@@ -8,6 +8,7 @@ import 'package:lottie/lottie.dart';
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
+
   @override
   State<CartPage> createState() => _CartPageState();
 }
@@ -40,6 +41,7 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> removeFromCart(int index) async {
+
     cartItems.removeAt(index);
     await updateCart();
   }
