@@ -4,12 +4,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class UploadProductPage extends StatefulWidget {
+class AdminPortal extends StatefulWidget {
   @override
-  _UploadProductPageState createState() => _UploadProductPageState();
+  _AdminPortalState createState() => _AdminPortalState();
 }
 
-class _UploadProductPageState extends State<UploadProductPage> {
+class _AdminPortalState extends State<AdminPortal> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController descController = TextEditingController();
   List<XFile> imageFiles = [];

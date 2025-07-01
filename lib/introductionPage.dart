@@ -50,10 +50,8 @@ class _IntroductionpageState extends State<Introductionpage> {
               SizedBox(height: 20),
               Buttons(
                 function: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => Login_Page()),
-                  );
+                
+              Navigator.pushNamed(context, '/login');
                 },
                 buttonText: 'Get started',
                 backgroundcolor: color.primaryColor,

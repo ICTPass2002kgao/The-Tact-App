@@ -27,26 +27,20 @@ class _Login_PageState extends State<Login_Page> {
 
   Future<void> _checkAdminStatusAndNavigate(User user) async {
     try {
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
       if (!context.mounted) return;
 
       if (userDoc.exists) {
-        final isAdmin = userDoc.data()?['isAdmin'] ?? false;
-        if (isAdmin) {
-          Navigator.pushNamed(context, '/dashboard');
+        final role = userDoc.data()?['role'] ?? '';
+        if (role == 'Admin') {
+          Navigator.pushNamed(context, "/admin");
         } else {
-          Navigator.pushNamed(context, '/main-menu');
+          Navigator.pushNamed(context, "/main-menu");
         }
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('User data not found')));
-        await _auth.signOut();
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -69,8 +63,8 @@ class _Login_PageState extends State<Login_Page> {
       await _auth.signOut();
       await _googleSignIn.signOut();
 
-      final GoogleSignInAccount? googleSignInAccount =
-          await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleSignInAccount = await _googleSignIn
+          .signIn();
       if (googleSignInAccount == null) return;
 
       final googleAuth = await googleSignInAccount.authentication;
@@ -87,8 +81,10 @@ class _Login_PageState extends State<Login_Page> {
       final uid = user.uid;
       final email = user.email;
 
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
 
       if (!context.mounted) return;
 
@@ -258,7 +254,8 @@ class _Login_PageState extends State<Login_Page> {
                   context,
                   MaterialPageRoute(builder: (context) => const MotherPage()),
                 );
-              }, width:isMobile ? double.infinity : 300
+              },
+              width: isMobile ? double.infinity : 300,
             ),
 
             const SizedBox(height: 20),
@@ -270,13 +267,10 @@ class _Login_PageState extends State<Login_Page> {
                   style: TextStyle(color: colorScheme.hintColor),
                 ),
                 GestureDetector(
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignUpPage(),
-                        ),
-                      ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SignUpPage()),
+                  ),
                   child: Text(
                     "Register Now",
                     style: TextStyle(

@@ -1,5 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:ttact/Pages/Admin_Portal.dart';
+import 'package:ttact/Pages/CartPage.dart';
+import 'package:ttact/Pages/Login.dart';
+import 'package:ttact/Pages/MotherPage.dart';
+import 'package:ttact/Pages/Payment.dart';
+import 'package:ttact/Pages/SignUpPage.dart';
 import 'package:ttact/Pages/Tact_Seller.dart';
 import 'package:ttact/firebase_options.dart';
 import 'package:ttact/introductionPage.dart';
@@ -33,7 +39,17 @@ class MyApp extends StatelessWidget {
         hintColor: const Color(0xFFBDBDBD),
       
       ),
-      home: Introductionpage(),
+      initialRoute: '/',
+      routes:  {
+        '/tact_seller': (context) =>   SellerProductPage(),
+        '/main-menu': (context) => const MotherPage(),
+      '/signup': (context) => SignUpPage(),
+      '/cart': (context) => CartPage(),
+      'payment': (context) => PaymentGatewayPage(),
+      '/admin': (context) => AdminPortal(),
+        '/login': (context) => Login_Page(),
+        '/': (context) => Introductionpage(),
+      }, 
     );
   }
 }

@@ -2,9 +2,9 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
- import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../Components/API.dart';
-import '../Components/Custom_Buttons.dart'; 
+import '../Components/Custom_Buttons.dart';
 import '../Components/TextField.dart';
 import 'package:text_field_validation/text_field_validation.dart';
 
@@ -19,9 +19,7 @@ class _SignUpPageState extends State<SignUpPage> {
   TextEditingController txtEmail = TextEditingController();
   TextEditingController txtName = TextEditingController();
   TextEditingController txtSurname = TextEditingController();
-  TextEditingController txtIDNumber = TextEditingController();
   TextEditingController txtAddress = TextEditingController();
-  TextEditingController txtWardInformation = TextEditingController();
   TextEditingController txtContactNumber = TextEditingController();
 
   TextEditingController txtPassword = TextEditingController();
@@ -41,6 +39,8 @@ class _SignUpPageState extends State<SignUpPage> {
 
   String _code = '';
   Api backendService = Api();
+  List roles = ['Member', 'Seller'];
+  String role = '';
   @override
   Widget build(BuildContext context) {
     final args =
@@ -68,7 +68,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
 
                 Form(
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,55 +86,47 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
 
                       AuthTextField(
-                        placeholder: 'ID Number',
-                        controller: txtIDNumber,
-                        onValidate: (value) => TextFieldValidation.number(value!),
-                      ),
-
-                      AuthTextField(
                         placeholder: 'Address',
                         controller: txtAddress,
-                        onValidate: (value) => TextFieldValidation.address(value!),
+                        onValidate: (value) =>
+                            TextFieldValidation.address(value!),
                       ),
-
-                      AuthTextField(
-                        placeholder: 'Ward Information',
-                        controller: txtWardInformation,
-                        onValidate: (value) => TextFieldValidation.number(value!),
+                      //User should be able to select a role using an expansion tile
+                      SizedBox(height: 10),
+                      ExpansionTile(
+                        title: Text(
+                          role.isEmpty ? 'Select Role' : role,
+                          style: TextStyle(color: colorScheme.primaryColor),
+                        ),
+                        children: [
+                          ...roles
+                              .map(
+                                (userRole) => RadioListTile<String>(
+                                  value: userRole,
+                                  groupValue: role,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      role = val as String;
+                                    });
+                                  },
+                                  title: Text(userRole),
+                                ),
+                              )
+                              .toList(),
+                        ],
                       ),
-
                       AuthTextField(
                         placeholder: 'Contact Number',
                         controller: txtContactNumber,
-                        onValidate: (value) => TextFieldValidation.number(value!),
+                        onValidate: (value) =>
+                            TextFieldValidation.number(value!),
                       ),
-                      SizedBox(height: 15),
-                      if (email.isEmpty)
-                        Text(
-                          "Email Address",
-                          style: TextStyle(
-                            color: colorScheme.hintColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                       if (email.isEmpty)
                         AuthTextField(
                           placeholder: 'Email Address',
                           controller: txtEmail,
-                          onValidate:
-                              (value) => TextFieldValidation.email(value!),
-                        ),
-                      SizedBox(height: 15),
-
-                      if (email.isEmpty)
-                        Text(
-                          "Password",
-                          style: TextStyle(
-                            color: colorScheme.hintColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          onValidate: (value) =>
+                              TextFieldValidation.email(value!),
                         ),
                       if (email.isEmpty)
                         TextField(
@@ -216,12 +208,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Checkbox(
-                            checkColor:
-                                Theme.of(context).scaffoldBackgroundColor,
+                            checkColor: Theme.of(
+                              context,
+                            ).scaffoldBackgroundColor,
                             activeColor: Theme.of(context).primaryColor,
                             value: isChecked,
-                            onChanged:
-                                (val) => setState(() => isChecked = val!),
+                            onChanged: (val) =>
+                                setState(() => isChecked = val!),
                           ),
                           SizedBox(width: 8.0),
                           Expanded(
@@ -270,19 +263,16 @@ class _SignUpPageState extends State<SignUpPage> {
                       Custom_Button(
                         minWidth: double.infinity,
                         text: email.isEmpty ? "Create account" : "Continue",
-                        backgroundColor:
-                            isChecked
-                                ? colorScheme.primaryColor
-                                : colorScheme.hintColor,
-                        foregroundColor:
-                            !isChecked
-                                ? colorScheme.scaffoldBackgroundColor
-                                : colorScheme.scaffoldBackgroundColor,
+                        backgroundColor: isChecked
+                            ? colorScheme.primaryColor
+                            : colorScheme.hintColor,
+                        foregroundColor: !isChecked
+                            ? colorScheme.scaffoldBackgroundColor
+                            : colorScheme.scaffoldBackgroundColor,
                         onPressed: () async {
                           if (isChecked) {
                             if (_formKey.currentState!.validate()) {
                               if (txtPassword.text == txtConfirmPassword.text) {
-                                 
                                 if (email.isNotEmpty) {
                                   try {
                                     backendService.showLoading(context);
@@ -300,13 +290,10 @@ class _SignUpPageState extends State<SignUpPage> {
                                             "name": txtName.text,
                                             "email": email,
                                             "profileUrl": "",
-                                            "ID Number": txtIDNumber.text,
                                             "Address": txtAddress.text,
-                                            "Ward Information":
-                                                txtWardInformation.text,
                                             "Contact Number":
                                                 txtContactNumber.text,
-                                            "isAdmin": false,
+                                            "role": role,
                                           });
                                     }
                                     Navigator.pop(context);
@@ -319,17 +306,16 @@ class _SignUpPageState extends State<SignUpPage> {
                                   }
                                   return null;
                                 } else {
-                                     backendService.signUp(
-                                      txtName.text,
-                                      txtEmail.text,
-                                      txtPassword.text,
-                                      txtIDNumber.text,
-                                      txtAddress.text,
-                                      txtWardInformation.text,
-                                      txtContactNumber.text,
-                              
-                          context, 
-                        ); 
+                                  backendService.signUp(
+                                    txtName.text,
+                                    txtEmail.text,
+                                    txtPassword.text,
+                                    txtAddress.text,
+                                    txtContactNumber.text,
+                                    role,
+
+                                    context,
+                                  );
                                 }
                               } else {
                                 backendService.showMessage(

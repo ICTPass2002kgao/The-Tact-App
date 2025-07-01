@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
- import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:mailer/mailer.dart';
@@ -20,10 +20,9 @@ class Api {
     String name,
     String email,
     String password,
-    String txtIDNumber,
     String txtAddress,
-    String txtWardInformation,
     String txtContactNumber,
+    String role,
     BuildContext context,
   ) async {
     try {
@@ -40,16 +39,17 @@ class Api {
           "name": name,
           "email": email,
           "profileUrl": "",
-          "ID Number": txtIDNumber,
           "Address": txtAddress,
-          "Ward Information": txtWardInformation,
           "Contact Number": txtContactNumber,
-          "isAdmin": false,
+          "role": role,
         });
       }
       await user?.sendEmailVerification();
       Navigator.pop(context);
-      showSuccessMessage(context, "Account created successfully! Please login."); 
+      showSuccessMessage(
+        context,
+        "Account created successfully! Please login.",
+      );
       return user;
     } catch (e) {
       showMessage(context, e.toString());
@@ -76,7 +76,7 @@ class Api {
         action: SnackBarAction(
           label: 'Login',
           textColor: Colors.white,
-          onPressed: () { 
+          onPressed: () {
             Navigator.pushNamed(context, '/');
           },
         ),
@@ -110,8 +110,10 @@ class Api {
   ) async {
     try {
       showLoading(context);
-      DocumentSnapshot doc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
 
       Navigator.pop(context);
       if (doc.exists) {
@@ -138,44 +140,42 @@ class Api {
   ) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            title: Center(
-              child: Text(
-                title,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-              ),
-            ),
-            content: Text(message),
-            actions: [
-              CustomOutlinedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                text: btnCancel,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                foregroundColor: Theme.of(context).primaryColor,
-                width: 120,
-              ),
-              CustomOutlinedButton(
-                onPressed: onPressed,
-                text: btnConfirm,
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-                width: 120,
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        title: Center(
+          child: Text(
+            title,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
           ),
+        ),
+        content: Text(message),
+        actions: [
+          CustomOutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            text: btnCancel,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            foregroundColor: Theme.of(context).primaryColor,
+            width: 120,
+          ),
+          CustomOutlinedButton(
+            onPressed: onPressed,
+            text: btnConfirm,
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+            width: 120,
+          ),
+        ],
+      ),
     );
   }
- 
+
   void showLoading(BuildContext context) {
     showDialog(
       context: context,
-      builder:
-          (context) =>
-              Center(child: CircularProgressIndicator(color: Colors.green)),
+      builder: (context) =>
+          Center(child: CircularProgressIndicator(color: Colors.green)),
     );
   }
   //  Future<void> sendEmail(
@@ -210,13 +210,12 @@ class Api {
       password: password,
       ssl: true,
     );
-    final message =
-        Message()
-          ..from = Address(username, 'Weather Alert Extreme')
-          ..recipients.add(email)
-          ..subject = subject
-          ..html = _message
-          ..text = body;
+    final message = Message()
+      ..from = Address(username, 'Weather Alert Extreme')
+      ..recipients.add(email)
+      ..subject = subject
+      ..html = _message
+      ..text = body;
     try {
       showLoading(context);
       final report = await send(message, smtpServer);
