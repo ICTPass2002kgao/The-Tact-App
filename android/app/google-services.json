@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "219784074240",
+    "project_id": "tact-3c612",
+    "storage_bucket": "tact-3c612.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:219784074240:android:558671265ae7d1a407b4e5",
+        "android_client_info": {
+          "package_name": "com.example.ttact"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
