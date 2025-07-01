@@ -2,10 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_image_slider/carousel.dart';
-import 'package:ttact/Components/Buttons/Buttons.dart';
-import 'package:ttact/Pages/Login.dart';
-import 'Images/Images.dart';
-import 'Pages/MotherPage.dart';
+import 'package:ttact/Components/Buttons/Buttons.dart'; 
+import 'Images/Images.dart'; 
 
 class Introductionpage extends StatefulWidget {
   const Introductionpage({super.key});

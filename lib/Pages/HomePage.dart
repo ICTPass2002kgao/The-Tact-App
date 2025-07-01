@@ -1,10 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 
-import 'package:buttons_tabbar/buttons_tabbar.dart';
-import 'package:flutter/material.dart';
-import 'package:ttact/Components/ApostleCards.dart';
-import 'package:ttact/Components/Color.dart';
-import 'package:ttact/Components/Tab.dart';
+ import 'package:flutter/material.dart';
+import 'package:ttact/Components/ApostleCards.dart'; 
 import 'package:ttact/Components/Upcoming_events_card.dart';
 import 'package:ttact/Components/bottomsheet.dart';
 

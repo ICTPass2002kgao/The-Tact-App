@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:text_field_validation/text_field_validation.dart';
-import 'package:ttact/Components/API.dart';
+import 'package:text_field_validation/text_field_validation.dart'; 
 import 'package:ttact/Components/Custom_Buttons.dart';
 import 'package:ttact/Components/TextField.dart';
 
@@ -20,9 +19,7 @@ class _MemberRegistrationState extends State<MemberRegistration> {
   bool isChecked = false;
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context);
-    final backendService = Api();
-    String email = ModalRoute.of(context)?.settings.arguments as String? ?? '';
+    final colorScheme = Theme.of(context);  
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16.0),

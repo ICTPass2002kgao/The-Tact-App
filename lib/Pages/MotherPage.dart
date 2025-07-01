@@ -6,8 +6,7 @@ import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:ttact/Pages/ShoppingPage.dart';
 import 'Events.dart';
 import 'HistoryPage.dart';
-import 'HomePage.dart';
-import 'OverseerPage.dart';
+import 'HomePage.dart'; 
 
 class MotherPage extends StatefulWidget {
   const MotherPage({super.key});
@@ -20,12 +19,10 @@ class _MotherPageState extends State<MotherPage>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   List pages = [HomePage(), EventsPage(), ShoppingPage(), HistoryPage()];
-
-  late TabController _tabController;
+ 
   @override
   void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    super.initState(); 
   }
 
   @override

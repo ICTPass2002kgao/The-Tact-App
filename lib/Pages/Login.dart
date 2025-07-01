@@ -50,8 +50,7 @@ class _Login_PageState extends State<Login_Page> {
     }
   }
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-  User? _user;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(); 
 
   @override
   void initState() {
@@ -99,8 +98,7 @@ class _Login_PageState extends State<Login_Page> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context);
+  Widget build(BuildContext context) { 
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(

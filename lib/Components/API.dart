@@ -1,16 +1,10 @@
-import 'dart:io';
-
+ 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'package:flutter/material.dart'; 
 import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
-import 'package:mailer/smtp_server/gmail.dart';
-import 'CustomOutlinedButton.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:mailer/smtp_server.dart'; 
+import 'CustomOutlinedButton.dart'; 
 
 class Api {
   final FirebaseAuth _auth = FirebaseAuth.instance;

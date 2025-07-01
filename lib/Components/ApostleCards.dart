@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:ttact/Components/Color.dart';
+import 'package:flutter/material.dart'; 
 
 class ApostleCard extends StatelessWidget {
   final String name;

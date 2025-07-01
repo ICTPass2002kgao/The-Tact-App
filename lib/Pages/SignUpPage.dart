@@ -1,5 +1,4 @@
-import 'dart:math';
-
+ 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -27,17 +26,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   bool _obscureText = true;
   bool _obscureText2 = true;
-  bool isChecked = false;
-  String verificationCode() {
-    Random random = Random();
-    int code = random.nextInt(9000) + 1000;
-    setState(() {
-      _code = code.toString();
-    });
-    return code.toString();
-  }
-
-  String _code = '';
+  bool isChecked = false; 
   Api backendService = Api();
   List roles = ['Member', 'Seller'];
   String role = '';
