@@ -1,8 +1,13 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:ionicons/ionicons.dart';
+import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
+import 'package:ttact/Components/API.dart';
+import 'package:ttact/Pages/Admin_Add_Officers.dart';
+import 'package:ttact/Pages/Admin_Home_Page.dart';
+import 'package:ttact/Pages/Admin_portal_home.dart';
+import 'package:ttact/Pages/Portal_Add_Feed.dart';
 
 class AdminPortal extends StatefulWidget {
   @override
@@ -10,82 +15,107 @@ class AdminPortal extends StatefulWidget {
 }
 
 class _AdminPortalState extends State<AdminPortal> {
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController descController = TextEditingController();
-  List<XFile> imageFiles = [];
-
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> pickImages() async {
-    final picked = await _picker.pickMultiImage();
-    if (picked.isNotEmpty) {
-      setState(() {
-        imageFiles = picked;
-      });
-    }
-  }
-
-  Future<void> uploadProduct() async {
-    if (nameController.text.isEmpty || imageFiles.isEmpty) return;
-
-    List<String> imageUrls = [];
-
-    for (var file in imageFiles) {
-      final ref = FirebaseStorage.instance.ref("products/${DateTime.now().millisecondsSinceEpoch}_${file.name}");
-      await ref.putFile(File(file.path));
-      final url = await ref.getDownloadURL();
-      imageUrls.add(url);
-    }
-
-    await FirebaseFirestore.instance.collection('products').add({
-      'name': nameController.text,
-      'description': descController.text,
-      'imageUrls': imageUrls,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Product uploaded with ${imageUrls.length} images")));
-
-    nameController.clear();
-    descController.clear();
-    setState(() {
-      imageFiles = [];
-    });
-  }
-
+  int _currentIndex = 0;
+  List pages = [
+    AdminHomePage(),
+    AdminAddProduct(),
+    AdminAddOfficers(),
+    PortalAddFeed(),
+  ];
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme;
+    final color = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text("Upload Product")),
-      backgroundColor: color.background,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+      appBar: AppBar(title: Text("Admin Portal")),
+      backgroundColor: color.scaffoldBackgroundColor.withOpacity(0.9),
+      bottomNavigationBar: SalomonBottomBar(
+        backgroundColor: color.primaryColor,
+        selectedItemColor: color.scaffoldBackgroundColor,
+        unselectedItemColor: color.hintColor,
+        currentIndex: _currentIndex,
+        onTap: (value) {
+          setState(() {
+            _currentIndex = value;
+          });
+        },
+        items: [
+          SalomonBottomBarItem(icon: Icon(Ionicons.home), title: Text('Home')),
+
+          SalomonBottomBarItem(
+            icon: Icon(Icons.add_shopping_cart_outlined),
+            title: Text('Add Products'),
+          ),
+          SalomonBottomBarItem(
+            icon: Icon(Icons.group_add_outlined),
+            title: Text('Add Officers'),
+          ),
+          SalomonBottomBarItem(
+            icon: Icon(Icons.add_card_outlined),
+            title: Text('Add feeds'),
+          ),
+        ],
+      ),
+      body: pages[_currentIndex],
+      drawer: Drawer(
+        backgroundColor: color.primaryColor,
+
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(labelText: "Product Name"),
+            Column(
+              children: [
+                DrawerHeader(
+                  child: Image.asset(
+                    'assets/tact_logo.PNG',
+                    height: 100,
+                    width: 100,
+                  ),
+                ),
+                ListTile(
+                  textColor: color.scaffoldBackgroundColor,
+
+                  title: Text('Manage Latest Updates'),
+                  leading: Icon(
+                    Icons.manage_accounts,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                ),
+                ListTile(
+                  textColor: color.scaffoldBackgroundColor,
+                  title: Text('Add Products'),
+                  leading: Icon(
+                    Icons.manage_accounts,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                ),
+                ListTile(
+                  textColor: color.scaffoldBackgroundColor,
+                  title: Text('Add Apostles'),
+                  leading: Icon(
+                    Icons.manage_accounts,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: descController,
-              decoration: InputDecoration(labelText: "Description"),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(onPressed: pickImages, child: Text("Pick Images")),
-            if (imageFiles.isNotEmpty)
-              Wrap(
-                spacing: 10,
-                children: imageFiles.map((file) {
-                  return Image.file(File(file.path), width: 100, height: 100, fit: BoxFit.cover);
-                }).toList(),
+
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: ListTile(
+                onTap: () {
+                  Api().showLoading(context);
+                  FirebaseAuth.instance.signOut();
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/login');
+                },
+                textColor: color.scaffoldBackgroundColor,
+                title: Text('Logout'),
+                leading: Icon(
+                  Icons.login_sharp,
+                  color: color.scaffoldBackgroundColor,
+                ),
               ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: uploadProduct,
-              child: Text("Upload Product"),
             ),
           ],
         ),

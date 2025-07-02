@@ -50,7 +50,7 @@ class _Login_PageState extends State<Login_Page> {
     }
   }
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(); 
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
   void initState() {
@@ -98,7 +98,7 @@ class _Login_PageState extends State<Login_Page> {
   }
 
   @override
-  Widget build(BuildContext context) { 
+  Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
@@ -248,6 +248,7 @@ class _Login_PageState extends State<Login_Page> {
               backgroundColor: colorScheme.scaffoldBackgroundColor,
               foregroundColor: colorScheme.primaryColor,
               onPressed: () async {
+                FirebaseAuth.instance.signInAnonymously();
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const MotherPage()),

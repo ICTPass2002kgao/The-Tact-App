@@ -1,7 +1,102 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class PaymentGatewayPage extends StatelessWidget {
-  const PaymentGatewayPage({super.key});
+class PaymentGatewayPage extends StatefulWidget {
+  final List<Map<String, dynamic>> cartProducts;
+  const PaymentGatewayPage({required this.cartProducts, Key? key})
+    : super(key: key);
+
+  @override
+  State<PaymentGatewayPage> createState() => _PaymentGatewayPageState();
+}
+
+class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
+  final _addressController = TextEditingController();
+  bool needsDelivery = false;
+  double deliveryCharge = 50.0;
+  String? selectedPaymentMethod;
+  bool isPlacingOrder = false;
+
+  final paymentMethods = [
+    'Credit/Debit Card',
+    'Mobile Wallet',
+    'PayPal',
+    'Scan to Pay (QR Code)',
+  ];
+
+  @override
+  void dispose() {
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> placeOrder() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to place an order')),
+      );
+      return;
+    }
+
+    if (_addressController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your address')),
+      );
+      return;
+    }
+
+    if (selectedPaymentMethod == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a payment method')),
+      );
+      return;
+    }
+
+    setState(() {
+      isPlacingOrder = true;
+    });
+
+    // Group products by seller for order creation
+    Map<String, List<Map<String, dynamic>>> productsBySeller = {};
+    for (var product in widget.cartProducts) {
+      String sellerId = product['sellerId'] ?? 'unknown_seller';
+      if (!productsBySeller.containsKey(sellerId)) {
+        productsBySeller[sellerId] = [];
+      }
+      productsBySeller[sellerId]!.add(product);
+    }
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    productsBySeller.forEach((sellerId, products) {
+      final orderDoc = FirebaseFirestore.instance.collection('orders').doc();
+
+      batch.set(orderDoc, {
+        'buyerId': user.uid,
+        'sellerId': sellerId,
+        'products': products,
+        'address': _addressController.text,
+        'needsDelivery': needsDelivery,
+        'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
+        'paymentMethod': selectedPaymentMethod,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+
+    setState(() {
+      isPlacingOrder = false;
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Order placed successfully!')));
+    Navigator.pushNamed(context, 'routeName');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +106,7 @@ class PaymentGatewayPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: color.primaryColor,
         foregroundColor: color.scaffoldBackgroundColor,
-        title: const Text('Payment Options'),
+        title: const Text('Payment & Delivery'),
         centerTitle: true,
       ),
       body: Padding(
@@ -20,89 +115,83 @@ class PaymentGatewayPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Choose Your Payment Method',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              'Delivery Address',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _addressController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'Enter your delivery address',
+              ),
             ),
             const SizedBox(height: 20),
-            PaymentOptionCard(
-              icon: Icons.credit_card,
-              title: 'Credit/Debit Card',
-              subtitle: 'Pay securely using your bank card.',
-              onTap: () {
-                // Navigate or trigger card payment logic
-              },
+            const Text(
+              'Delivery Option',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            PaymentOptionCard(
-              icon: Icons.account_balance_wallet,
-              title: 'Mobile Wallet',
-              subtitle: 'Google Pay, Apple Pay, Samsung Pay',
-              onTap: () {
-                // Navigate or trigger mobile wallet payment
-              },
+            Row(
+              children: [
+                const Text('Pickup'),
+                Radio<bool>(
+                  value: false,
+                  groupValue: needsDelivery,
+                  onChanged: (val) {
+                    setState(() {
+                      needsDelivery = val ?? false;
+                    });
+                  },
+                ),
+                const Text('Delivery'),
+                Radio<bool>(
+                  value: true,
+                  groupValue: needsDelivery,
+                  onChanged: (val) {
+                    setState(() {
+                      needsDelivery = val ?? false;
+                    });
+                  },
+                ),
+              ],
             ),
-            PaymentOptionCard(
-              icon: Icons.paypal,
-              title: 'PayPal',
-              subtitle: 'Use your PayPal account to complete payment.',
-              onTap: () {
-                // Navigate or trigger PayPal payment
-              },
+            if (needsDelivery)
+              Text(
+                'Delivery Charge: R$deliveryCharge',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            const SizedBox(height: 20),
+            const Text(
+              'Choose Payment Method',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            PaymentOptionCard(
-              icon: Icons.qr_code,
-              title: 'Scan to Pay (QR Code)',
-              subtitle: 'Scan with your banking app to pay.',
-              onTap: () {
-                // Navigate or display QR
-              },
-            ),
+            ...paymentMethods.map((method) {
+              return ListTile(
+                title: Text(method),
+                leading: Radio<String>(
+                  value: method,
+                  groupValue: selectedPaymentMethod,
+                  onChanged: (val) {
+                    setState(() {
+                      selectedPaymentMethod = val;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
             const Spacer(),
             ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Redirecting to payment gateway...')),
-                );
-              },
+              onPressed: isPlacingOrder ? null : placeOrder,
               style: ElevatedButton.styleFrom(
                 backgroundColor: color.primaryColor,
                 foregroundColor: color.scaffoldBackgroundColor,
                 minimumSize: const Size.fromHeight(50),
               ),
-              child: const Text('Continue to Payment'),
-            )
+              child: isPlacingOrder
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Continue to Payment'),
+            ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class PaymentOptionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const PaymentOptionCard({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        leading: Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 18),
-        onTap: onTap,
       ),
     );
   }

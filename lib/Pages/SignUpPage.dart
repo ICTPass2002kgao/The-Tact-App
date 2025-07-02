@@ -1,7 +1,8 @@
- 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import '../Components/API.dart';
 import '../Components/Custom_Buttons.dart';
 import '../Components/TextField.dart';
@@ -26,10 +27,57 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   bool _obscureText = true;
   bool _obscureText2 = true;
-  bool isChecked = false; 
+  bool isChecked = false;
   Api backendService = Api();
   List roles = ['Member', 'Seller'];
   String role = '';
+
+  //create functionality to retrieve the user's current address using relevant packages
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    _getAddress();
+    super.initState();
+  }
+
+  Future<void> _getAddress() async {
+    try {
+      // Check and request permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+        if (permission != LocationPermission.always &&
+            permission != LocationPermission.whileInUse) {
+          throw Exception('Location permission not granted');
+        }
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Reverse geocoding
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        Placemark p = placemarks.first;
+        String fullAddress =
+            "${p.name}, ${p.street}, ${p.locality}, ${p.administrativeArea}, ${p.country}";
+        txtAddress.text = fullAddress;
+      } else {
+        txtAddress.text = "Address not found";
+      }
+    } catch (e) {
+      txtAddress.text = "Error: ${e.toString()}";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final args =
@@ -73,13 +121,27 @@ class _SignUpPageState extends State<SignUpPage> {
                         controller: txtSurname,
                         onValidate: (value) => TextFieldValidation.name(value!),
                       ),
-
-                      AuthTextField(
-                        placeholder: 'Address',
+                      TextField(
                         controller: txtAddress,
-                        onValidate: (value) =>
-                            TextFieldValidation.address(value!),
-                      ),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: colorScheme.hintColor,
+                            ),
+                            borderRadius: BorderRadius.circular(17),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: colorScheme.hintColor,
+                            ),
+                            borderRadius: BorderRadius.circular(17),
+                          ),
+                          fillColor: colorScheme.scaffoldBackgroundColor,
+                          filled: true, 
+                          hintText: 'Address',
+                          hintStyle: TextStyle(color: colorScheme.hintColor),
+                        ), 
+                      ), 
                       //User should be able to select a role using an expansion tile
                       SizedBox(height: 10),
                       ExpansionTile(

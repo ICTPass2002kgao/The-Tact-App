@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:ttact/Components/Color.dart';
+import 'package:flutter/material.dart'; 
 
 class AuthTextField extends StatelessWidget {
   final TextEditingController? controller;
@@ -22,7 +21,7 @@ class AuthTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     
-  final color = AppColor(color: const Color.fromARGB(255, 15, 76, 167));
+  final color = Theme.of(context);
     return TextFormField(
       onChanged: (value) => onChange?.call,
       controller: controller,
@@ -30,17 +29,17 @@ class AuthTextField extends StatelessWidget {
       obscureText: visible ?? false,
       decoration: InputDecoration(
         border: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.blue),
+          borderSide: BorderSide(color: color.primaryColor),
           borderRadius: BorderRadius.circular(10),
         ),
         focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.blue),
+          borderSide: BorderSide(color: color.primaryColor),
           borderRadius: BorderRadius.circular(10),
         ),
-        focusColor: Colors.blue,
-        fillColor: Colors.blue[50],
+        focusColor: color.primaryColor,
+        fillColor: color.scaffoldBackgroundColor,
         filled: true,
-        prefixIcon: icon != null ? Icon(icon, color: color.color) : null,
+        prefixIcon: icon != null ? Icon(icon, color: color.primaryColor) : null,
         labelText: placeholder,
       ),
     );

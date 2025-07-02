@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:toastification/toastification.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ttact/Components/ProductCard.dart';
 import 'package:ttact/Pages/CartPage.dart';
 
@@ -50,34 +52,13 @@ class ShoppingPage extends StatefulWidget {
 class _ShoppingPageState extends State<ShoppingPage> {
   int cartCount = 0;
 
-  final List<Map<String, dynamic>> products = [
-    {
-      'imageUrl':
-          'https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcQndSK7hvssofrM2uzv75NxVjrkAwH3RwyqWcBesUsmq1ipmkuljRr6x_SRbCKaBXvjTR9CKfAaEFtmUFw-69o52wgVMgk2hp8KDYr4FvKtQ8ZfKewgOW4gDQ&usqp=CAE4',
-      'categoryName': 'Pants',
-      'productName': 'Senior Testify Shoes',
-      'price': 199.99,
-    },
-    {
-      'imageUrl':
-          'https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcQndSK7hvssofrM2uzv75NxVjrkAwH3RwyqWcBesUsmq1ipmkuljRr6x_SRbCKaBXvjTR9CKfAaEFtmUFw-69o52wgVMgk2hp8KDYr4FvKtQ8ZfKewgOW4gDQ&usqp=CAE4',
-      'categoryName': 'Pants',
-      'productName': 'Jean Pants',
-      'price': 179.99,
-    },
-    {
-      'imageUrl':
-          'https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcQndSK7hvssofrM2uzv75NxVjrkAwH3RwyqWcBesUsmq1ipmkuljRr6x_SRbCKaBXvjTR9CKfAaEFtmUFw-69o52wgVMgk2hp8KDYr4FvKtQ8ZfKewgOW4gDQ&usqp=CAE4',
-      'categoryName': 'Pants',
-      'productName': 'Jacket Pants',
-      'price': 299.99,
-    },
-  ];
+  List<Map<String, dynamic>> products = [];
 
   @override
   void initState() {
     super.initState();
     loadCartCount();
+    fetchAllSellerProducts(); // 🔥 Load seller-added products from Firestore
   }
 
   void loadCartCount() async {
@@ -87,10 +68,46 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
+  void fetchAllSellerProducts() async {
+    final sellerProductsSnap = await FirebaseFirestore.instance
+        .collection('seller_products')
+        .get();
+
+    List<Map<String, dynamic>> loadedProducts = [];
+
+    for (var doc in sellerProductsSnap.docs) {
+      final sellerData = doc.data();
+
+      final productSnap = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(sellerData['productId'])
+          .get();
+
+      if (productSnap.exists) {
+        final productData = productSnap.data()!;
+        loadedProducts.add({
+          'imageUrl': (productData['imageUrl'] is List)
+              ? productData['imageUrl'][0]
+              : productData['imageUrl'],
+          'categoryName': productData['category'] ?? 'Other',
+          'productName': productData['name'],
+          'price': sellerData['price'],
+          'location': sellerData['location'],
+          'productId': sellerData['productId'],
+        });
+      }
+    }
+
+    setState(() {
+      products = loadedProducts;
+    });
+  }
+
   void addToCart(Map<String, dynamic> product) async {
     await CartHelper.addToCart(product);
     loadCartCount();
-    final color = Theme.of(context); 
+
+    final color = Theme.of(context);
     toastification.dismissAll();
     toastification.show(
       context: context,
@@ -139,11 +156,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
       applyBlurEffect: true,
       callbacks: ToastificationCallbacks(
         onTap: (toastItem) => print('Toast ${toastItem.id} tapped'),
-        onCloseButtonTap:
-            (toastItem) => print('Toast ${toastItem.id} close button tapped'),
-        onAutoCompleteCompleted:
-            (toastItem) =>
-                print('Toast ${toastItem.id} auto complete completed'),
+        onCloseButtonTap: (toastItem) =>
+            print('Toast ${toastItem.id} close button tapped'),
+        onAutoCompleteCompleted: (toastItem) =>
+            print('Toast ${toastItem.id} auto complete completed'),
         onDismissed: (toastItem) => print('Toast ${toastItem.id} dismissed'),
       ),
     );
@@ -153,9 +169,26 @@ class _ShoppingPageState extends State<ShoppingPage> {
   Widget build(BuildContext context) {
     final color = Theme.of(context);
     return Scaffold(
-      floatingActionButton:
-          cartCount.isNaN || cartCount == 0
-              ? FloatingActionButton(
+      floatingActionButton: cartCount.isNaN || cartCount == 0
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => CartPage()),
+                );
+              },
+              backgroundColor: color.primaryColor,
+              child: Icon(
+                Icons.shopping_cart_outlined,
+                color: color.scaffoldBackgroundColor,
+              ),
+            )
+          : badges.Badge(
+              badgeContent: Text(
+                '$cartCount',
+                style: TextStyle(color: Colors.white),
+              ),
+              child: FloatingActionButton(
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -167,46 +200,27 @@ class _ShoppingPageState extends State<ShoppingPage> {
                   Icons.shopping_cart_outlined,
                   color: color.scaffoldBackgroundColor,
                 ),
-              )
-              : badges.Badge(
-                badgeContent: Text(
-                  '$cartCount',
-                  style: TextStyle(color: Colors.white),
-                ),
-                child: FloatingActionButton(
-                  onPressed: () { 
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => CartPage()),
-                    );
-                  },
-                  backgroundColor: color.primaryColor,
-                  child: Icon(
-                    Icons.shopping_cart_outlined,
-                    color: color.scaffoldBackgroundColor,
-                  ),
-                ),
               ),
+            ),
       body: GridView.count(
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
         childAspectRatio: 0.67,
         padding: EdgeInsets.all(10),
-        children:
-            products.map((product) {
-              return Product_Card(
-                onCartPressed: () {
-                  addToCart(product);
-                },
-                imageUrl: product['imageUrl'],
-                categoryName: product['categoryName'],
-                productName: product['productName'],
-                price: product['price'],
-                productDescription: 'Nice product',
-                isAvailable: true,
-              );
-            }).toList(),
+        children: products.map((product) {
+          return Product_Card(
+            onCartPressed: () {
+              addToCart(product);
+            },
+            imageUrl: product['imageUrl'],
+            categoryName: product['categoryName'],
+            productName: product['productName'],
+            price: product['price'],
+            productDescription: 'Nice product',
+            isAvailable: true,
+          );
+        }).toList(),
       ),
     );
   }

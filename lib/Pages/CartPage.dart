@@ -180,7 +180,7 @@ class _CartPageState extends State<CartPage> {
                               context,
                               MaterialPageRoute(
                                 builder:
-                                    (context) => const PaymentGatewayPage(),
+                                    (context) => PaymentGatewayPage(cartProducts: cartItems,),
                               ),
                             );
                           },

@@ -1,10 +1,9 @@
- 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; 
-import 'package:flutter/material.dart'; 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart'; 
-import 'CustomOutlinedButton.dart'; 
+import 'package:mailer/smtp_server.dart';
+import 'CustomOutlinedButton.dart';
 
 class Api {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -71,7 +70,7 @@ class Api {
           label: 'Login',
           textColor: Colors.white,
           onPressed: () {
-            Navigator.pushNamed(context, '/');
+            Navigator.pushNamed(context, '/login');
           },
         ),
       ),
@@ -90,7 +89,6 @@ class Api {
         password: password,
       );
       Navigator.pop(context);
-      Navigator.pushNamed(context, '/main-menu');
       return user.user;
     } catch (e) {
       Navigator.pop(context);
