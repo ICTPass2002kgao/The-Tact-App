@@ -158,6 +158,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   onChanged: (val) {
                                     setState(() {
                                       role = val as String;
+                                      
                                     });
                                   },
                                   title: Text(userRole),
@@ -352,7 +353,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   } catch (e) {
                                     backendService.showMessage(
                                       context,
-                                      e.toString(),
+                                      e.toString(),'Error',colorScheme.primaryColorDark
                                     );
                                   }
                                   return null;
@@ -372,6 +373,8 @@ class _SignUpPageState extends State<SignUpPage> {
                                 backendService.showMessage(
                                   context,
                                   "Passwords do not match!",
+                                  "Error",
+                                  colorScheme.primaryColorDark
                                 );
                               }
                             }

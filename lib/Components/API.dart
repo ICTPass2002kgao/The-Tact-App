@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import 'package:toastification/toastification.dart';
 import 'CustomOutlinedButton.dart';
 
 class Api {
@@ -19,6 +20,7 @@ class Api {
     BuildContext context,
   ) async {
     try {
+      final color = Theme.of(context);
       showLoading(context);
       UserCredential credentials = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -39,41 +41,59 @@ class Api {
       }
       await user?.sendEmailVerification();
       Navigator.pop(context);
-      showSuccessMessage(
+      showMessage(
         context,
         "Account created successfully! Please login.",
+        'Proceed to login',
+        color.splashColor,
       );
+      Navigator.pushNamed(context, '/login');
       return user;
     } catch (e) {
-      showMessage(context, e.toString());
+      final color = Theme.of(context);
+
+      showMessage(context, e.toString(), 'Error', color.primaryColorDark);
     }
     return null;
   }
 
-  void showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        showCloseIcon: true,
-        backgroundColor: Colors.red,
-        content: Text(message),
-      ),
-    );
-  }
+  void showMessage(
+    BuildContext context,
+    String message,
+    String title,
+    Color _color,
+  ) {
+    final color = Theme.of(context);
+    toastification.dismissAll();
+    toastification.show(
+      context: context,
+      type: ToastificationType.warning,
+      autoCloseDuration: const Duration(seconds: 5),
+      title: Text(title, style: TextStyle(color: _color)),
+      description: RichText(text: TextSpan(text: message)),
+      alignment: Alignment.bottomCenter,
+      animationDuration: const Duration(milliseconds: 500),
+      icon: const Icon(Icons.check),
+      showIcon: true,
+      primaryColor: color.scaffoldBackgroundColor,
+      backgroundColor: _color,
 
-  void showSuccessMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        showCloseIcon: true,
-        backgroundColor: const Color.fromARGB(255, 44, 102, 46),
-        content: Text(message),
-        action: SnackBarAction(
-          label: 'Login',
-          textColor: Colors.white,
-          onPressed: () {
-            Navigator.pushNamed(context, '/login');
-          },
-        ),
+      borderRadius: BorderRadius.circular(30),
+      showProgressBar: true,
+      progressBarTheme: ProgressIndicatorThemeData(
+        color: color.scaffoldBackgroundColor,
       ),
+      closeButton: ToastCloseButton(
+        showType: CloseButtonShowType.onHover,
+        buttonBuilder: (context, onClose) {
+          return OutlinedButton.icon(
+            onPressed: onClose,
+            icon: const Icon(Icons.close, size: 20, color: Colors.white),
+            label: const Text('Close'),
+          );
+        },
+      ),
+      closeOnClick: true,
     );
   }
 
@@ -90,35 +110,10 @@ class Api {
       );
       Navigator.pop(context);
       return user.user;
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
+      final color = Theme.of(context);
       Navigator.pop(context);
-      showMessage(context, e.toString());
-    }
-  }
-
-  Future<Map<String, dynamic>?> fetchUser(
-    String uid,
-    BuildContext context,
-  ) async {
-    try {
-      showLoading(context);
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-
-      Navigator.pop(context);
-      if (doc.exists) {
-        return doc.data() as Map<String, dynamic>;
-      } else {
-        showMessage(context, "User data not found.");
-        return null;
-      }
-    } catch (e) {
-      Navigator.pop(context);
-      print("Error fetching user: $e");
-      showMessage(context, "Something went wrong. Please try again later.");
-      return null;
+      showMessage(context, e.message!, 'Error', color.primaryColorDark);
     }
   }
 
@@ -164,10 +159,11 @@ class Api {
   }
 
   void showLoading(BuildContext context) {
+    final color = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) =>
-          Center(child: CircularProgressIndicator(color: Colors.green)),
+          Center(child: CircularProgressIndicator(color: color.primaryColor)),
     );
   }
   //  Future<void> sendEmail(

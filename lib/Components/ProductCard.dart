@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_launcher_icons/xml_templates.dart';
 
 class Product_Card extends StatelessWidget {
   final String? imageUrl;
@@ -44,7 +45,7 @@ class Product_Card extends StatelessWidget {
                 right: 8,
                 top: 8,
                 child: IconButton(
-                  icon: const Icon(Icons.favorite_border),
+                  icon: const Icon(Icons.favorite_border,),
                   onPressed: () {
                     // Handle favorite action
                   },

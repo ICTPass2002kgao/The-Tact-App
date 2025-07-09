@@ -4,8 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:toastification/toastification.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/ProductCard.dart';
+import 'package:ttact/Components/Product_Details.dart';
 import 'package:ttact/Pages/CartPage.dart';
 
 class CartHelper {
@@ -109,59 +110,11 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
     final color = Theme.of(context);
     toastification.dismissAll();
-    toastification.show(
-      context: context,
-      type: ToastificationType.success,
-      style: ToastificationStyle.flat,
-      autoCloseDuration: const Duration(seconds: 5),
-      title: Text('${product['productName']} added to cart'),
-      description: RichText(
-        text: const TextSpan(
-          text: 'The product was successfully added to your cart.',
-        ),
-      ),
-      alignment: Alignment.bottomCenter,
-      animationDuration: const Duration(milliseconds: 500),
-      animationBuilder: (context, animation, alignment, child) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-      icon: const Icon(Icons.check),
-      showIcon: true,
-      primaryColor: color.scaffoldBackgroundColor,
-      backgroundColor: color.primaryColor,
-      foregroundColor: Colors.black,
-      borderRadius: BorderRadius.circular(12),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x07000000),
-          blurRadius: 16,
-          offset: Offset(0, 16),
-          spreadRadius: 0,
-        ),
-      ],
-      showProgressBar: true,
-      closeButton: ToastCloseButton(
-        showType: CloseButtonShowType.onHover,
-        buttonBuilder: (context, onClose) {
-          return OutlinedButton.icon(
-            onPressed: onClose,
-            icon: const Icon(Icons.close, size: 20),
-            label: const Text('Close'),
-          );
-        },
-      ),
-      closeOnClick: false,
-      pauseOnHover: true,
-      dragToClose: true,
-      applyBlurEffect: true,
-      callbacks: ToastificationCallbacks(
-        onTap: (toastItem) => print('Toast ${toastItem.id} tapped'),
-        onCloseButtonTap: (toastItem) =>
-            print('Toast ${toastItem.id} close button tapped'),
-        onAutoCompleteCompleted: (toastItem) =>
-            print('Toast ${toastItem.id} auto complete completed'),
-        onDismissed: (toastItem) => print('Toast ${toastItem.id} dismissed'),
-      ),
+    Api().showMessage(
+      context,
+      'Your Product is addded to the cart',
+      'Success',
+      color.splashColor,
     );
   }
 
@@ -206,19 +159,31 @@ class _ShoppingPageState extends State<ShoppingPage> {
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.67,
+        childAspectRatio: 0.65,
         padding: EdgeInsets.all(10),
         children: products.map((product) {
-          return Product_Card(
-            onCartPressed: () {
-              addToCart(product);
+          return GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                scrollControlDisabledMaxHeightRatio: 0.8,
+                context: context,
+                builder: (context) {
+                  return ProductDetails(productDetails: products[4]);
+                },
+              );
             },
-            imageUrl: product['imageUrl'],
-            categoryName: product['categoryName'],
-            productName: product['productName'],
-            price: product['price'],
-            productDescription: 'Nice product',
-            isAvailable: true,
+            child: Product_Card(
+              onCartPressed: () {
+                addToCart(product);
+              },
+              imageUrl: product['imageUrl'],
+              categoryName: product['categoryName'],
+              productName: product['productName'],
+              price: product['price'],
+              productDescription:
+                  product['description'] ?? 'Here is a description',
+              isAvailable: true,
+            ),
           );
         }).toList(),
       ),

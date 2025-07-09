@@ -20,7 +20,7 @@ class _SellerProductPageState extends State<SellerProductPage>
     super.initState();
   }
 
-  Future<void> addSellerProduct(String productId, String name) async {
+  Future<void> addSellerProduct(String productId, String name,String descrip) async {
     if (user == null ||
         priceController.text.isEmpty ||
         locationController.text.isEmpty) return;
@@ -29,6 +29,7 @@ class _SellerProductPageState extends State<SellerProductPage>
       'productId': productId,
       'sellerId': user!.uid,
       'price': double.parse(priceController.text),
+      'description':descrip,
       'location': locationController.text,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -120,7 +121,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                   actions: [
                     TextButton(
                       onPressed: () async {
-                        await addSellerProduct(prod.id, prod['name']);
+                        await addSellerProduct(prod.id, prod['name'],prod['description']);
                         Navigator.pop(context);
                       },
                       child: Text("Submit"),

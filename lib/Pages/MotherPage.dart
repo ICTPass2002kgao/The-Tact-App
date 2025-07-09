@@ -151,22 +151,25 @@ class _MotherPageState extends State<MotherPage>
           });
         },
         items: [
-          SalomonBottomBarItem(icon: Icon(Ionicons.home), title: Text('Home')),
+          SalomonBottomBarItem(
+            icon: Icon(Ionicons.home_outline),
+            title: Text('Home'),
+          ),
           SalomonBottomBarItem(
             icon: Icon(Ionicons.calendar_outline),
             title: Text('Events'),
           ),
           SalomonBottomBarItem(
-            icon: Icon(Icons.shopping_basket),
+            icon: Icon(Icons.local_mall_outlined),
             title: Text('Shopping'),
           ),
           SalomonBottomBarItem(
-            icon: Icon(Icons.history),
+            icon: Icon(Icons.history_outlined),
             title: Text('History'),
           ),
           if (_userData['role'] == 'Seller')
             SalomonBottomBarItem(
-              icon: Icon(Ionicons.person),
+              icon: Icon(Ionicons.person_outline),
               title: Text('My Shop'),
             ),
         ],

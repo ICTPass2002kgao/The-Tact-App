@@ -127,7 +127,7 @@ class _Login_PageState extends State<Login_Page> {
           flex: 2,
           child: Image.asset(
             "assets/tact_logo.PNG",
-            height: 500,
+            height: 600,
             fit: BoxFit.contain,
           ),
         ),
@@ -141,12 +141,16 @@ class _Login_PageState extends State<Login_Page> {
     return Column(
       children: [
         SizedBox(height: 30),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(100),
-          child: Image.asset(
-            "assets/tact_logo.PNG",
-            height: 200,
-            fit: BoxFit.contain,
+        Card(
+          elevation: 0,
+          color: Colors.white,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(50),
+            child: Image.asset(
+              "assets/tact_logo.PNG",
+              height: 250,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
         const SizedBox(height: 30),
@@ -214,47 +218,64 @@ class _Login_PageState extends State<Login_Page> {
             ),
             const SizedBox(height: 24),
             Center(
-              child: Custom_Button(
-                text: "Login",
-                backgroundColor: colorScheme.primaryColor,
-                foregroundColor: colorScheme.scaffoldBackgroundColor,
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    try {
-                      await Api().login(
-                        context,
-                        txtEmail.text,
-                        txtPassword.text,
-                      );
-                      final user = _auth.currentUser;
-                      if (user != null) {
-                        await _checkAdminStatusAndNavigate(user);
+              child: Card(
+                color: Colors.transparent,
+                elevation: 10,
+                child: Custom_Button(
+                  text: "Login",
+                  backgroundColor: colorScheme.primaryColor,
+                  foregroundColor: colorScheme.scaffoldBackgroundColor,
+                  onPressed: () async {
+                    if (_formKey.currentState!.validate()) {
+                      try {
+                        await Api().login(
+                          context,
+                          txtEmail.text,
+                          txtPassword.text,
+                        );
+                        final user = _auth.currentUser;
+                        if (user != null) {
+                          await _checkAdminStatusAndNavigate(user);
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Login failed: ${e.toString()}'),
+                          ),
+                        );
                       }
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Login failed: ${e.toString()}'),
-                        ),
-                      );
                     }
-                  }
-                },
-                minWidth: isMobile ? double.infinity : 300,
+                  },
+                  minWidth: isMobile ? double.infinity : 300,
+                ),
               ),
             ),
             SizedBox(height: 20),
-            CustomOutlinedButton(
-              text: "Proceed without login",
-              backgroundColor: colorScheme.scaffoldBackgroundColor,
-              foregroundColor: colorScheme.primaryColor,
-              onPressed: () async {
-                FirebaseAuth.instance.signInAnonymously();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const MotherPage()),
-                );
-              },
-              width: isMobile ? double.infinity : 300,
+            Center(
+              child: Card(
+                elevation: 5,
+                color: Colors.transparent,
+                child: CustomOutlinedButton(
+                  text: "Proceed without login",
+                  backgroundColor: colorScheme.scaffoldBackgroundColor,
+                  foregroundColor: colorScheme.primaryColor,
+                  onPressed: () async {
+                    try {
+                      await FirebaseAuth.instance.signOut();
+                      if (!context.mounted) return;
+                      Navigator.pushNamed(context, '/main-menu');
+                    } catch (e) {
+                      Api().showMessage(
+                        context,
+                        'Something went wrong try again later $e',
+                        '',
+                        colorScheme.primaryColorDark,
+                      );
+                    }
+                  },
+                  width: isMobile ? double.infinity : 300,
+                ),
+              ),
             ),
 
             const SizedBox(height: 20),

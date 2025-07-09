@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class EventDetailBottomSheet extends StatelessWidget {
   final String date;
@@ -48,13 +51,30 @@ class EventDetailBottomSheet extends StatelessWidget {
                 width: double.infinity,
                 fit: BoxFit.cover,
               ),
-            Text(
-              "$title",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: color.scaffoldBackgroundColor,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    "$title",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: color.scaffoldBackgroundColor,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    SharePlus.instance.share(
+                      ShareParams(text: 'https://www.facebook.com'),
+                    );
+                  },
+                  icon: Icon(Icons.share, color: color.scaffoldBackgroundColor),
+                ),
+              ],
             ),
             SizedBox(height: 10),
             Row(
@@ -83,7 +103,20 @@ class EventDetailBottomSheet extends StatelessWidget {
             ),
             SizedBox(height: 20),
             CustomOutlinedButton(
-              onPressed: () {},
+              onPressed: () async {
+                final url = Uri.parse('https://www.facebook.com');
+                // Replace with your live stream URL
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                } else {
+                  Api().showMessage(
+                    context,
+                    'Cannot join live',
+                    "Error",
+                    color.primaryColorDark,
+                  );
+                }
+              },
               text: 'JOIN LIVE!',
               backgroundColor: color.scaffoldBackgroundColor,
               foregroundColor: color.primaryColor,

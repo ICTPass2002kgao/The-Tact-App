@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 
 class AuthTextField extends StatelessWidget {
   final TextEditingController? controller;
@@ -20,27 +20,31 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    
-  final color = Theme.of(context);
-    return TextFormField(
-      onChanged: (value) => onChange?.call,
-      controller: controller,
-      validator: (value) => onValidate(value),
-      obscureText: visible ?? false,
-      decoration: InputDecoration(
-        border: OutlineInputBorder(
-          borderSide: BorderSide(color: color.primaryColor),
-          borderRadius: BorderRadius.circular(10),
+    final color = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(4.0),
+      child: TextFormField(
+        onChanged: (value) => onChange?.call,
+        controller: controller,
+        validator: (value) => onValidate(value),
+        obscureText: visible ?? false,
+        decoration: InputDecoration(
+          border: OutlineInputBorder(
+            borderSide: BorderSide(color: color.primaryColor),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: color.primaryColor),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          focusColor: color.primaryColor,
+          fillColor: color.scaffoldBackgroundColor,
+          filled: true,
+          prefixIcon: icon != null
+              ? Icon(icon, color: color.primaryColor)
+              : null,
+          labelText: placeholder,
         ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: color.primaryColor),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        focusColor: color.primaryColor,
-        fillColor: color.scaffoldBackgroundColor,
-        filled: true,
-        prefixIcon: icon != null ? Icon(icon, color: color.primaryColor) : null,
-        labelText: placeholder,
       ),
     );
   }

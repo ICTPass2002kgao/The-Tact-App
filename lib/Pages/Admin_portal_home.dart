@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:text_field_validation/text_field_validation.dart';
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Components/TextField.dart';
 
@@ -33,7 +34,7 @@ class _AdminAddProductState extends State<AdminAddProduct> {
 
   Future<void> uploadProduct() async {
     if (nameController.text.isEmpty || imageFiles.isEmpty) return;
-
+    Api().showLoading(context);
     List<String> imageUrls = [];
 
     for (var file in imageFiles) {
@@ -51,12 +52,15 @@ class _AdminAddProductState extends State<AdminAddProduct> {
       'imageUrl': imageUrls,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    final color = Theme.of(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Product uploaded with ${imageUrls.length} images"),
-      ),
+    Api().showMessage(
+      context,
+      'The ${nameController.text} have been added',
+      '',
+      color.splashColor,
     );
+    Navigator.of(context);
 
     nameController.clear();
     descController.clear();

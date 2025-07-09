@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Pages/Add_Tactso_Branch.dart';
 import 'package:ttact/Pages/Admin_Add_Officers.dart';
 import 'package:ttact/Pages/Admin_Home_Page.dart';
 import 'package:ttact/Pages/Admin_portal_home.dart';
@@ -19,7 +20,8 @@ class _AdminPortalState extends State<AdminPortal> {
   List pages = [
     AdminHomePage(),
     AdminAddProduct(),
-    AdminAddOfficers(),
+    AddMusic(),
+    AddTactsoBranch(),
     PortalAddFeed(),
   ];
   @override
@@ -27,8 +29,8 @@ class _AdminPortalState extends State<AdminPortal> {
     final color = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text("Admin Portal")),
-      backgroundColor: color.scaffoldBackgroundColor.withOpacity(0.9),
+      appBar: AppBar(title: Text("Admin Portal"), elevation: 0),
+      backgroundColor: color.scaffoldBackgroundColor.withOpacity(1),
       bottomNavigationBar: SalomonBottomBar(
         backgroundColor: color.primaryColor,
         selectedItemColor: color.scaffoldBackgroundColor,
@@ -47,8 +49,12 @@ class _AdminPortalState extends State<AdminPortal> {
             title: Text('Add Products'),
           ),
           SalomonBottomBarItem(
-            icon: Icon(Icons.group_add_outlined),
-            title: Text('Add Officers'),
+            icon: Icon(Ionicons.musical_notes_outline),
+            title: Text('Add Tact Songs'),
+          ),
+          SalomonBottomBarItem(
+            icon: Icon(Icons.location_city_outlined),
+            title: Text('Add Tactso Branch'),
           ),
           SalomonBottomBarItem(
             icon: Icon(Icons.add_card_outlined),
