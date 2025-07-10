@@ -61,5 +61,12 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your media to pick videos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to audio for extraction.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Optional if you use camera input.</string>
+
 </dict>
 </plist>
