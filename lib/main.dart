@@ -38,8 +38,7 @@ class MyApp extends StatelessWidget {
         hintColor: const Color.fromARGB(255, 103, 103, 103),
         splashColor: const Color.fromARGB(255, 33, 98, 35),
         primaryColorDark: const Color.fromARGB(255, 194, 50, 40),
-      ),
-      //const Color.fromARGB(255, 7, 2, 80)
+      ), 
       initialRoute: '/',
       routes: {
         '/tact_seller': (context) => SellerProductPage(),

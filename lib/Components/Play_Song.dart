@@ -1,13 +1,117 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:ttact/Components/API.dart';
+import 'song.dart';
 
-class PlaySong extends StatelessWidget {
-  final Map<String, dynamic> songs;
-  const PlaySong({super.key, required this.songs});
+class PlaySong extends StatefulWidget {
+  final List<Map<String, dynamic>> songs;
+  final int initialIndex;
+
+  const PlaySong({super.key, required this.songs, required this.initialIndex});
+
+  @override
+  State<PlaySong> createState() => _PlaySongState();
+}
+
+class _PlaySongState extends State<PlaySong> {
+  late AudioPlayer _audioPlayer;
+  int _currentIndex = 0;
+
+  bool _isPlaying = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  final LocalStorageService _storage = LocalStorageService();
+  final AudioPlayerService _playerService = AudioPlayerService();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+
+    _playerService.audioPlayer.onDurationChanged.listen((newDuration) {
+      setState(() {
+        _duration = newDuration;
+      });
+    });
+
+    _playerService.audioPlayer.onPositionChanged.listen((newPosition) {
+      setState(() {
+        _position = newPosition;
+      });
+    });
+
+    _playerService.audioPlayer.onPlayerComplete.listen((event) {
+      _playNext();
+    });
+
+    _playSong();
+  }
+
+  bool isPlaying = false;
+  Future<void> _playSong() async {
+    final songUrl = widget.songs[_currentIndex]['songUrl'];
+    if (songUrl != null) {
+      await _playerService.play(songUrl);
+      setState(() {
+        isPlaying = true;
+      });
+    }
+  }
+
+  void _togglePlayPause() async {
+    if (_playerService.isPlaying) {
+      await _playerService.pause();
+      setState(() {
+        isPlaying = false;
+      });
+    } else {
+      await _playerService.resume();
+      setState(() {
+        isPlaying = true;
+      });
+    }
+    setState(() {});
+  }
+
+  void _seekTo(double seconds) {
+    final newPosition = Duration(seconds: seconds.toInt());
+    _playerService.audioPlayer.seek(newPosition);
+  }
+
+  void _playNext() {
+    if (_currentIndex < widget.songs.length - 1) {
+      setState(() {
+        _currentIndex++;
+      });
+      _playSong();
+    }
+  }
+
+  void _playPrevious() {
+    if (_currentIndex > 0) {
+      setState(() {
+        _currentIndex--;
+      });
+      _playSong();
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+
+    final song = Song.fromMap(widget.songs[_currentIndex]);
+
     return Scaffold(
       backgroundColor: color.scaffoldBackgroundColor,
       body: Padding(
@@ -58,7 +162,6 @@ class PlaySong extends StatelessWidget {
                 ),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -81,7 +184,7 @@ class PlaySong extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              songs['songName'],
+                              song.songName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -90,7 +193,7 @@ class PlaySong extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'By ${songs['artist']}',
+                              'By ${song.artist}',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w300,
@@ -102,7 +205,15 @@ class PlaySong extends StatelessWidget {
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () async {
+                              await _storage.saveDownloadedSong(song);
+                              Api().showMessage(
+                                context,
+                                'Downloaded!',
+                                '',
+                                color.splashColor,
+                              );
+                            },
                             icon: Icon(
                               Icons.download_outlined,
                               size: 30,
@@ -110,7 +221,15 @@ class PlaySong extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () async {
+                              await _storage.saveToPlaylist(song);
+                              Api().showMessage(
+                                context,
+                                "Song added to playlist",
+                                '',
+                                color.splashColor,
+                              );
+                            },
                             icon: Icon(
                               Icons.playlist_add,
                               color: color.primaryColor,
@@ -118,7 +237,11 @@ class PlaySong extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Share.share(
+                                'Check out this song: ${song.songUrl}',
+                              );
+                            },
                             icon: Icon(
                               Ionicons.share_outline,
                               color: color.primaryColor,
@@ -132,17 +255,22 @@ class PlaySong extends StatelessWidget {
                   SizedBox(height: 20),
                   Row(
                     children: [
-                      Text('05:20'),
-
+                      Text(_formatDuration(_position)),
                       Expanded(
-                        child: Divider(
-                          indent: 4,
-                          endIndent: 4,
-                          thickness: 4,
-                          color: color.primaryColor,
+                        child: Slider(
+                          activeColor: color.primaryColor,
+                          inactiveColor: Colors.grey,
+                          min: 0,
+                          max: _duration.inSeconds.toDouble(),
+                          value: _position.inSeconds
+                              .clamp(0, _duration.inSeconds)
+                              .toDouble(),
+                          onChanged: (value) {
+                            _seekTo(value);
+                          },
                         ),
                       ),
-                      Text('00:00'),
+                      Text(_formatDuration(_duration)),
                     ],
                   ),
                   SizedBox(height: 20),
@@ -158,12 +286,11 @@ class PlaySong extends StatelessWidget {
                         borderRadius: BorderRadius.circular(30),
                         color: color.primaryColor.withOpacity(0.9),
                       ),
-
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           IconButton(
-                            onPressed: () {},
+                            onPressed: _playPrevious,
                             icon: Icon(
                               Icons.skip_previous,
                               color: color.scaffoldBackgroundColor,
@@ -171,15 +298,19 @@ class PlaySong extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: _togglePlayPause,
                             icon: Icon(
-                              Icons.play_arrow,
+                              _isPlaying
+                                  ? Icons.pause
+                                  : isPlaying == false
+                                  ? Icons.play_arrow
+                                  : Icons.pause,
                               color: color.scaffoldBackgroundColor,
                               size: 70,
                             ),
                           ),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: _playNext,
                             icon: Icon(
                               Icons.skip_next,
                               color: color.scaffoldBackgroundColor,

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/ApostleCards.dart';
 import 'package:ttact/Components/Play_Song.dart';
 import 'package:ttact/Components/Tactso_Branch_Details.dart';
@@ -626,55 +627,92 @@ class _HomePageState extends State<HomePage>
                       ),
                       SizedBox(height: 10),
                       Expanded(
-                        child: ListView.builder(
-                          itemCount: songs.length,
-                          itemBuilder: (context, index) {
-                            final data = songs.values.toList();
-                            var song = data[index];
-                            return Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(width: 1.5),
-                                ),
-                                child: ListTile(
-                                  onTap: () {
-                                    showCupertinoSheet(
-                                      enableDrag: true,
-                                      context: context,
-                                      pageBuilder: (context) {
-                                        return PlaySong(songs: song);
-                                      },
-                                    );
-                                  },
-                                  minVerticalPadding: 1,
-                                  trailing: Icon(Icons.more_vert_outlined),
-                                  subtitle: Text(
-                                    'by - ${song['artist']} released on ${song['released']}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w200,
-                                      fontStyle: FontStyle.italic,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  title: Text(song['songName']),
-                                  leading: Container(
-                                    height: 50,
-                                    width: 50,
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('tact_music')
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return Center(child: CircularProgressIndicator());
+                            }
+
+                            if (!snapshot.hasData ||
+                                snapshot.data!.docs.isEmpty) {
+                              return Center(child: Text('No songs available'));
+                            }
+
+                            final songs = snapshot.data!.docs;
+
+                            return ListView.builder(
+                              itemCount: songs.length,
+                              itemBuilder: (context, index) {
+                                final song =
+                                    songs[index].data() as Map<String, dynamic>;
+
+                                return Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Container(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(18),
                                       border: Border.all(width: 1.5),
                                     ),
-                                    child: Icon(
-                                      Icons.music_note_outlined,
-                                      color: color.primaryColor,
+                                    child: ListTile(
+                                      onTap: () {
+                                        showCupertinoSheet(
+                                          enableDrag: true,
+                                          context: context,
+                                          pageBuilder: (context) {
+                                            return PlaySong(
+                                              songs: songs
+                                                  .map(
+                                                    (doc) =>
+                                                        doc.data()
+                                                            as Map<
+                                                              String,
+                                                              dynamic
+                                                            >,
+                                                  )
+                                                  .toList(),
+                                              initialIndex: index,
+                                            );
+                                          },
+                                        );
+                                      },
+                                      minVerticalPadding: 1,
+                                      trailing: Icon(Icons.more_vert_outlined),
+                                      subtitle: Text(
+                                        'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w200,
+                                          fontStyle: FontStyle.italic,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      title: Text(
+                                        song['songName']?.toString() ??
+                                            'Untitled song',
+                                      ),
+                                      leading: Container(
+                                        height: 50,
+                                        width: 50,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          border: Border.all(width: 1.5),
+                                        ),
+                                        child: Icon(
+                                          Icons.music_note_outlined,
+                                          color: Theme.of(context).primaryColor,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             );
                           },
                         ),

@@ -67,6 +67,14 @@
 	<string>We need access to audio for extraction.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Optional if you use camera input.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app uses the local network to connect the Flutter debugger during development.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartobservatory._tcp</string>
+        <string>_dartVmService._tcp</string> 
+	</array> 
+  
 
 </dict>
 </plist>

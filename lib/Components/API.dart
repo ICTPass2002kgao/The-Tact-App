@@ -1,9 +1,14 @@
+import 'dart:convert';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toastification/toastification.dart';
+import 'package:ttact/Components/song.dart';
 import 'CustomOutlinedButton.dart';
 
 class Api {
@@ -211,5 +216,72 @@ class Api {
     } catch (e) {
       print(e.toString());
     }
+  }
+
+  //Music API
+}
+ 
+
+class AudioPlayerService {
+  static final AudioPlayerService _instance = AudioPlayerService._internal();
+
+  factory AudioPlayerService() => _instance;
+
+  AudioPlayerService._internal();
+
+  final AudioPlayer audioPlayer = AudioPlayer();
+  bool isPlaying = false;
+
+  Future<void> play(String url) async {
+    await audioPlayer.play(UrlSource(url));
+    isPlaying = true;
+  }
+
+  Future<void> pause() async {
+    await audioPlayer.pause();
+    isPlaying = false;
+  }
+
+  Future<void> resume() async {
+    await audioPlayer.resume();
+    isPlaying = true;
+  }
+
+  Future<void> stop() async {
+    await audioPlayer.stop();
+    isPlaying = false;
+  }
+} 
+ 
+
+class LocalStorageService {
+  static final LocalStorageService _instance = LocalStorageService._internal();
+  factory LocalStorageService() => _instance;
+  LocalStorageService._internal();
+
+  Future<void> saveDownloadedSong(Song song) async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getStringList('downloaded_songs') ?? [];
+    existing.add(jsonEncode(song.toJson()));
+    await prefs.setStringList('downloaded_songs', existing);
+  }
+
+  Future<void> saveToPlaylist(Song song) async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getStringList('playlist_songs') ?? [];
+    existing.add(jsonEncode(song.toJson()));
+    await prefs.setStringList('playlist_songs', existing);
+  }
+
+  Future<List<Song>> getDownloadedSongs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('downloaded_songs') ?? [];
+    return list.map((e) => Song.fromMap(jsonDecode(e))).toList();
+  }
+
+  Future<List<Song>> getPlaylistSongs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('playlist_songs') ?? [];
+    return list.map((e) => Song.fromMap(jsonDecode(e))).toList();
   }
 }
