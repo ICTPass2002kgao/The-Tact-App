@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:flutter/material.dart'; 
 
 class UniversityCard extends StatelessWidget {
   final String UniName;

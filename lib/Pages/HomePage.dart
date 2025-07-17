@@ -3,9 +3,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
-import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/ApostleCards.dart';
+import 'package:ionicons/ionicons.dart'; 
 import 'package:ttact/Components/Play_Song.dart';
 import 'package:ttact/Components/Tactso_Branch_Details.dart';
 import 'package:ttact/Components/UniversityCard.dart';
@@ -381,8 +379,7 @@ class _HomePageState extends State<HomePage>
                           stream: FirebaseFirestore.instance
                               .collection('upcoming_events')
                               .snapshots(),
-                          builder: (context, snapshots) {
-                            final event = snapshots.data;
+                          builder: (context, snapshots) { 
                             return GestureDetector(
                               onTap: () {
                                 showModalBottomSheet(

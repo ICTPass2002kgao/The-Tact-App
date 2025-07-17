@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
-import 'package:ttact/Pages/ShoppingPage.dart'; // For date formatting
+import 'package:intl/intl.dart'; 
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -575,11 +574,7 @@ class OrderStatusTracker extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final int currentStatusIndex = allStatuses.indexOf(
-      currentStatus.toLowerCase(),
-    );
-
+  Widget build(BuildContext context) { 
     // Handle 'cancelled' status specifically. It's a terminal state outside the linear flow.
     if (currentStatus.toLowerCase() == 'cancelled') {
       return Center(

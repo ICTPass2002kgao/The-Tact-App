@@ -286,8 +286,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // New Widget to build the Upcoming Events List
-  Widget _buildUpcomingEventsList(BuildContext context) {
-    final color = Theme.of(context);
+  Widget _buildUpcomingEventsList(BuildContext context) { 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('upcoming_events')
@@ -370,8 +369,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             String monthDisplay = event['month'] ?? '';
             String title = event['title'] ?? 'No Title';
             String description =
-                event['description'] ?? 'No description available.';
-            String province = event['province'] ?? '';
+                event['description'] ?? 'No description available.'; 
 
             // Adjust date format for ranges if necessary, e.g., "Feb - Mar"
             if (dateDisplay.contains('-') && monthDisplay.isEmpty) {

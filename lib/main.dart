@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:ttact/Pages/Admin_Portal.dart';
 import 'package:ttact/Pages/CartPage.dart';
 import 'package:ttact/Pages/Login.dart';
-import 'package:ttact/Pages/MotherPage.dart';
-import 'package:ttact/Pages/Payment.dart'; // Assuming Payment is still relevant but not used in routes
+import 'package:ttact/Pages/MotherPage.dart'; 
 import 'package:ttact/Pages/SignUpPage.dart'; // Corrected import from Tact_Seller
 import 'package:ttact/Pages/Tact_Seller.dart';
 import 'package:ttact/Pages/orders.dart'; // Corrected import for the actual OrdersPage

@@ -136,8 +136,7 @@ class _EventsPageState extends State<EventsPage> {
         firstUpcomingIndex = i;
         break;
       }
-    }
-    final colorv = Theme.of(context);
+    } 
     return Column(
       children: [
         Padding(

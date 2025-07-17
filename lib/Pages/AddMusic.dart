@@ -26,8 +26,7 @@ class _AddMusicState extends State<AddMusic> {
   TextEditingController artistController = TextEditingController();
   DateTime? _releasedDate;
   File? _videoFile;
-  String? _audioUrl;
-  bool _isLoading = false;
+  String? _audioUrl; 
 
   final AudioPlayer _audioPlayer = AudioPlayer();
 
@@ -43,8 +42,7 @@ class _AddMusicState extends State<AddMusic> {
 Future<void> uploadVideo() async {
   if (_videoFile == null) return;
 
-  Api().showLoading(context);
-  setState(() => _isLoading = true);
+  Api().showLoading(context); 
 
   try {
     // 1. Convert video to audio via Django
@@ -76,8 +74,7 @@ Future<void> uploadVideo() async {
       Theme.of(context).primaryColorDark,
     );
   } finally {
-    Navigator.pop(context);
-    setState(() => _isLoading = false);
+    Navigator.pop(context); 
   }
 }
 Future<File> _convertToAudio(String videoPath) async {

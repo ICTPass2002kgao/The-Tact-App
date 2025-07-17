@@ -476,8 +476,7 @@ class LocalStorageService {
   factory LocalStorageService() => _instance;
 
   LocalStorageService._internal();
-
-  static const String _downloadedSongsKey = 'downloads';
+ 
 
   static const String _playlistSongsKey = 'playlist_songs';
 
@@ -490,7 +489,7 @@ class LocalStorageService {
   /// Returns the updated Song object or null if download fails.
 
   Future<Song?> downloadSong(Song songToDownload) async {
-    if (songToDownload.songUrl == null || songToDownload.songUrl!.isEmpty) {
+    if (songToDownload.songUrl == null || songToDownload.songUrl.isEmpty) {
       debugPrint('Song URL is null or empty. Cannot download.');
 
       return null;
@@ -505,7 +504,7 @@ class LocalStorageService {
     }
 
     try {
-      final response = await http.get(Uri.parse(songToDownload.songUrl!));
+      final response = await http.get(Uri.parse(songToDownload.songUrl));
 
       if (response.statusCode == 200) {
         final directory = await getApplicationDocumentsDirectory();
@@ -534,9 +533,7 @@ class LocalStorageService {
           createdAt: songToDownload.createdAt,
 
           localFilePath: filePath, // Store the local path
-        );
-
-        await _saveSongToDownloadedList(updatedSong);
+        ); 
 
         debugPrint('Song downloaded to: $filePath');
 
@@ -559,102 +556,17 @@ class LocalStorageService {
 
   /// This will overwrite an existing song with the same ID or add a new one.
 
-  Future<void> _saveSongToDownloadedList(Song song) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    List<Song> currentSongs = await getDownloadedSongs();
-
-    // Check if the song already exists by ID and update it
-
-    final existingIndex = currentSongs.indexWhere((s) => s.id == song.id);
-
-    if (existingIndex != -1) {
-      currentSongs[existingIndex] = song;
-    } else {
-      currentSongs.add(song);
-    }
-
-    // Convert the list of Song objects back to a list of JSON strings
-
-    final List<String> songJsonList = currentSongs
-        .map((s) => jsonEncode(s.toMap()))
-        .toList();
-
-    await prefs.setStringList(_downloadedSongsKey, songJsonList);
-
-    debugPrint('Downloaded song metadata saved for song ID: ${song.id}');
-  }
+  
 
   /// Retrieves all downloaded songs metadata, including their local file paths.
 
-  @override
-  Future<List<Song>> getDownloadedSongs() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final List<String>? songJsonList = prefs.getStringList(_downloadedSongsKey);
-
-    if (songJsonList == null) {
-      return [];
-    }
-
-    return songJsonList.map((e) => Song.fromMap(jsonDecode(e))).toList();
-  }
+  
 
   /// Deletes a downloaded song by its ID.
 
   /// This will remove both the local audio file and its metadata from SharedPreferences.
 
-  Future<void> deleteDownloadedSong(String songId) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    List<Song> currentSongs = await getDownloadedSongs();
-
-    final songToRemoveIndex = currentSongs.indexWhere((s) => s.id == songId);
-
-    if (songToRemoveIndex != -1) {
-      final songToRemove = currentSongs[songToRemoveIndex];
-
-      // 1. Delete the actual local audio file
-
-      if (songToRemove.localFilePath != null &&
-          songToRemove.localFilePath!.isNotEmpty) {
-        final file = File(songToRemove.localFilePath!);
-
-        if (await file.exists()) {
-          try {
-            await file.delete();
-
-            debugPrint('Local file deleted: ${songToRemove.localFilePath}');
-          } catch (e) {
-            debugPrint(
-              'Error deleting local file ${songToRemove.localFilePath}: $e',
-            );
-
-            // Continue even if file deletion fails, remove metadata anyway
-          }
-        } else {
-          debugPrint(
-            'Local file not found for deletion: ${songToRemove.localFilePath}',
-          );
-        }
-      }
-
-      // 2. Remove the song metadata from the list in SharedPreferences
-
-      currentSongs.removeAt(songToRemoveIndex);
-
-      final List<String> updatedSongJsonList = currentSongs
-          .map((s) => jsonEncode(s.toMap()))
-          .toList();
-
-      await prefs.setStringList(_downloadedSongsKey, updatedSongJsonList);
-
-      debugPrint('Downloaded song metadata removed for song ID: $songId');
-    } else {
-      debugPrint('Song with ID $songId not found in downloaded list.');
-    }
-  }
-
+  
   // --- Existing Methods for Playlist (Unchanged but using new keys) ---
 
   Future<void> saveToPlaylist(Song song) async {

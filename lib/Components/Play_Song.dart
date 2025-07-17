@@ -1,5 +1,4 @@
-import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/material.dart';
+ import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ttact/Components/API.dart';
@@ -15,14 +14,9 @@ class PlaySong extends StatefulWidget {
   State<PlaySong> createState() => _PlaySongState();
 }
 
-class _PlaySongState extends State<PlaySong> {
-  late AudioPlayer
-  _audioPlayer; // This variable is declared but not used, consider removing it if not needed.
+class _PlaySongState extends State<PlaySong> { // This variable is declared but not used, consider removing it if not needed.
   int _currentIndex = 0;
-
-  bool _isPlaying =
-      false; // This state variable seems to be shadowed by 'isPlaying' below, leading to potential confusion.
-  Duration _position = Duration.zero;
+   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
 
   final LocalStorageService _storage = LocalStorageService();
@@ -59,8 +53,7 @@ class _PlaySongState extends State<PlaySong> {
     if (songUrl != null) {
       await _playerService.play(songUrl);
       setState(() {
-        isPlaying = true;
-        _isPlaying = true; // Keep consistent with both _isPlaying and isPlaying
+        isPlaying = true; // Keep consistent with both _isPlaying and isPlaying
       });
     }
   }
@@ -69,14 +62,12 @@ class _PlaySongState extends State<PlaySong> {
     if (_playerService.isPlaying) {
       await _playerService.pause();
       setState(() {
-        isPlaying = false;
-        _isPlaying = false;
+        isPlaying = false; 
       });
     } else {
       await _playerService.resume();
       setState(() {
-        isPlaying = true;
-        _isPlaying = true;
+        isPlaying = true; 
       });
     }
   }
@@ -97,8 +88,7 @@ class _PlaySongState extends State<PlaySong> {
       // Optional: Handle end of playlist, e.g., loop back to the beginning or stop
       // For now, it will just stop playing when it reaches the end.
       setState(() {
-        isPlaying = false;
-        _isPlaying = false;
+        isPlaying = false; 
       });
       await _playerService.pause(); // Stop playback at the end of the playlist
     }
@@ -115,8 +105,7 @@ class _PlaySongState extends State<PlaySong> {
       // Optional: Handle beginning of playlist, e.g., loop to the end or stop
       // For now, it will just stop playing when it reaches the beginning.
       setState(() {
-        isPlaying = false;
-        _isPlaying = false;
+        isPlaying = false; 
       });
       await _playerService
           .pause(); // Stop playback at the beginning of the playlist

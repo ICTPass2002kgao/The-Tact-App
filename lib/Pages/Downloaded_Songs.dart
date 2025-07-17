@@ -1,8 +1,7 @@
 // lib/Components/DownloadedSongs.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:ttact/Components/API.dart'; // Ensure this path is correct
+import 'package:flutter/material.dart'; 
 import 'package:ttact/Components/Play_Song.dart'; // Ensure this path is correct
 import 'package:ttact/Components/song.dart'; // Ensure this path is correct
 
@@ -14,21 +13,13 @@ class DownloadedSongs extends StatefulWidget {
 }
 
 class _DownloadedSongsState extends State<DownloadedSongs> {
-  List<Song> songs = [];
-  final LocalStorageService _localStorageService = LocalStorageService();
+  List<Song> songs = []; 
 
   @override
   void initState() {
-    super.initState();
-    _loadDownloadedSongs();
+    super.initState(); 
   }
-
-  Future<void> _loadDownloadedSongs() async {
-    final downloaded = await _localStorageService.getDownloadedSongs();
-    setState(() {
-      songs = downloaded;
-    });
-  }
+ 
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +56,7 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                       },
                       trailing: const Icon(Icons.more_vert_outlined),
                       subtitle: Text(
-                        'by - ${song.artist ?? 'Unknown artist'} • ${song.createdAt is Timestamp ? (song.createdAt as Timestamp).toDate().toString().split(' ')[0] : (song.createdAt ?? 'Unknown date')}',
+                        'by - ${song.artist} • ${song.createdAt is Timestamp ? (song.createdAt as Timestamp).toDate().toString().split(' ')[0] : (song.createdAt ?? 'Unknown date')}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -74,7 +65,7 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                           fontSize: 13,
                         ),
                       ),
-                      title: Text(song.songName ?? 'Untitled song'),
+                      title: Text(song.songName),
                       leading: Container(
                         height: 50,
                         width: 50,

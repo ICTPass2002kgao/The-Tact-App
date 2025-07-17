@@ -267,8 +267,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
-        final String? paymentUrl = responseData['paymentUrl'];
-        final String? orderId = responseData['orderId'];
+        final String? paymentUrl = responseData['paymentUrl']; 
 
         if (paymentUrl != null) {
           final Uri uri = Uri.parse(paymentUrl);
@@ -398,9 +397,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
         final String? paymentLinkUrl = responseData['paymentLinkUrl'];
-        final String? orderId =
-            responseData['orderId']; // Get the Firestore orderId
-
+        
         if (paymentLinkUrl != null) {
           final Uri uri = Uri.parse(paymentLinkUrl);
 

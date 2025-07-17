@@ -825,7 +825,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                           Text('Delivery Needed: Yes'),
                           Text('Delivery Address: ${deliveryAddress}'),
                           Text(
-                            'Delivery Charge: R${(orderData['deliveryCharge'] as num?)?.toDouble()?.toStringAsFixed(2) ?? '0.00'}',
+                            'Delivery Charge: R${(orderData['deliveryCharge'] as num?)?.toDouble().toStringAsFixed(2) ?? '0.00'}',
                           ),
                         ] else ...[
                           Text('Delivery Needed: No (Collection)'),
@@ -846,7 +846,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                                 top: 4.0,
                               ),
                               child: Text(
-                                '- ${product['productName']} (x${product['quantity']}) @ R${(product['price'] as num?)?.toDouble()?.toStringAsFixed(2)} each = R${(product['itemTotalPrice'] as num?)?.toDouble()?.toStringAsFixed(2)}',
+                                '- ${product['productName']} (x${product['quantity']}) @ R${(product['price'] as num?)?.toDouble().toStringAsFixed(2)} each = R${(product['itemTotalPrice'] as num?)?.toDouble().toStringAsFixed(2)}',
                               ),
                             );
                           }).toList(),

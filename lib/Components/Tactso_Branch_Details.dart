@@ -166,8 +166,7 @@ class TactsoBranchDetails extends StatelessWidget {
             CustomOutlinedButton(
               onPressed: () async {
                 final url = Uri.parse(
-                  "${universityDetails['applicationLink']}" ??
-                      'https://www.vut.ac.za',
+                  "${universityDetails['applicationLink']}"  
                 ); 
                 if (await canLaunchUrl(url)) {
                   await launchUrl(url, mode: LaunchMode.inAppBrowserView);
