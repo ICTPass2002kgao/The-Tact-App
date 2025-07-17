@@ -7,7 +7,7 @@ import 'package:ttact/Components/API.dart';
 import 'package:ttact/Pages/Add_Tactso_Branch.dart';
 import 'package:ttact/Pages/AddMusic.dart';
 import 'package:ttact/Pages/Admin_Home_Page.dart';
-import 'package:ttact/Pages/Admin_portal_home.dart';
+import 'package:ttact/Pages/Admin_Add_Product.dart';
 import 'package:ttact/Pages/Portal_Add_Feed.dart';
 
 class AdminPortal extends StatefulWidget {
@@ -30,7 +30,7 @@ class _AdminPortalState extends State<AdminPortal> {
 
     return Scaffold(
       appBar: AppBar(title: Text("Admin Portal"), elevation: 0),
-      backgroundColor: color.scaffoldBackgroundColor.withOpacity(1),
+      backgroundColor: color.scaffoldBackgroundColor,
       bottomNavigationBar: SalomonBottomBar(
         backgroundColor: color.primaryColor,
         selectedItemColor: color.scaffoldBackgroundColor,
@@ -46,19 +46,35 @@ class _AdminPortalState extends State<AdminPortal> {
 
           SalomonBottomBarItem(
             icon: Icon(Icons.add_shopping_cart_outlined),
-            title: Text('Add Products'),
+            title: Text(
+              'Add Products',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           SalomonBottomBarItem(
             icon: Icon(Ionicons.musical_notes_outline),
-            title: Text('Add Tact Songs'),
+            title: Text(
+              'Add Tact Songs',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           SalomonBottomBarItem(
             icon: Icon(Icons.location_city_outlined),
-            title: Text('Add Tactso Branch'),
+            title: Text(
+              'Add Tactso Branch',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           SalomonBottomBarItem(
             icon: Icon(Icons.add_card_outlined),
-            title: Text('Add feeds'),
+            title: Text(
+              'Add feeds',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

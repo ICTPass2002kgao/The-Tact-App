@@ -25,11 +25,13 @@ class AuthTextField extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: TextFormField(
+        
         onChanged: (value) => onChange?.call(value),
         controller: controller,
         validator: (value) => onValidate(value),
         obscureText: visible ?? false,
         decoration: InputDecoration(
+          
           border: OutlineInputBorder(
             borderSide: BorderSide(color: color.hintColor),
             borderRadius: BorderRadius.circular(15),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,8 +23,9 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
       TextEditingController();
   final TextEditingController institutionAddressController =
       TextEditingController();
-  final TextEditingController address = TextEditingController();
   List<XFile> imageFiles = [];
+  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
 
   final ImagePicker _picker = ImagePicker();
 
@@ -51,25 +53,32 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
       imageUrls.add(url);
     }
     final color = Theme.of(context);
+    var user = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      email: emailController.text,
+      password: passwordController.text,
+    );
     await FirebaseFirestore.instance.collection('tactso_branches').add({
       'institutionName': nameController.text,
       'applicationLink': applicationLinkController.text,
-      'address': address.text,
+      'email': user.user!.email,
+      'uid': user.user!.uid,
+      'address': institutionAddressController.text,
       'imageUrl': imageUrls,
       'isOpplicationOpen': isApplicationOpen,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    Navigator.of(context);
+    Navigator.pop(context);
     Api().showMessage(
       context,
       'Institution added successfully',
       'Successful',
       color.splashColor,
     );
+    institutionAddressController.clear();
     nameController.clear();
-    address.clear();
     applicationLinkController.clear();
-    address.clear;
+    emailController.clear();
+    passwordController.clear();
     setState(() {
       imageFiles = [];
     });
@@ -145,6 +154,16 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
             placeholder: 'Institution Application link',
             controller: applicationLinkController,
           ),
+          AuthTextField(
+            onValidate: TextFieldValidation.email,
+            placeholder: 'Email',
+            controller: emailController,
+          ),
+          AuthTextField(
+            onValidate: TextFieldValidation.password,
+            placeholder: 'Password',
+            controller: passwordController,
+          ),
           SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -167,7 +186,7 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
           ),
           SizedBox(height: 20),
           CustomOutlinedButton(
-            onPressed: () async => await _addTactsoBranch(),
+            onPressed: _addTactsoBranch,
             text: "Add Institution",
             backgroundColor: color.primaryColor,
             foregroundColor: color.scaffoldBackgroundColor,

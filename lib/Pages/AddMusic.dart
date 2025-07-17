@@ -59,6 +59,7 @@ Future<void> uploadVideo() async {
       "artist": artistController.text,
       "songUrl": audioUrl,
       "released": _releasedDate,
+      "category":category
     });
     
     Api().showMessage(
@@ -118,72 +119,7 @@ Future<String> _uploadToFirebase(File audioFile) async {
   final snapshot = await uploadTask;
   
   return await snapshot.ref.getDownloadURL();
-}
-  // Future<void> uploadVideo() async {
-  //   Api().showLoading(context);
-  //   if (_videoFile == null) return;
-
-  //   setState(() {
-  //     _isLoading = true;
-  //   });
-
-  //   final request = http.MultipartRequest(
-  //     'POST',
-  //     Uri.parse('https://tactapi-production.up.railway.app/extract-audio/'),
-  //   );
-  //   request.files.add(
-  //     await http.MultipartFile.fromPath('video', _videoFile!.path),
-  //   );
-
-  //   final response = await request.send();
-
-  //   if (response.statusCode == 201) {
-  //     Navigator.pop(context);
-  //     final responseBody = await response.stream.bytesToString();
-  //     final audioUrl = RegExp(
-  //       r'"audio":"(.*?)"',
-  //     ).firstMatch(responseBody)?.group(1);
-  //     if (audioUrl != null) {
-  //       // Replace any escaped slashes
-  //       final cleanUrl = audioUrl.replaceAll(r'\/', '/');
-
-  //       // Make sure full URL is correct
-  //       final fullAudioUrl = cleanUrl.startsWith('http')
-  //           ? cleanUrl
-  //           : 'https://tactapi-production.up.railway.app/extract-audio/$cleanUrl';
-
-  //       setState(() {
-  //         _audioUrl = fullAudioUrl;
-  //       });
-  //       FirebaseFirestore.instance.collection('tact_music').add({
-  //         "songName": songNameController.text,
-  //         "artist": artistController.text,
-  //         "songUrl": _audioUrl!,
-  //         "released": _releasedDate,
-  //       });
-  //       Api().showMessage(
-  //         context,
-  //         'Song Uploaded Successfully',
-  //         '',
-  //         Theme.of(context).splashColor,
-  //       );
-  //     }
-  //   } else {
-  //     Navigator.pop(context);
-  //     Api().showMessage(
-  //       context,
-  //       '${response.statusCode}',
-  //       '',
-  //       Theme.of(context).primaryColorDark,
-  //     );
-  //     debugPrint('Failed: ${response.statusCode}');
-  //   }
-
-  //   setState(() {
-  //     _isLoading = false;
-  //   });
-  // }
-
+} 
   Future<void> playAudio() async {
     if (_audioUrl != null) {
       await _audioPlayer.play(
@@ -193,6 +129,8 @@ Future<String> _uploadToFirebase(File audioFile) async {
     }
   }
 
+  List categories = ['Slow Jam', 'Apostle choir','choreography','Instrumental songs'];
+  String category = '';
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
@@ -257,6 +195,32 @@ Future<String> _uploadToFirebase(File audioFile) async {
               shape: BoxShape.rectangle,
             ),
           ),
+          SizedBox(height: 10),
+           ExpansionTile(
+                        title: Text(
+                          category.isEmpty ? 'Select category' : category,
+                          style: TextStyle(color: color.primaryColor),
+                        ),
+                        children: [
+                          ...categories
+                              .map(
+                                (userRole) => RadioListTile<String>(
+                                  value: userRole,
+                                  groupValue: category,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      category = val as String;
+                                      
+                                    });
+                                  },
+                                  title: Text(userRole),
+                                ),
+                              )
+                              .toList(),
+                        ],
+                      ),
+                     
+          SizedBox(height: 10),
           GestureDetector(
             onTap: () async {
               DateTime? pickedDate = await showDatePicker(

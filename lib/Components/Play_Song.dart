@@ -16,10 +16,12 @@ class PlaySong extends StatefulWidget {
 }
 
 class _PlaySongState extends State<PlaySong> {
-  late AudioPlayer _audioPlayer;
+  late AudioPlayer
+  _audioPlayer; // This variable is declared but not used, consider removing it if not needed.
   int _currentIndex = 0;
 
-  bool _isPlaying = false;
+  bool _isPlaying =
+      false; // This state variable seems to be shadowed by 'isPlaying' below, leading to potential confusion.
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
 
@@ -50,13 +52,15 @@ class _PlaySongState extends State<PlaySong> {
     _playSong();
   }
 
-  bool isPlaying = false;
+  bool isPlaying =
+      false; // This 'isPlaying' is used more consistently in the UI logic.
   Future<void> _playSong() async {
     final songUrl = widget.songs[_currentIndex]['songUrl'];
     if (songUrl != null) {
       await _playerService.play(songUrl);
       setState(() {
         isPlaying = true;
+        _isPlaying = true; // Keep consistent with both _isPlaying and isPlaying
       });
     }
   }
@@ -66,14 +70,15 @@ class _PlaySongState extends State<PlaySong> {
       await _playerService.pause();
       setState(() {
         isPlaying = false;
+        _isPlaying = false;
       });
     } else {
       await _playerService.resume();
       setState(() {
         isPlaying = true;
+        _isPlaying = true;
       });
     }
-    setState(() {});
   }
 
   void _seekTo(double seconds) {
@@ -81,21 +86,40 @@ class _PlaySongState extends State<PlaySong> {
     _playerService.audioPlayer.seek(newPosition);
   }
 
-  void _playNext() {
+  void _playNext() async {
+    // Made async because _playSong() is async
     if (_currentIndex < widget.songs.length - 1) {
       setState(() {
         _currentIndex++;
       });
-      _playSong();
+      await _playSong(); // <--- This is the crucial change
+    } else {
+      // Optional: Handle end of playlist, e.g., loop back to the beginning or stop
+      // For now, it will just stop playing when it reaches the end.
+      setState(() {
+        isPlaying = false;
+        _isPlaying = false;
+      });
+      await _playerService.pause(); // Stop playback at the end of the playlist
     }
   }
 
-  void _playPrevious() {
+  void _playPrevious() async {
+    // Made async because _playSong() is async
     if (_currentIndex > 0) {
       setState(() {
         _currentIndex--;
       });
-      _playSong();
+      await _playSong(); // <--- This is also crucial for previous song
+    } else {
+      // Optional: Handle beginning of playlist, e.g., loop to the end or stop
+      // For now, it will just stop playing when it reaches the beginning.
+      setState(() {
+        isPlaying = false;
+        _isPlaying = false;
+      });
+      await _playerService
+          .pause(); // Stop playback at the beginning of the playlist
     }
   }
 
@@ -206,7 +230,7 @@ class _PlaySongState extends State<PlaySong> {
                         children: [
                           IconButton(
                             onPressed: () async {
-                              await _storage.saveDownloadedSong(song);
+                              await _storage.downloadSong(song);
                               Api().showMessage(
                                 context,
                                 'Downloaded!',
@@ -253,27 +277,7 @@ class _PlaySongState extends State<PlaySong> {
                     ],
                   ),
                   SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Text(_formatDuration(_position)),
-                      Expanded(
-                        child: Slider(
-                          activeColor: color.primaryColor,
-                          inactiveColor: Colors.grey,
-                          min: 0,
-                          max: _duration.inSeconds.toDouble(),
-                          value: _position.inSeconds
-                              .clamp(0, _duration.inSeconds)
-                              .toDouble(),
-                          onChanged: (value) {
-                            _seekTo(value);
-                          },
-                        ),
-                      ),
-                      Text(_formatDuration(_duration)),
-                    ],
-                  ),
-                  SizedBox(height: 20),
+
                   Card(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(35),
@@ -281,44 +285,83 @@ class _PlaySongState extends State<PlaySong> {
                     elevation: 15,
                     color: Colors.transparent,
                     child: Container(
-                      height: 180,
+                      // height: 10,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(30),
                         color: color.primaryColor.withOpacity(0.9),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          IconButton(
-                            onPressed: _playPrevious,
-                            icon: Icon(
-                              Icons.skip_previous,
-                              color: color.scaffoldBackgroundColor,
-                              size: 70,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    _formatDuration(_position),
+                                    style: TextStyle(
+                                      color: color.scaffoldBackgroundColor,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      activeColor: color.primaryColor,
+                                      inactiveColor: Colors.grey,
+                                      thumbColor: color.scaffoldBackgroundColor,
+                                      min: 0,
+                                      max: _duration.inSeconds.toDouble(),
+                                      value: _position.inSeconds
+                                          .clamp(0, _duration.inSeconds)
+                                          .toDouble(),
+                                      onChanged: (value) {
+                                        _seekTo(value);
+                                      },
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDuration(_duration),
+                                    style: TextStyle(
+                                      color: color.scaffoldBackgroundColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: _togglePlayPause,
-                            icon: Icon(
-                              _isPlaying
-                                  ? Icons.pause
-                                  : isPlaying == false
-                                  ? Icons.play_arrow
-                                  : Icons.pause,
-                              color: color.scaffoldBackgroundColor,
-                              size: 70,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                IconButton(
+                                  onPressed: _playPrevious,
+                                  icon: Icon(
+                                    Icons.skip_previous,
+                                    color: color.scaffoldBackgroundColor,
+                                    size: 70,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _togglePlayPause,
+                                  icon: Icon(
+                                    // Simplified logic for play/pause icon
+                                    isPlaying ? Icons.pause : Icons.play_arrow,
+                                    color: color.scaffoldBackgroundColor,
+                                    size: 70,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _playNext,
+                                  icon: Icon(
+                                    Icons.skip_next,
+                                    color: color.scaffoldBackgroundColor,
+                                    size: 70,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          IconButton(
-                            onPressed: _playNext,
-                            icon: Icon(
-                              Icons.skip_next,
-                              color: color.scaffoldBackgroundColor,
-                              size: 70,
-                            ),
-                          ),
-                        ],
-                      ),
+                            SizedBox(height: 20),
+                          ],
+                        ),
+                      ),          
                     ),
                   ),
                 ],

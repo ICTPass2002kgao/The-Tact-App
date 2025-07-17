@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:ttact/Pages/Ask_For_Assistance.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class TactsoBranchDetails extends StatelessWidget {
@@ -165,10 +166,9 @@ class TactsoBranchDetails extends StatelessWidget {
             CustomOutlinedButton(
               onPressed: () async {
                 final url = Uri.parse(
-                  universityDetails['applicationLink'] ??
+                  "${universityDetails['applicationLink']}" ??
                       'https://www.vut.ac.za',
-                );
-                // Replace with your live stream URL
+                ); 
                 if (await canLaunchUrl(url)) {
                   await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                 } else {
@@ -188,7 +188,16 @@ class TactsoBranchDetails extends StatelessWidget {
             SizedBox(height: 10),
 
             CustomOutlinedButton(
-              onPressed: () async {},
+              onPressed: () async {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UploadApplicationDocumentsPage(
+                      universityName: universityDetails['institutionName'],
+                    ),
+                  ),
+                );
+              },
               text: 'Ask for Help!',
               backgroundColor: color.primaryColor,
               foregroundColor: color.scaffoldBackgroundColor,

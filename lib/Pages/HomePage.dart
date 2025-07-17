@@ -11,6 +11,7 @@ import 'package:ttact/Components/Tactso_Branch_Details.dart';
 import 'package:ttact/Components/UniversityCard.dart';
 import 'package:ttact/Components/Upcoming_events_card.dart';
 import 'package:ttact/Components/bottomsheet.dart';
+import 'package:ttact/Pages/Downloaded_Songs.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -241,91 +242,10 @@ class _HomePageState extends State<HomePage>
       'isApplicationOpen': true,
     },
   };
-  Map<String, dynamic> songs = {
-    'song1': {
-      "songName": 'Naba Abakwa israel',
-      'artist': 'Br Thabethe',
-      'released': '01-06-2025',
-    },
 
-    'song2': {
-      "songName": 'Naphakade nguye',
-      'artist': 'Br Ntuli',
-      'released': '03-05-2025',
-    },
+  String _searchQuery = '';
+  String _selectedCategory = 'All'; // Default selected category
 
-    'song3': {
-      "songName": 'Sisebenzise Yebo baba siyavuma',
-      'artist': 'Br Sphiwe',
-      'released': '01-06-2025',
-    },
-
-    'song4': {
-      "songName": 'Sibongu Musa\'ngaka',
-      'artist': 'Br Hlatswayo',
-      'released': '01-10-2024',
-    },
-
-    'song5': {
-      "songName": 'Isivumelano esisha',
-      'artist': 'Br Moeti',
-      'released': '03-05-2025',
-    },
-
-    'song6': {
-      "songName": 'Singumuzi okhanyayo',
-      'artist': 'Br Mbatha',
-      'released': '01-06-2025',
-    },
-
-    'song7': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song12': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song22': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song122': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song13': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song17': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song27': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-
-    'song37': {
-      "songName": 'Sithembe amandla',
-      'artist': 'Br Khowa',
-      'released': '03-05-2025',
-    },
-  };
   @override
   Widget build(BuildContext context) {
     // final color = AppColor(color: const Color.fromARGB(255, 15, 76, 167));
@@ -457,30 +377,38 @@ class _HomePageState extends State<HomePage>
                           ),
                         ),
                         SizedBox(height: 5),
-                        GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              scrollControlDisabledMaxHeightRatio: 0.8,
-                              context: context,
-                              builder: (context) {
-                                return EventDetailBottomSheet(
-                                  posterUrl: 'assets/Poster.jpg',
-                                  date: '17',
-                                  eventMonth: 'Aug',
-                                  title: 'Music Concert',
-                                  description:
-                                      'Join us for a musical evening with Overseer MJ Kubheka.',
+                        StreamBuilder(
+                          stream: FirebaseFirestore.instance
+                              .collection('upcoming_events')
+                              .snapshots(),
+                          builder: (context, snapshots) {
+                            final event = snapshots.data;
+                            return GestureDetector(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  scrollControlDisabledMaxHeightRatio: 0.8,
+                                  context: context,
+                                  builder: (context) {
+                                    return EventDetailBottomSheet(
+                                      posterUrl: 'assets/Poster.jpg',
+                                      date: '17',
+                                      eventMonth: 'Aug',
+                                      title: 'Music Concert',
+                                      description:
+                                          'Join us for a musical evening with Overseer MJ Kubheka.',
+                                    );
+                                  },
                                 );
                               },
+                              child: UpcomingEventsCard(
+                                date: '17',
+                                eventMonth: 'Aug',
+                                eventTitle: 'Music Concert',
+                                eventDescription:
+                                    'Join us for a musical evening with Overseer MJ Kubheka.',
+                              ),
                             );
                           },
-                          child: UpcomingEventsCard(
-                            date: '17',
-                            eventMonth: 'Aug',
-                            eventTitle: 'Music Concert',
-                            eventDescription:
-                                'Join us for a musical evening with Overseer MJ Kubheka.',
-                          ),
                         ),
                         SizedBox(height: 5),
                         GestureDetector(
@@ -551,173 +479,296 @@ class _HomePageState extends State<HomePage>
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return Center(child: Text('No branches found'));
                     }
+
                     final branchList = snapshot.data!.docs;
-                    return GridView.builder(
-                      physics: AlwaysScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: branchList.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        childAspectRatio: 0.85,
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 3,
-                        mainAxisSpacing: 6,
-                      ),
-                      itemBuilder: (context, index) {
-                        final data =
-                            branchList[index].data() as Map<String, dynamic>;
-                        return Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: GestureDetector(
-                            onTap: () {
-                              showModalBottomSheet(
-                                scrollControlDisabledMaxHeightRatio: 0.8,
-                                context: context,
-                                builder: (context) {
-                                  return TactsoBranchDetails(
-                                    universityDetails: data,
+
+                    return SingleChildScrollView(
+                      // Use SingleChildScrollView to allow scrolling if Wrap content exceeds screen height
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0,
+                          vertical: 4.0,
+                        ), // Add some padding around the wrap
+                        child: Wrap(
+                          alignment:
+                              WrapAlignment.start, // Align items to the start
+                          spacing: 6.0, // Horizontal spacing between cards
+                          runSpacing:
+                              12.0, // Vertical spacing between rows of cards
+                          children: branchList.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            return SizedBox(
+                              // Wrap each card in a SizedBox to give it a fixed width for two columns
+                              width:
+                                  MediaQuery.of(context).size.width / 2 -
+                                  12, // Roughly half screen width minus spacing
+                              child: GestureDetector(
+                                onTap: () {
+                                  showModalBottomSheet(
+                                    scrollControlDisabledMaxHeightRatio: 0.8,
+                                    context: context,
+                                    builder: (context) {
+                                      return TactsoBranchDetails(
+                                        universityDetails: data,
+                                      );
+                                    },
                                   );
                                 },
-                              );
-                            },
-                            child: UniversityCard(
-                              imageUrl: data['imageUrl'][0],
-                              UniName: data['institutionName'] ?? '',
-                              uniAddress: data['address'] ?? '',
-                              applicationLink: data['applicationLink'] ?? '',
-                              onPressed: () {
-                                showModalBottomSheet(
-                                  scrollControlDisabledMaxHeightRatio: 0.8,
-                                  context: context,
-                                  builder: (context) {
-                                    return TactsoBranchDetails(
-                                      universityDetails: data,
+                                child: UniversityCard(
+                                  imageUrl: data['imageUrl'][0],
+                                  UniName: data['institutionName'] ?? '',
+                                  uniAddress: data['address'] ?? '',
+                                  applicationLink:
+                                      data['applicationLink'] ?? '',
+                                  onPressed: () {
+                                    showModalBottomSheet(
+                                      scrollControlDisabledMaxHeightRatio: 0.8,
+                                      context: context,
+                                      builder: (context) {
+                                        return TactsoBranchDetails(
+                                          universityDetails: data,
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
-                              applicationIsOpen:
-                                  data['isOpplicationOpen'] ?? false,
-                            ),
-                          ),
-                        );
-                      },
+                                  applicationIsOpen:
+                                      data['isOpplicationOpen'] ?? false,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
                     );
                   },
                 ),
-
                 //===========================|> The Tact Music <|==============================================
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: TextField(
-                          decoration: InputDecoration(
-                            contentPadding: EdgeInsets.all(15),
-                            hintText: 'Search song by name... 🎶',
-                            fillColor: color.hintColor,
-                            focusColor: color.primaryColor,
-                            hoverColor: color.primaryColor,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
+                //  ]  // ],
+                DefaultTabController(
+                  length:
+                      5, // Number of tabs: All, Choreography, Apostle Choir, Slow Jam
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: TextField(
+                            onChanged: (value) {
+                              setState(() {
+                                _searchQuery = value;
+                              });
+                            },
+                            decoration: InputDecoration(
+                              contentPadding: EdgeInsets.all(15),
+                              hintText: 'Search song by name... 🎶',
+                              fillColor: color.hintColor,
+                              focusColor: color.primaryColor,
+                              hoverColor: color.primaryColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      SizedBox(height: 10),
-                      Expanded(
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('tact_music')
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return Center(child: CircularProgressIndicator());
-                            }
+                        SizedBox(height: 10),
+                        TabBar(
+                          isScrollable: true,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          labelColor: color.scaffoldBackgroundColor,
+                          dividerColor: Colors.transparent,
+                          indicatorColor: color.primaryColor,
+                          unselectedLabelColor: color.hintColor,
+                          overlayColor: WidgetStatePropertyAll(
+                            color.primaryColor,
+                          ),
+                          indicator: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color: color.primaryColor,
+                          ),
+                          onTap: (index) {
+                            setState(() {
+                              switch (index) {
+                                case 0:
+                                  _selectedCategory = 'All';
+                                  break;
+                                case 1:
+                                  _selectedCategory = 'choreography';
+                                  break;
+                                case 2:
+                                  _selectedCategory = 'Apostle choir';
+                                  break;
+                                case 3:
+                                  _selectedCategory = 'Slow Jam';
+                                  break;
+                                case 4:
+                                  _selectedCategory = 'Instrumental songs';
+                                  break;
+                              }
+                            });
+                          },
+                          tabs: const [
+                            Tab(text: 'All'),
+                            Tab(text: 'Choreography'),
+                            Tab(text: 'Apostle choir'),
+                            Tab(text: 'Slow Jam'),
+                            Tab(text: 'Instrumental Songs'),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Expanded(
+                          child: StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('tact_music')
+                                .where(
+                                  'songName',
+                                  isGreaterThanOrEqualTo: _searchQuery,
+                                )
+                                .where(
+                                  'songName',
+                                  isLessThanOrEqualTo: _searchQuery + '\uf8ff',
+                                )
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
 
-                            if (!snapshot.hasData ||
-                                snapshot.data!.docs.isEmpty) {
-                              return Center(child: Text('No songs available'));
-                            }
+                              if (!snapshot.hasData ||
+                                  snapshot.data!.docs.isEmpty) {
+                                return Center(
+                                  child: Text('No songs available'),
+                                );
+                              }
 
-                            final songs = snapshot.data!.docs;
+                              final allSongs = snapshot.data!.docs;
 
-                            return ListView.builder(
-                              itemCount: songs.length,
-                              itemBuilder: (context, index) {
-                                final song =
-                                    songs[index].data() as Map<String, dynamic>;
+                              final filteredSongs = _selectedCategory == 'All'
+                                  ? allSongs
+                                  : allSongs.where((doc) {
+                                      final songData =
+                                          doc.data() as Map<String, dynamic>;
+                                      return songData['category'] ==
+                                          _selectedCategory;
+                                    }).toList();
 
-                                return Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(width: 1.5),
-                                    ),
-                                    child: ListTile(
-                                      onTap: () {
+                              if (filteredSongs.isEmpty) {
+                                return Center(
+                                  child: Text(
+                                    'No songs found in this category.',
+                                  ),
+                                );
+                              }
+
+                              return Stack(
+                                children: [
+                                  ListView.builder(
+                                    itemCount: filteredSongs.length,
+                                    itemBuilder: (context, index) {
+                                      final song =
+                                          filteredSongs[index].data()
+                                              as Map<String, dynamic>;
+
+                                      return Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                            border: Border.all(width: 1.5),
+                                          ),
+                                          child: ListTile(
+                                            onTap: () {
+                                              showCupertinoSheet(
+                                                enableDrag: true,
+                                                context: context,
+                                                pageBuilder: (context) {
+                                                  return PlaySong(
+                                                    songs: filteredSongs
+                                                        .map(
+                                                          (doc) =>
+                                                              doc.data()
+                                                                  as Map<
+                                                                    String,
+                                                                    dynamic
+                                                                  >,
+                                                        )
+                                                        .toList(),
+                                                    initialIndex: index,
+                                                  );
+                                                },
+                                              );
+                                            },
+                                            minVerticalPadding: 1,
+                                            trailing: Icon(
+                                              Icons.more_vert_outlined,
+                                            ),
+                                            subtitle: Text(
+                                              'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w200,
+                                                fontStyle: FontStyle.italic,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            title: Text(
+                                              song['songName']?.toString() ??
+                                                  'Untitled song',
+                                            ),
+                                            leading: Container(
+                                              height: 50,
+                                              width: 50,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                border: Border.all(width: 1.5),
+                                              ),
+                                              child: Icon(
+                                                Icons.music_note_outlined,
+                                                color: Theme.of(
+                                                  context,
+                                                ).primaryColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  Positioned(
+                                    bottom: 10,
+                                    right: 20,
+                                    child: IconButton.filled(
+                                      onPressed: () {
                                         showCupertinoSheet(
                                           enableDrag: true,
                                           context: context,
                                           pageBuilder: (context) {
-                                            return PlaySong(
-                                              songs: songs
-                                                  .map(
-                                                    (doc) =>
-                                                        doc.data()
-                                                            as Map<
-                                                              String,
-                                                              dynamic
-                                                            >,
-                                                  )
-                                                  .toList(),
-                                              initialIndex: index,
-                                            );
+                                            return DownloadedSongs();
                                           },
                                         );
                                       },
-                                      minVerticalPadding: 1,
-                                      trailing: Icon(Icons.more_vert_outlined),
-                                      subtitle: Text(
-                                        'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w200,
-                                          fontStyle: FontStyle.italic,
-                                          fontSize: 13,
+                                      style: ButtonStyle(
+                                        backgroundColor: WidgetStatePropertyAll(
+                                          color.splashColor,
                                         ),
                                       ),
-                                      title: Text(
-                                        song['songName']?.toString() ??
-                                            'Untitled song',
-                                      ),
-                                      leading: Container(
-                                        height: 50,
-                                        width: 50,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          border: Border.all(width: 1.5),
-                                        ),
-                                        child: Icon(
-                                          Icons.music_note_outlined,
-                                          color: Theme.of(context).primaryColor,
-                                        ),
-                                      ),
+                                      icon: Icon(Icons.download_done, size: 40),
                                     ),
                                   ),
-                                );
-                              },
-                            );
-                          },
+                                ],
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
