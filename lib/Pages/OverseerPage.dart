@@ -1126,20 +1126,37 @@ class _OverseerPageState extends State<OverseerPage>
         build: (pw.Context context) {
           return [
             if (_logoBytes != null)
-              pw.Image(pw.MemoryImage(_logoBytes!), width: 100, height: 100),
-            pw.Center(
-              child: pw.Text(
-                'The Twelve Apostles Church in Trinity',
-                style: pw.TextStyle(
-                  fontSize: 24,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Image(
+                    pw.MemoryImage(_logoBytes!),
+                    width: 100,
+                    height: 100,
+                  ),
+                  pw.Column(
+                    children: [
+                      pw.Center(
+                        child: pw.Text(
+                          'The Twelve Apostles Church in Trinity',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      pw.SizedBox(height: 10),
+                      pw.Center(
+                        child: pw.Text('P. O. Box 40376, Red Hill, 4071'),
+                      ),
+                      pw.Center(
+                        child: pw.Text('Tel./Fax No\'s: (031) 569 6164'),
+                      ),
+                      pw.Center(child: pw.Text('Email: thetacc@telkomsa.net')),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            pw.SizedBox(height: 10),
-            pw.Center(child: pw.Text('P. O. Box 40376, Red Hill, 4071')),
-            pw.Center(child: pw.Text('Tel./Fax No\'s: (031) 569 6164')),
-            pw.Center(child: pw.Text('Email: thetacc@telkomsa.net')),
             pw.SizedBox(height: 30),
             pw.Text(
               'Income and Expenditure Statement',
