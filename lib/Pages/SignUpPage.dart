@@ -68,7 +68,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (placemarks.isNotEmpty) {
         Placemark p = placemarks.first;
         String fullAddress =
-            "${p.name}, ${p.street}, ${p.locality}, ${p.administrativeArea}, ${p.country}";
+            "${p.locality} ${p.administrativeArea}, ${p.street}";
         txtAddress.text = fullAddress;
       } else {
         txtAddress.text = "Address not found";
@@ -78,6 +78,19 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
+  String? selectedMemberUid;
+  String? selectedProvince;
+  List<String> provinces = [
+    'Gauteng',
+    'Western Cape',
+    'KwaZulu-Natal',
+    'Eastern Cape',
+    'Free State',
+    'Limpopo',
+    'Mpumalanga',
+    'North West',
+    'Northern Cape',
+  ];
   @override
   Widget build(BuildContext context) {
     final args =
@@ -137,13 +150,14 @@ class _SignUpPageState extends State<SignUpPage> {
                             borderRadius: BorderRadius.circular(17),
                           ),
                           fillColor: colorScheme.scaffoldBackgroundColor,
-                          filled: true, 
+                          filled: true,
                           hintText: 'Address',
                           hintStyle: TextStyle(color: colorScheme.hintColor),
-                        ), 
-                      ), 
+                        ),
+                      ),
                       //User should be able to select a role using an expansion tile
                       SizedBox(height: 10),
+
                       ExpansionTile(
                         title: Text(
                           role.isEmpty ? 'Select Role' : role,
@@ -158,7 +172,6 @@ class _SignUpPageState extends State<SignUpPage> {
                                   onChanged: (val) {
                                     setState(() {
                                       role = val as String;
-                                      
                                     });
                                   },
                                   title: Text(userRole),
@@ -166,6 +179,70 @@ class _SignUpPageState extends State<SignUpPage> {
                               )
                               .toList(),
                         ],
+                      ),
+                      SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: DropdownButtonFormField<String>(
+                          borderRadius: BorderRadius.circular(8.0),
+                          focusColor: colorScheme.scaffoldBackgroundColor,
+                          decoration: InputDecoration(
+                            labelText: 'Select your Province',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: provinces.map((String province) {
+                            return DropdownMenuItem<String>(
+                              value: province,
+                              child: Text(province),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            // Handle province selection
+                            setState(() {
+                              selectedProvince = newValue;
+                            });
+                          },
+                        ),
+                      ),
+
+                      SizedBox(height: 10),
+                      StreamBuilder(
+                        stream: FirebaseFirestore.instance
+                            .collection('overseers')
+                            .where('province', isEqualTo: selectedProvince)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          if (snapshot.hasError) {
+                            return Text('Error: ${snapshot.error}');
+                          }
+                          final overseers = snapshot.data?.docs ?? [];
+                          return Column(
+                            children: overseers.map((overseer) {
+                              // i want the select one overseer shown by name and surname but the value should be overseer['uid']
+                              return ExpansionTile(
+                                title: Text('Select an overseer'),
+                                children: [
+                                  RadioListTile(
+                                    title: Text(
+                                      '${overseer['name']} ${overseer['surname']}',
+                                    ),
+                                    value: overseer['uid'],
+                                    groupValue: selectedMemberUid,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedMemberUid = value as String;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          );
+                        },
                       ),
                       AuthTextField(
                         placeholder: 'Contact Number',
@@ -346,6 +423,11 @@ class _SignUpPageState extends State<SignUpPage> {
                                             "Contact Number":
                                                 txtContactNumber.text,
                                             "role": role,
+                                            'overseerUid': selectedMemberUid,
+                                            'week1':0.00,
+                                            'week2':0.00,
+                                            'week3':0.00,
+                                            'week4':0.00,
                                           });
                                     }
                                     Navigator.pop(context);
@@ -353,17 +435,22 @@ class _SignUpPageState extends State<SignUpPage> {
                                   } catch (e) {
                                     backendService.showMessage(
                                       context,
-                                      e.toString(),'Error',colorScheme.primaryColorDark
+                                      e.toString(),
+                                      'Error',
+                                      colorScheme.primaryColorDark,
                                     );
                                   }
                                   return null;
                                 } else {
                                   backendService.signUp(
                                     txtName.text,
+                                    txtSurname.text,
                                     txtEmail.text,
                                     txtPassword.text,
                                     txtAddress.text,
                                     txtContactNumber.text,
+                                    selectedMemberUid!,
+                                    
                                     role,
 
                                     context,
@@ -374,7 +461,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   context,
                                   "Passwords do not match!",
                                   "Error",
-                                  colorScheme.primaryColorDark
+                                  colorScheme.primaryColorDark,
                                 );
                               }
                             }

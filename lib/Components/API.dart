@@ -33,7 +33,7 @@ class Api {
 
   Future<User?> signUp(
     String name,
-
+    String surname,
     String email,
 
     String password,
@@ -41,6 +41,8 @@ class Api {
     String txtAddress,
 
     String txtContactNumber,
+
+    String selectedMemberUid,
 
     String role,
 
@@ -62,15 +64,16 @@ class Api {
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
           "name": name,
-
-          "email": email,
-
-          "profileUrl": "",
-
-          "Address": txtAddress,
-
+          "surname": surname, 
+          "email": email, 
+          "profileUrl": "", 
+          "Address": txtAddress, 
           "Contact Number": txtContactNumber,
-
+          "overseerUid": selectedMemberUid,
+          'week1': 0.00,
+          'week2': 0.00,
+          'week3': 0.00,
+          'week4': 0.00, 
           "role": role,
         });
       }
@@ -476,7 +479,6 @@ class LocalStorageService {
   factory LocalStorageService() => _instance;
 
   LocalStorageService._internal();
- 
 
   static const String _playlistSongsKey = 'playlist_songs';
 
@@ -533,7 +535,7 @@ class LocalStorageService {
           createdAt: songToDownload.createdAt,
 
           localFilePath: filePath, // Store the local path
-        ); 
+        );
 
         debugPrint('Song downloaded to: $filePath');
 
@@ -556,17 +558,12 @@ class LocalStorageService {
 
   /// This will overwrite an existing song with the same ID or add a new one.
 
-  
-
   /// Retrieves all downloaded songs metadata, including their local file paths.
-
-  
 
   /// Deletes a downloaded song by its ID.
 
   /// This will remove both the local audio file and its metadata from SharedPreferences.
 
-  
   // --- Existing Methods for Playlist (Unchanged but using new keys) ---
 
   Future<void> saveToPlaylist(Song song) async {

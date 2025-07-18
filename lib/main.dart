@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:ttact/Pages/Admin_Portal.dart';
 import 'package:ttact/Pages/CartPage.dart';
 import 'package:ttact/Pages/Login.dart';
-import 'package:ttact/Pages/MotherPage.dart'; 
+import 'package:ttact/Pages/MotherPage.dart';
+import 'package:ttact/Pages/OverseerPage.dart'; 
 import 'package:ttact/Pages/SignUpPage.dart'; // Corrected import from Tact_Seller
 import 'package:ttact/Pages/Tact_Seller.dart';
 import 'package:ttact/Pages/orders.dart'; // Corrected import for the actual OrdersPage
@@ -113,6 +114,7 @@ class _MyAppState extends State<MyApp> {
             OrdersPage(), // Corrected this route to point to OrdersPage
         '/admin': (context) => AdminPortal(),
         '/login': (context) => Login_Page(),
+        '/overseer': (context) => OverseerPage(),
         '/': (context) => Introductionpage(),
       },
     );

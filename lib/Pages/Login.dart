@@ -2,7 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:ttact/Components/CustomOutlinedButton.dart'; 
+import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:ttact/Pages/ForgotPassword.dart';
 import '../Components/API.dart';
 import '../Components/Custom_Buttons.dart';
 import '../Components/TextField.dart';
@@ -24,26 +25,55 @@ class _Login_PageState extends State<Login_Page> {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<void> _checkAdminStatusAndNavigate(User user) async {
+  Future<void> login(String email, String password) async {
+    Api().showLoading(context);
     try {
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = userCredential.user;
+
+      if (user == null) return;
+
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
+      final overseers = await FirebaseFirestore.instance
+          .collection('overseers')
+          .where('uid', isEqualTo: user.uid)
+          .get();
+
       if (!context.mounted) return;
+      if (overseers.docs.isNotEmpty) {
+        Navigator.pushNamed(context, "/overseer");
+      }
 
       if (userDoc.exists) {
         final role = userDoc.data()?['role'] ?? '';
         if (role == 'Admin') {
           Navigator.pushNamed(context, "/admin");
-        } else {
+        } else if (role == 'Member') {
           Navigator.pushNamed(context, "/main-menu");
+        } else {
+          Navigator.pop(context);
+          await _auth.signOut();
+          Api().showMessage(
+            context,
+            'Unknown role: $role',
+            'Error',
+            Theme.of(context).primaryColorDark,
+          );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error checking admin status: ${e.toString()}')),
+      Api().showMessage(
+        context,
+        'Login failed: ${e.toString()}',
+        'Error',
+        Theme.of(context).primaryColorDark,
       );
       await _auth.signOut();
     }
@@ -205,7 +235,12 @@ class _Login_PageState extends State<Login_Page> {
               obscureText: _obscureText,
             ),
             GestureDetector(
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ForgotPassword()),
+                );
+              },
               child: Text(
                 'Forgot Password?',
                 style: TextStyle(
@@ -215,7 +250,7 @@ class _Login_PageState extends State<Login_Page> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 10),
             Center(
               child: Card(
                 color: Colors.transparent,
@@ -227,15 +262,8 @@ class _Login_PageState extends State<Login_Page> {
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
                       try {
-                        await Api().login(
-                          context,
-                          txtEmail.text,
-                          txtPassword.text,
-                        );
-                        final user = _auth.currentUser;
-                        if (user != null) {
-                          await _checkAdminStatusAndNavigate(user);
-                        }
+                        await login(txtEmail.text, txtPassword.text);
+                        if (!context.mounted) return;
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -249,7 +277,7 @@ class _Login_PageState extends State<Login_Page> {
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 10),
             Center(
               child: Card(
                 elevation: 5,

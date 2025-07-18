@@ -1,10 +1,11 @@
- import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Pages/Add_Tactso_Branch.dart';
 import 'package:ttact/Pages/AddMusic.dart';
+import 'package:ttact/Pages/Admin_Add_Overseer.dart';
 import 'package:ttact/Pages/Admin_Home_Page.dart';
 import 'package:ttact/Pages/Admin_Add_Product.dart';
 import 'package:ttact/Pages/Portal_Add_Feed.dart';
@@ -21,6 +22,7 @@ class _AdminPortalState extends State<AdminPortal> {
     AdminAddProduct(),
     AddMusic(),
     AddTactsoBranch(),
+    AdminAddOverseer(),
     PortalAddFeed(),
   ];
   @override
@@ -31,6 +33,7 @@ class _AdminPortalState extends State<AdminPortal> {
       appBar: AppBar(title: Text("Admin Portal"), elevation: 0),
       backgroundColor: color.scaffoldBackgroundColor,
       bottomNavigationBar: SalomonBottomBar(
+        curve: Curves.slowMiddle,
         backgroundColor: color.primaryColor,
         selectedItemColor: color.scaffoldBackgroundColor,
         unselectedItemColor: color.hintColor,
@@ -41,7 +44,10 @@ class _AdminPortalState extends State<AdminPortal> {
           });
         },
         items: [
-          SalomonBottomBarItem(icon: Icon(Ionicons.home), title: Text('Home')),
+          SalomonBottomBarItem(
+            icon: Icon(Ionicons.home),
+            title: Text('Home', maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
 
           SalomonBottomBarItem(
             icon: Icon(Icons.add_shopping_cart_outlined),
@@ -63,6 +69,14 @@ class _AdminPortalState extends State<AdminPortal> {
             icon: Icon(Icons.location_city_outlined),
             title: Text(
               'Add Tactso Branch',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          SalomonBottomBarItem(
+            icon: Icon(Icons.person_add_alt_1_outlined),
+            title: Text(
+              'Add Oveerseer',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

@@ -472,7 +472,7 @@ class _UploadApplicationDocumentsPageState
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [ 
+            children: [
               _buildSectionTitle('1. Personal Information'),
               TextFormField(
                 controller: _fullNameController,
@@ -1228,7 +1228,10 @@ class _LoginBottomSheetState extends State<_LoginBottomSheet> {
                 )
               : Text(
                   'Login',
-                  style: TextStyle(fontSize: 18, color: color.primaryColor),
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: color.scaffoldBackgroundColor,
+                  ),
                 ),
         ),
         TextButton(
