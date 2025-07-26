@@ -34,8 +34,14 @@ class CartHelper {
 
 class PaymentGatewayPage extends StatefulWidget {
   final List<Map<String, dynamic>> cartProducts;
-  const PaymentGatewayPage({required this.cartProducts, Key? key})
-    : super(key: key);
+  final String selectedColor;
+  final String selectedSize;
+  const PaymentGatewayPage({
+    required this.cartProducts,
+    Key? key,
+    required this.selectedColor,
+    required this.selectedSize,
+  }) : super(key: key);
 
   @override
   State<PaymentGatewayPage> createState() => _PaymentGatewayPageState();
@@ -257,6 +263,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
               'TTAC-${DateTime.now().millisecondsSinceEpoch}-${user.uid.substring(0, 8)}',
           'customerName': user.displayName ?? 'Guest User',
           'customerEmail': user.email ?? 'no_email@example.com',
+          'color': widget.selectedColor,
+          'size': widget.selectedSize,
           'products': widget.cartProducts,
           'address': _addressController.text,
           'needsDelivery': needsDelivery,
@@ -267,7 +275,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
-        final String? paymentUrl = responseData['paymentUrl']; 
+        final String? paymentUrl = responseData['paymentUrl'];
 
         if (paymentUrl != null) {
           final Uri uri = Uri.parse(paymentUrl);
@@ -325,8 +333,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       });
     }
   }
-
-  // --- MODIFIED: Function to handle Stripe Payment Link ---
+ 
   Future<void> _processStripePaymentLink() async {
     final color = Theme.of(context);
     final user = FirebaseAuth.instance.currentUser;
@@ -380,9 +387,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
           'customerEmail': user.email ?? 'no_email@example.com',
           'customerName': user.displayName ?? 'Guest User',
           'orderReference':
-              'TTACT-${DateTime.now().millisecondsSinceEpoch}-${user.uid.substring(0, 8)}',
+              'TTACT-$customerName ${DateTime.now().millisecondsSinceEpoch}',
           'products': formattedProducts, // Use the properly formatted products
           'address': _addressController.text,
+          'color': widget.selectedColor,
+          'size': widget.selectedSize,
           'needsDelivery': needsDelivery,
           'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
           'paymentMethod': selectedPaymentMethod,
@@ -397,7 +406,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
         final String? paymentLinkUrl = responseData['paymentLinkUrl'];
-        
+
         if (paymentLinkUrl != null) {
           final Uri uri = Uri.parse(paymentLinkUrl);
 
@@ -462,6 +471,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     }
   }
 
+  String customerName = 'Guest User';
   Future<void> placeOrder() async {
     final color = Theme.of(context);
     final user = FirebaseAuth.instance.currentUser;
@@ -538,9 +548,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       );
       return;
     }
-
-  String customerName = 'Guest User'; // Default if not found
-  String customerEmail = user.email ?? 'no_email@example.com';
+    // Default if not found
+    String customerEmail = user.email ?? 'no_email@example.com';
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -549,11 +558,13 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     if (userDoc.exists) {
       Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
       if (userData != null && userData.containsKey('name')) {
-        customerName = userData['name'];
+        setState(() {
+          customerName = userData['name'];
+        });
       }
       // You might also get the email from Firestore if you store it there
       // customerEmail = userData['email'] ?? user.email ?? 'no_email@example.com';
-    } 
+    }
 
     if (selectedPaymentMethod == 'Ozow Instant EFT') {
       await _processOzowPaymentWithUrlLauncher();
@@ -596,7 +607,12 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     for (var entry in productsBySeller.entries) {
       final sellerId = entry.key;
       final productsForSeller = entry.value;
-      final orderDoc = FirebaseFirestore.instance.collection('orders').doc();
+
+      final orderDoc = FirebaseFirestore.instance
+          .collection('seller_products')
+          .doc(sellerId) // Use sellerId as the document ID for the seller
+          .collection('orders') // Add a subcollection for orders
+          .doc();
       if (createdOrderId == null) {
         createdOrderId = orderDoc.id; // Capture the first order ID
       }
@@ -607,6 +623,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         'sellerId': sellerId,
         'products': productsForSeller,
         'address': _addressController.text,
+        'color': widget.selectedColor,
+        'size': widget.selectedSize,
         'needsDelivery': needsDelivery,
         'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
         'paymentMethod': selectedPaymentMethod,
@@ -615,7 +633,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         'customerName': customerName,
         'customerEmail': customerEmail,
         'orderReference':
-            'TTACT-${DateTime.now().millisecondsSinceEpoch}-${user.uid.substring(0, 8)}',
+            'TTACT-$customerName - ${DateTime.now().millisecondsSinceEpoch}',
         'amount': _calculateSubtotal(), // Subtotal before delivery
         'totalPaidAmount': _calculateTotal(), // Total including delivery
       });

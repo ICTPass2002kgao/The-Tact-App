@@ -3,7 +3,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart'; 
+import 'package:ionicons/ionicons.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:ttact/Components/Play_Song.dart';
 import 'package:ttact/Components/Tactso_Branch_Details.dart';
 import 'package:ttact/Components/UniversityCard.dart';
@@ -27,219 +28,6 @@ class _HomePageState extends State<HomePage>
 
     _tabController = TabController(length: 3, vsync: this);
   }
-
-  Map<String, dynamic> tactsoBranches = {
-    'University of Cape Town': {
-      'institutionName': 'University of Cape Town',
-      'applicationLink': 'https://applyonline.uct.ac.za/',
-      'address': 'Rondebosch, Cape Town, 7700, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7c/University_of_Cape_Town_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of the Witwatersrand': {
-      'institutionName': 'University of the Witwatersrand',
-      'applicationLink': 'https://www.wits.ac.za/applications/',
-      'address':
-          '1 Jan Smuts Ave, Braamfontein, Johannesburg, 2000, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/2/2e/Wits_Logo.png',
-      'isApplicationOpen': true,
-    },
-    'Stellenbosch University': {
-      'institutionName': 'Stellenbosch University',
-      'applicationLink': 'https://www.sun.ac.za/english/maties/apply',
-      'address':
-          'Victoria St, Stellenbosch Central, Stellenbosch, 7602, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Stellenbosch_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Pretoria': {
-      'institutionName': 'University of Pretoria',
-      'applicationLink': 'https://www.up.ac.za/online-application',
-      'address': 'Lynnwood Rd, Hatfield, Pretoria, 0002, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7c/University_of_Pretoria_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of KwaZulu-Natal': {
-      'institutionName': 'University of KwaZulu-Natal',
-      'applicationLink': 'https://applications.ukzn.ac.za/',
-      'address': 'King George V Ave, Glenwood, Durban, 4041, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/2/2a/University_of_KwaZulu-Natal_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Johannesburg': {
-      'institutionName': 'University of Johannesburg',
-      'applicationLink': 'https://www.uj.ac.za/admission-aid/undergraduate/',
-      'address':
-          'Kingsway Ave, Auckland Park, Johannesburg, 2092, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/2/2b/University_of_Johannesburg_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'North-West University': {
-      'institutionName': 'North-West University',
-      'applicationLink':
-          'https://studies.nwu.ac.za/undergraduate-studies/apply',
-      'address': 'Hoffman St, Potchefstroom, 2531, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7d/North-West_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of the Western Cape': {
-      'institutionName': 'University of the Western Cape',
-      'applicationLink': 'https://www.uwc.ac.za/study-at-uwc/apply-now',
-      'address': 'Robert Sobukwe Rd, Bellville, Cape Town, 7535, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/8/8d/University_of_the_Western_Cape_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Rhodes University': {
-      'institutionName': 'Rhodes University',
-      'applicationLink': 'https://www.ru.ac.za/admissiongateway/',
-      'address': 'Drosty Rd, Grahamstown, 6139, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/6/6e/Rhodes_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of the Free State': {
-      'institutionName': 'University of the Free State',
-      'applicationLink': 'https://apply.ufs.ac.za/',
-      'address':
-          '205 Nelson Mandela Dr, Park West, Bloemfontein, 9301, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/2/2e/University_of_the_Free_State_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Nelson Mandela University': {
-      'institutionName': 'Nelson Mandela University',
-      'applicationLink': 'https://applyonline.mandela.ac.za/',
-      'address': 'University Way, Summerstrand, Gqeberha, 6031, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/2/2c/Nelson_Mandela_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Fort Hare': {
-      'institutionName': 'University of Fort Hare',
-      'applicationLink': 'https://www.ufh.ac.za/apply/',
-      'address': '50 Church St, Alice, 5700, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7d/University_of_Fort_Hare_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Limpopo': {
-      'institutionName': 'University of Limpopo',
-      'applicationLink': 'https://www.ul.ac.za/index.php?Entity=Apply%20Now',
-      'address': 'University Rd, Mankweng, Polokwane, 0727, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7b/University_of_Limpopo_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Venda': {
-      'institutionName': 'University of Venda',
-      'applicationLink': 'https://www.univen.ac.za/apply/',
-      'address': 'University Rd, Thohoyandou, 0950, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/University_of_Venda_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Walter Sisulu University': {
-      'institutionName': 'Walter Sisulu University',
-      'applicationLink':
-          'https://www.wsu.ac.za/index.php/wsu-online-application',
-      'address': 'Mthatha, Eastern Cape, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7d/Walter_Sisulu_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Cape Peninsula University of Technology': {
-      'institutionName': 'Cape Peninsula University of Technology',
-      'applicationLink': 'https://www.cput.ac.za/study/apply',
-      'address': 'Symphony Way, Bellville, Cape Town, 7535, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Cape_Peninsula_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Durban University of Technology': {
-      'institutionName': 'Durban University of Technology',
-      'applicationLink': 'https://www.dut.ac.za/apply-to-dut/',
-      'address': 'Steve Biko Campus, Durban, 4001, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Durban_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Tshwane University of Technology': {
-      'institutionName': 'Tshwane University of Technology',
-      'applicationLink':
-          'https://www.tut.ac.za/study-at-tut/i-want-to-study/apply',
-      'address':
-          'Staatsartillerie Rd, Pretoria West, Pretoria, 0183, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Tshwane_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Vaal University of Technology': {
-      'institutionName': 'Vaal University of Technology',
-      'applicationLink': 'https://www.vut.ac.za/apply-to-vut/',
-      'address': 'Andries Potgieter Blvd, Vanderbijlpark, 1900, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Vaal_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-
-    'Mangosuthu University of Technology': {
-      'institutionName': 'Mangosuthu University of Technology',
-      'applicationLink': 'https://www.mut.ac.za/apply-to-mut/',
-      'address': '511 Griffiths Mxenge Hwy, Umlazi, Durban, 4066, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Mangosuthu_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Sol Plaatje University': {
-      'institutionName': 'Sol Plaatje University',
-      'applicationLink': 'https://www.spu.ac.za/index.php/how-to-apply/',
-      'address': 'Danie Theron St, Civic Centre, Kimberley, 8300, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Sol_Plaatje_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Sefako Makgatho Health Sciences University': {
-      'institutionName': 'Sefako Makgatho Health Sciences University',
-      'applicationLink': 'https://www.smu.ac.za/students/applications/',
-      'address': 'Molotlegi St, Ga-Rankuwa, Pretoria, 0208, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Sefako_Makgatho_Health_Sciences_University_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of Zululand': {
-      'institutionName': 'University of Zululand',
-      'applicationLink': 'https://www.unizulu.ac.za/apply-to-unizulu/',
-      'address': '1 Main Rd, Vulindlela, KwaDlangezwa, 3886, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/University_of_Zululand_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'Central University of Technology': {
-      'institutionName': 'Central University of Technology',
-      'applicationLink': 'https://www.cut.ac.za/application-process',
-      'address': '1 Park Rd, Bloemfontein, 9301, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/Central_University_of_Technology_logo.svg',
-      'isApplicationOpen': true,
-    },
-    'University of South Africa': {
-      'institutionName': 'University of South Africa',
-      'applicationLink':
-          'https://www.unisa.ac.za/sites/corporate/default/Apply-for-admission',
-      'address': 'Preller St, Muckleneuk, Pretoria, 0002, South Africa',
-      'imageUrl':
-          'https://upload.wikimedia.org/wikipedia/en/7/7e/University_of_South_Africa_logo.svg',
-      'isApplicationOpen': true,
-    },
-  };
 
   String _searchQuery = '';
   String _selectedCategory = 'All'; // Default selected category
@@ -375,11 +163,11 @@ class _HomePageState extends State<HomePage>
                           ),
                         ),
                         SizedBox(height: 5),
-                        StreamBuilder(
-                          stream: FirebaseFirestore.instance
+                        FutureBuilder(
+                          future: FirebaseFirestore.instance
                               .collection('upcoming_events')
-                              .snapshots(),
-                          builder: (context, snapshots) { 
+                              .get(),
+                          builder: (context, snapshots) {
                             return GestureDetector(
                               onTap: () {
                                 showModalBottomSheet(
@@ -460,15 +248,38 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                 ),
-                //##########################   Available Tactso Branches tab ################################
-                StreamBuilder(
-                  stream: FirebaseFirestore.instance
+
+                FutureBuilder(
+                  future: FirebaseFirestore.instance
                       .collection('tactso_branches')
                       .orderBy('createdAt', descending: true)
-                      .snapshots(),
+                      .get(),
                   builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
+                      return Shimmer.fromColors(
+                        baseColor: color.hintColor.withOpacity(0.3),
+                        highlightColor: color.hintColor.withOpacity(0.1),
+                        child: Wrap(
+                          alignment: WrapAlignment.start,
+                          spacing: 6.0,
+                          runSpacing: 12.0,
+                          children: List.generate(
+                            4,
+                            (index) => SizedBox(
+                              // Show 4 shimmer cards
+                              width: MediaQuery.of(context).size.width / 2 - 12,
+                              height:
+                                  150, // Approximate height of UniversityCard
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
                     }
                     if (snapshot.hasError) {
                       return Center(child: Text('Error loading branches'));
@@ -479,57 +290,94 @@ class _HomePageState extends State<HomePage>
 
                     final branchList = snapshot.data!.docs;
 
+                    // --- NEW LOGIC: Group campuses by University Name ---
+                    Map<String, List<Map<String, dynamic>>>
+                    groupedUniversities = {};
+                    for (var doc in branchList) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final universityName =
+                          data['universityName'] ??
+                          'Unknown University'; // Use 'universityName' field
+                      if (!groupedUniversities.containsKey(universityName)) {
+                        groupedUniversities[universityName] = [];
+                      }
+                      groupedUniversities[universityName]!.add(data);
+                    }
+                    // --- END NEW LOGIC ---
+
                     return SingleChildScrollView(
-                      // Use SingleChildScrollView to allow scrolling if Wrap content exceeds screen height
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8.0,
                           vertical: 4.0,
-                        ), // Add some padding around the wrap
+                        ),
                         child: Wrap(
-                          alignment:
-                              WrapAlignment.start, // Align items to the start
-                          spacing: 6.0, // Horizontal spacing between cards
-                          runSpacing:
-                              12.0, // Vertical spacing between rows of cards
-                          children: branchList.map((doc) {
-                            final data = doc.data() as Map<String, dynamic>;
+                          alignment: WrapAlignment.start,
+                          spacing: 6.0,
+                          runSpacing: 12.0,
+                          children: groupedUniversities.entries.map((entry) {
+                            final String universityName = entry.key;
+                            final List<Map<String, dynamic>> campuses =
+                                entry.value;
+
+                            // Pick one campus's data to represent the university on the main card
+                            // You might want to refine this to pick a 'main' campus's details
+                            // For simplicity, we'll take the first one found.
+                            final Map<String, dynamic>
+                            representativeCampusData = campuses.first;
+
+                            // Determine if the main university card should show 'application open'
+                            // if ANY of its campuses have applications open.
+                            final bool anyCampusApplicationOpen = campuses.any(
+                              (campus) => campus['isApplicationOpen'] == true,
+                            );
+
                             return SizedBox(
-                              // Wrap each card in a SizedBox to give it a fixed width for two columns
-                              width:
-                                  MediaQuery.of(context).size.width / 2 -
-                                  12, // Roughly half screen width minus spacing
+                              width: MediaQuery.of(context).size.width / 2 - 12,
                               child: GestureDetector(
                                 onTap: () {
                                   showModalBottomSheet(
                                     scrollControlDisabledMaxHeightRatio: 0.8,
                                     context: context,
                                     builder: (context) {
+                                      // Pass the ENTIRE list of campuses for this university
+                                      // TactsoBranchDetails will need to be updated to handle this list
                                       return TactsoBranchDetails(
-                                        universityDetails: data,
+                                        universityDetails:
+                                            representativeCampusData, // Pass a single campus map for universityDetails
+                                        campusListForUniversity:
+                                            campuses, // Pass the list of all campuses
                                       );
                                     },
                                   );
                                 },
                                 child: UniversityCard(
-                                  imageUrl: data['imageUrl'][0],
-                                  UniName: data['institutionName'] ?? '',
-                                  uniAddress: data['address'] ?? '',
+                                  imageUrl:
+                                      representativeCampusData['imageUrl'][0],
+                                  UniName:
+                                      universityName, // Use the grouped university name
+                                  uniAddress:
+                                      representativeCampusData['address'] ??
+                                      '', // Representative address
                                   applicationLink:
-                                      data['applicationLink'] ?? '',
+                                      representativeCampusData['applicationLink'] ??
+                                      '', // Representative link
                                   onPressed: () {
                                     showModalBottomSheet(
                                       scrollControlDisabledMaxHeightRatio: 0.8,
                                       context: context,
                                       builder: (context) {
                                         return TactsoBranchDetails(
-                                          universityDetails: data,
+                                          universityDetails:
+                                              campuses as dynamic,
+                                          campusListForUniversity:
+                                              campuses, // Pass the list of all campuses
                                         );
                                       },
                                     );
                                   },
                                   applicationIsOpen:
-                                      data['isOpplicationOpen'] ?? false,
+                                      anyCampusApplicationOpen, // Show if any campus is open
                                 ),
                               ),
                             );
@@ -538,8 +386,7 @@ class _HomePageState extends State<HomePage>
                       ),
                     );
                   },
-                ),
-                //===========================|> The Tact Music <|==============================================
+                ), //===========================|> The Tact Music <|==============================================
                 //  ]  // ],
                 DefaultTabController(
                   length:
@@ -614,8 +461,8 @@ class _HomePageState extends State<HomePage>
                         ),
                         SizedBox(height: 10),
                         Expanded(
-                          child: StreamBuilder<QuerySnapshot>(
-                            stream: FirebaseFirestore.instance
+                          child: FutureBuilder<QuerySnapshot>(
+                            future: FirebaseFirestore.instance
                                 .collection('tact_music')
                                 .where(
                                   'songName',
@@ -625,12 +472,33 @@ class _HomePageState extends State<HomePage>
                                   'songName',
                                   isLessThanOrEqualTo: _searchQuery + '\uf8ff',
                                 )
-                                .snapshots(),
+                                .get(),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState ==
                                   ConnectionState.waiting) {
-                                return Center(
-                                  child: CircularProgressIndicator(),
+                                return Shimmer.fromColors(
+                                  baseColor: color.hintColor.withOpacity(0.3),
+                                  highlightColor: color.hintColor.withOpacity(
+                                    0.1,
+                                  ),
+                                  child: ListView.builder(
+                                    itemCount: 10, // Show 5 shimmer items
+                                    itemBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Container(
+                                          height:
+                                              70, // Approximate height of ListTile
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 );
                               }
 

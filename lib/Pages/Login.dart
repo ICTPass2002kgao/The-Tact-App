@@ -25,60 +25,6 @@ class _Login_PageState extends State<Login_Page> {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<void> login(String email, String password) async {
-    Api().showLoading(context);
-    try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      final user = userCredential.user;
-
-      if (user == null) return;
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      final overseers = await FirebaseFirestore.instance
-          .collection('overseers')
-          .where('uid', isEqualTo: user.uid)
-          .get();
-
-      if (!context.mounted) return;
-      if (overseers.docs.isNotEmpty) {
-        Navigator.pushNamed(context, "/overseer");
-      }
-
-      if (userDoc.exists) {
-        final role = userDoc.data()?['role'] ?? '';
-        if (role == 'Admin') {
-          Navigator.pushNamed(context, "/admin");
-        } else if (role == 'Member') {
-          Navigator.pushNamed(context, "/main-menu");
-        } else {
-          Navigator.pop(context);
-          await _auth.signOut();
-          Api().showMessage(
-            context,
-            'Unknown role: $role',
-            'Error',
-            Theme.of(context).primaryColorDark,
-          );
-        }
-      }
-    } catch (e) {
-      Api().showMessage(
-        context,
-        'Login failed: ${e.toString()}',
-        'Error',
-        Theme.of(context).primaryColorDark,
-      );
-      await _auth.signOut();
-    }
-  }
-
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
@@ -169,17 +115,13 @@ class _Login_PageState extends State<Login_Page> {
   Widget buildMobileLayout() {
     return Column(
       children: [
-        SizedBox(height: 30),
-        Card(
-          elevation: 0,
-          color: Colors.white,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(50),
-            child: Image.asset(
-              "assets/tact_logo.PNG",
-              height: 250,
-              fit: BoxFit.cover,
-            ),
+        SizedBox(height: 70),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(50),
+          child: Image.asset(
+            "assets/tact_logo.PNG",
+            height: 250,
+            fit: BoxFit.cover,
           ),
         ),
         const SizedBox(height: 30),
@@ -262,13 +204,61 @@ class _Login_PageState extends State<Login_Page> {
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
                       try {
-                        await login(txtEmail.text, txtPassword.text);
-                        if (!context.mounted) return;
+                        Api().showLoading(context);
+                        final user = await FirebaseAuth.instance
+                            .signInWithEmailAndPassword(
+                              email: txtEmail.text,
+                              password: txtPassword.text,
+                            );
+                        if (user.user!.uid != null) {
+                          final userDoc = await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.user!.uid)
+                              .get();
+                          final overseer = await FirebaseFirestore.instance
+                              .collection('overseers')
+                              .where('uid', isEqualTo: user.user!.uid)
+                              .get();
+
+                          final tactsobranches = await FirebaseFirestore
+                              .instance
+                              .collection('tactso_branches')
+                              .where('uid', isEqualTo: user.user!.uid)
+                              .get();
+                          if (tactsobranches.docs.isNotEmpty) {
+                            Navigator.pushNamed(context, "/tactso-branches");
+                          }
+                          if (overseer.docs.isNotEmpty) {
+                            Navigator.pushNamed(context, "/overseer");
+                          }
+
+                          if (userDoc.data()!.isNotEmpty) {
+                            final role = userDoc.data()?['role'] ?? '';
+                            if (role == 'Admin') {
+                              Navigator.pushNamed(context, "/admin");
+                            } else if (role == 'Member') {
+                              Navigator.pushNamed(context, "/main-menu");
+                            } else if (role == 'Seller') {
+                              Navigator.pushNamed(context, "/main-menu");
+                            } else {
+                              Navigator.pop(context);
+                              Api().showMessage(
+                                context,
+                                'Unknown role: $role',
+                                'Error',
+                                colorScheme.primaryColorDark,
+                              );
+                            }
+                          }
+                        }
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Login failed: ${e.toString()}'),
-                          ),
+                        print(e.toString());
+                        Navigator.pop(context);
+                        Api().showMessage(
+                          context,
+                          'Error loggin in: ${e.toString()}',
+                          'title',
+                          colorScheme.primaryColorDark,
                         );
                       }
                     }

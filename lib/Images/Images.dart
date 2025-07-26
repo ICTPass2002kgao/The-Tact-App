@@ -7,7 +7,8 @@ class ImagesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Image.asset(imageName, height: 350, fit: BoxFit.cover));
+      borderRadius: BorderRadius.circular(20),
+      child: Image.asset(imageName, fit: BoxFit.fill),
+    );
   }
 }

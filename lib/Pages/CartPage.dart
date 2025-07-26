@@ -91,8 +91,7 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context); // Access your defined theme colors
-
+    final color = Theme.of(context); //Access your defined theme colors
     return Scaffold(
       appBar: AppBar(
         backgroundColor: color.primaryColor,
@@ -250,7 +249,7 @@ class _CartPageState extends State<CartPage> {
                     ],
                   ),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min, // Wrap content height
+                    mainAxisSize: MainAxisSize.min,  
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -308,7 +307,7 @@ class _CartPageState extends State<CartPage> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => PaymentGatewayPage(
-                                        cartProducts: cartItems,
+                                        cartProducts: cartItems, selectedColor: '', selectedSize: '',
                                       ),
                                     ),
                                   );

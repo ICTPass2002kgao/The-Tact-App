@@ -5,14 +5,14 @@ class CustomOutlinedButton extends StatelessWidget {
   final String text;
   final Color backgroundColor;
   final Color foregroundColor;
-  final double width;
+  final double? width;
   const CustomOutlinedButton({
     super.key,
     required this.onPressed,
     required this.text,
     required this.backgroundColor,
     required this.foregroundColor,
-    required this.width,
+      this.width,
   });
 
   @override
@@ -30,7 +30,7 @@ class CustomOutlinedButton extends StatelessWidget {
         ),
         backgroundColor: WidgetStatePropertyAll(backgroundColor),
         foregroundColor: WidgetStatePropertyAll(foregroundColor),
-        minimumSize: WidgetStatePropertyAll(Size(width, 50)),
+        minimumSize: WidgetStatePropertyAll(Size(width!, 50)),
       ),
     );
   }

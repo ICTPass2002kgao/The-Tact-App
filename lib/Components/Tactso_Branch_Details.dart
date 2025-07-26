@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:ttact/Pages/Ask_For_Assistance.dart';
+import 'package:ttact/Pages/Ask_For_Assistance.dart' hide CustomOutlinedButton;
 import 'package:url_launcher/url_launcher.dart';
 
 class TactsoBranchDetails extends StatelessWidget {
   final Map<String, dynamic> universityDetails;
-  const TactsoBranchDetails({Key? key, required this.universityDetails})
-    : super(key: key);
+  final List<Map<String, dynamic>> campusListForUniversity;
+  const TactsoBranchDetails({
+    Key? key,
+    required this.universityDetails,
+    required this.campusListForUniversity,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +74,7 @@ class TactsoBranchDetails extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    universityDetails['institutionName'] ??
+                    universityDetails['universityName'] ??
                         'Vaal University of technology',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -81,13 +85,12 @@ class TactsoBranchDetails extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 IconButton(
                   onPressed: () {
                     SharePlus.instance.share(
                       ShareParams(
-                        text:
-                            universityDetails['applicationLink'] ??
-                            'https://www.vut.ac.za',
+                        text: universityDetails['applicationLink'] ?? '',
                       ),
                     );
                   },
@@ -163,27 +166,35 @@ class TactsoBranchDetails extends StatelessWidget {
               ),
             ),
             SizedBox(height: 20),
-            CustomOutlinedButton(
-              onPressed: () async {
-                final url = Uri.parse(
-                  "${universityDetails['applicationLink']}"  
-                ); 
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                } else {
-                  Api().showMessage(
-                    context,
-                    'Cannot join live',
-                    "Error",
-                    color.primaryColorDark,
-                  );
-                }
-              },
-              text: 'Apply for yourself',
-              backgroundColor: color.scaffoldBackgroundColor,
-              foregroundColor: color.primaryColor,
-              width: double.infinity,
-            ),
+            universityDetails['isApplicationOpen'] ?? true == true
+                ? CustomOutlinedButton(
+                    onPressed: () async {
+                      final url = Uri.parse(
+                        "${universityDetails['applicationLink']}",
+                      );
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      } else {
+                        Api().showMessage(
+                          context,
+                          'Cannot open the link',
+                          "Error",
+                          color.primaryColorDark,
+                        );
+                      }
+                    },
+                    text: 'Apply for yourself',
+                    backgroundColor: color.primaryColor,
+                    foregroundColor: color.scaffoldBackgroundColor,
+                    width: double.infinity,
+                  )
+                : CustomOutlinedButton(
+                    onPressed: () {},
+                    text: 'Applications closed',
+                    backgroundColor: color.primaryColorDark,
+                    foregroundColor: color.scaffoldBackgroundColor,
+                    width: double.infinity,
+                  ),
             SizedBox(height: 10),
 
             CustomOutlinedButton(
@@ -191,15 +202,15 @@ class TactsoBranchDetails extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => UploadApplicationDocumentsPage(
-                      universityName: universityDetails['institutionName'],
+                    builder: (context) => UniversityApplicationScreen(
+                      universityData: universityDetails,
                     ),
                   ),
                 );
               },
               text: 'Ask for Help!',
-              backgroundColor: color.primaryColor,
-              foregroundColor: color.scaffoldBackgroundColor,
+              backgroundColor: color.scaffoldBackgroundColor,
+              foregroundColor: color.primaryColor,
               width: double.infinity,
             ),
             SizedBox(height: 10),

@@ -48,11 +48,10 @@ class _AdminPortalState extends State<AdminPortal> {
             icon: Icon(Ionicons.home),
             title: Text('Home', maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
-
           SalomonBottomBarItem(
             icon: Icon(Icons.add_shopping_cart_outlined),
             title: Text(
-              'Add Products',
+              'Products', // Changed from 'Add Products'
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -60,7 +59,7 @@ class _AdminPortalState extends State<AdminPortal> {
           SalomonBottomBarItem(
             icon: Icon(Ionicons.musical_notes_outline),
             title: Text(
-              'Add Tact Songs',
+              'Songs', // Changed from 'Add Tact Songs'
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -68,7 +67,7 @@ class _AdminPortalState extends State<AdminPortal> {
           SalomonBottomBarItem(
             icon: Icon(Icons.location_city_outlined),
             title: Text(
-              'Add Tactso Branch',
+              'Branches', // Changed from 'Add Tactso Branch'
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -76,7 +75,7 @@ class _AdminPortalState extends State<AdminPortal> {
           SalomonBottomBarItem(
             icon: Icon(Icons.person_add_alt_1_outlined),
             title: Text(
-              'Add Oveerseer',
+              'Overseers', // Changed from 'Add Oveerseer'
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -84,7 +83,7 @@ class _AdminPortalState extends State<AdminPortal> {
           SalomonBottomBarItem(
             icon: Icon(Icons.add_card_outlined),
             title: Text(
-              'Add feeds',
+              'Feeds', // Changed from 'Add feeds'
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

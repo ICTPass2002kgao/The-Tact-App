@@ -118,9 +118,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
             context: context,
             title: "TOTAL TACTSO BRANCHES",
             icon: Icons.location_city_outlined,
-            stream: FirebaseFirestore.instance
+            future: FirebaseFirestore.instance
                 .collection('tactso_branches')
-                .snapshots(),
+                .get(),
             backgroundColor: color.primaryColor.withOpacity(0.7),
           ),
           const SizedBox(height: 10),
@@ -130,9 +130,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             context: context,
             title: "TOTAL TACT Songs",
             icon: Ionicons.musical_notes_outline,
-            stream: FirebaseFirestore.instance
-                .collection('tact_music')
-                .snapshots(),
+            future: FirebaseFirestore.instance.collection('tact_music').get(),
             backgroundColor: color.splashColor.withOpacity(0.7).withRed(150),
           ),
           const SizedBox(height: 10),
@@ -142,10 +140,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
             context: context,
             title: "TOTAL TACT SELLERS",
             icon: Ionicons.people_outline,
-            stream: FirebaseFirestore.instance
+            future: FirebaseFirestore.instance
                 .collection('users')
                 .where('role', isEqualTo: 'Seller')
-                .snapshots(),
+                .get(),
             backgroundColor: color.splashColor.withOpacity(0.5),
           ),
           const SizedBox(height: 20),
@@ -180,7 +178,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     required BuildContext context,
     required String title,
     required IconData icon,
-    required Stream<QuerySnapshot> stream,
+    required Future<QuerySnapshot> future,
     required Color backgroundColor,
   }) {
     final color = Theme.of(context);
@@ -194,8 +192,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
-        child: StreamBuilder(
-          stream: stream,
+        child: FutureBuilder(
+          future: future,
           builder: (context, snapshots) {
             if (snapshots.connectionState == ConnectionState.waiting) {
               return Shimmer.fromColors(
@@ -286,13 +284,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // New Widget to build the Upcoming Events List
-  Widget _buildUpcomingEventsList(BuildContext context) { 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+  Widget _buildUpcomingEventsList(BuildContext context) {
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
           .collection('upcoming_events')
           .orderBy('parsedDate', descending: false) // Order by date
           .limit(10) // Fetch a few more than 3 to ensure we get 3 future events
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Column(
@@ -369,7 +367,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             String monthDisplay = event['month'] ?? '';
             String title = event['title'] ?? 'No Title';
             String description =
-                event['description'] ?? 'No description available.'; 
+                event['description'] ?? 'No description available.';
 
             // Adjust date format for ranges if necessary, e.g., "Feb - Mar"
             if (dateDisplay.contains('-') && monthDisplay.isEmpty) {

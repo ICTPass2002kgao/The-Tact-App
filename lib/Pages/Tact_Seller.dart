@@ -1,3 +1,4 @@
+import 'dart:math'; // For random number generation
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,8 +14,13 @@ class _SellerProductPageState extends State<SellerProductPage>
   late TabController _tabController;
   final priceController = TextEditingController();
   final locationController = TextEditingController();
-  final quantityController = TextEditingController();
+  // Removed: quantityController
   final user = FirebaseAuth.instance.currentUser;
+
+  // NEW: Controller for adding individual colors
+  final singleColorController = TextEditingController();
+  // NEW: List to temporarily hold colors as they are added in the bottom sheet
+  List<String> _tempColors = [];
 
   final List<String> orderStatuses = [
     'pending',
@@ -25,13 +31,21 @@ class _SellerProductPageState extends State<SellerProductPage>
     'cancelled',
   ];
 
+  late int _randomDisplayPercentage;
+
   @override
   void initState() {
-    _tabController = TabController(
-      length: 4,
-      vsync: this,
-    ); // Increased tab length to 4 for Dashboard
     super.initState();
+    _tabController = TabController(
+      length: 4, // 4 tabs: Dashboard, My Products, Add Product, Orders
+      vsync: this,
+    );
+    _generateRandomDisplayDiscount();
+  }
+
+  void _generateRandomDisplayDiscount() {
+    final random = Random();
+    _randomDisplayPercentage = 13 + random.nextInt(44 - 13 + 1);
   }
 
   @override
@@ -39,28 +53,34 @@ class _SellerProductPageState extends State<SellerProductPage>
     _tabController.dispose();
     priceController.dispose();
     locationController.dispose();
-    quantityController.dispose();
+    // Removed: quantityController.dispose();
+    singleColorController.dispose(); // NEW: Dispose singleColorController
     super.dispose();
   }
 
+  // --- UPDATED: addSellerProduct Function ---
+  // Quantity parameter removed, colors list updated.
   Future<void> addSellerProduct(
-    String productId,
+    String productId, // ID from the 'products' collection
     String name,
     String descrip,
-    int quantity,
-    dynamic imageUrl,
+    // Removed: int quantity,
+    dynamic imageUrl, // Could be String or List<String>
+    List<String> colors, // List of available colors
   ) async {
+    // Basic validation
     if (user == null ||
         priceController.text.isEmpty ||
-        locationController.text.isEmpty ||
-        quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Please fill all fields correctly, including a valid quantity.',
+        locationController.text.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please fill all required fields: price and location.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return;
     }
 
@@ -71,38 +91,62 @@ class _SellerProductPageState extends State<SellerProductPage>
         .get();
 
     if (existingProduct.docs.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'You have already listed this product. Consider updating it in "My Products" tab.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'You have already listed this product. Consider updating it in "My Products" tab.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return;
     }
 
-    await FirebaseFirestore.instance.collection('seller_products').add({
-      'productId': productId,
-      'sellerId': user!.uid,
-      'price': double.parse(priceController.text),
-      'location': locationController.text,
-      'quantity': quantity,
-      'createdAt': FieldValue.serverTimestamp(),
-      'productName': name,
-      'productDescription': descrip,
-      'imageUrl': (imageUrl is List) ? imageUrl[0] : imageUrl,
-      'views': 0, // Initialize views for new products
-    });
+    _generateRandomDisplayDiscount();
 
-    priceController.clear();
-    locationController.clear();
-    quantityController.clear();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Product added successfully!')));
-    Navigator.pop(context);
+    try {
+      await FirebaseFirestore.instance.collection('seller_products').add({
+        'productId': productId,
+        'sellerId': user!.uid,
+        'price': double.parse(priceController.text),
+        'location': locationController.text,
+        // Removed: 'quantity': quantity,
+        'createdAt': FieldValue.serverTimestamp(),
+        'productName': name,
+        'productDescription': descrip,
+        'discountPercentage': _randomDisplayPercentage,
+        'imageUrl': (imageUrl is List) ? imageUrl[0] : imageUrl,
+        'views': 0,
+        'availableColors': colors,
+      });
+
+      // Clear controllers and provide success feedback
+      priceController.clear();
+      locationController.clear();
+      singleColorController.clear(); // NEW: Clear single color controller
+      _tempColors.clear(); // NEW: Clear temporary colors list
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product added successfully!')),
+        );
+        Navigator.pop(context); // Close the bottom sheet
+      }
+      setState(
+        () {},
+      ); // Rebuild to refresh the filtered list of available products
+    } catch (e) {
+      print("Error adding seller product: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error adding product: $e')));
+      }
+    }
   }
 
+  // --- EXISTING: updateSellerProductPrice ---
   Future<void> updateSellerProductPrice(String docId, double newPrice) async {
     final color = Theme.of(context);
     try {
@@ -110,49 +154,60 @@ class _SellerProductPageState extends State<SellerProductPage>
           .collection('seller_products')
           .doc(docId)
           .update({'price': newPrice});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Price updated successfully!'),
-          backgroundColor: color.primaryColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Price updated successfully!'),
+            backgroundColor: color.primaryColor,
+          ),
+        );
+      }
+      setState(() {});
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating price: $e'),
-          backgroundColor: color.primaryColorDark,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating price: $e'),
+            backgroundColor: color.primaryColorDark,
+          ),
+        );
+      }
       print('Error updating seller product price: $e');
     }
   }
 
+  // --- EXISTING: updateOrderStatus ---
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
     final color = Theme.of(context);
     try {
       await FirebaseFirestore.instance.collection('orders').doc(orderId).update(
         {'status': newStatus},
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Order status updated to "${newStatus.toUpperCase().replaceAll('_', ' ')}"!',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Order status updated to "${newStatus.toUpperCase().replaceAll('_', ' ')}!"',
+            ),
+            backgroundColor: color.primaryColor,
           ),
-          backgroundColor: color.primaryColor,
-        ),
-      );
+        );
+      }
+      setState(() {});
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating order status: $e'),
-          backgroundColor: color.primaryColorDark,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating order status: $e'),
+            backgroundColor: color.primaryColorDark,
+          ),
+        );
+      }
       print('Error updating order status: $e');
     }
   }
 
-  // Helper function for status colors
+  // --- EXISTING: _getStatusColor Helper ---
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':
@@ -176,7 +231,7 @@ class _SellerProductPageState extends State<SellerProductPage>
   Widget dashboardTab() {
     final currentSellerId = user?.uid;
     if (currentSellerId == null) {
-      return Center(child: Text("Please log in to view your dashboard."));
+      return const Center(child: Text("Please log in to view your dashboard."));
     }
 
     return SingleChildScrollView(
@@ -192,14 +247,14 @@ class _SellerProductPageState extends State<SellerProductPage>
               color: Theme.of(context).primaryColor,
             ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           // Total Products Listed Card
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance
                 .collection('seller_products')
                 .where('sellerId', isEqualTo: currentSellerId)
-                .snapshots(),
+                .get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return _buildDashboardCard(
@@ -216,11 +271,11 @@ class _SellerProductPageState extends State<SellerProductPage>
               );
             },
           ),
-          SizedBox(height: 15),
+          const SizedBox(height: 15),
 
           // Total Orders Received & Total Revenue Card
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('orders').snapshots(),
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance.collection('orders').get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Column(
@@ -230,7 +285,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                       "Loading...",
                       Icons.shopping_bag,
                     ),
-                    SizedBox(height: 15),
+                    const SizedBox(height: 15),
                     _buildDashboardCard(
                       "Total Revenue (Your Products)",
                       "Loading...",
@@ -247,7 +302,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                       "Error",
                       Icons.error,
                     ),
-                    SizedBox(height: 15),
+                    const SizedBox(height: 15),
                     _buildDashboardCard(
                       "Total Revenue (Your Products)",
                       "Error",
@@ -292,7 +347,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                     totalOrdersForSeller.toString(),
                     Icons.shopping_bag,
                   ),
-                  SizedBox(height: 15),
+                  const SizedBox(height: 15),
                   _buildDashboardCard(
                     "Total Revenue (Your Products)",
                     "R${totalRevenueForSeller.toStringAsFixed(2)}",
@@ -302,14 +357,14 @@ class _SellerProductPageState extends State<SellerProductPage>
               );
             },
           ),
-          SizedBox(height: 15),
+          const SizedBox(height: 15),
 
           // Total Product Views Card
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
+          FutureBuilder<QuerySnapshot>(
+            future: FirebaseFirestore.instance
                 .collection('seller_products')
                 .where('sellerId', isEqualTo: currentSellerId)
-                .snapshots(),
+                .get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return _buildDashboardCard(
@@ -339,7 +394,7 @@ class _SellerProductPageState extends State<SellerProductPage>
               );
             },
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           Text(
             "Note: Product views are incremented when customers interact with your products on the shopping page.",
             style: TextStyle(
@@ -363,7 +418,7 @@ class _SellerProductPageState extends State<SellerProductPage>
         child: Row(
           children: [
             Icon(icon, size: 40, color: Theme.of(context).primaryColor),
-            SizedBox(width: 15),
+            const SizedBox(width: 15),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -375,7 +430,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                     color: Colors.grey[700],
                   ),
                 ),
-                SizedBox(height: 5),
+                const SizedBox(height: 5),
                 Text(
                   value,
                   style: TextStyle(
@@ -392,21 +447,22 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
+  // --- My Products Tab Widget ---
   Widget myProductsTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
           .collection('seller_products')
           .where('sellerId', isEqualTo: user?.uid)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
           return Center(child: Text("Error: ${snapshot.error}"));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text("No products added yet."));
+          return const Center(child: Text("No products added yet."));
         }
 
         final sellerProds = snapshot.data!.docs;
@@ -420,12 +476,17 @@ class _SellerProductPageState extends State<SellerProductPage>
 
             final productName = data['productName'] ?? 'Unnamed Product';
             final imageUrl = data['imageUrl'];
-            final quantity = data['quantity'] ?? 0;
+            // Removed: final quantity = data['quantity'] ?? 0;
             final currentPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
             final productViews = (data['views'] as int?) ?? 0; // Get views
+            final List<dynamic> availableColorsDynamic =
+                data['availableColors'] ?? []; // Retrieve colors
+            final List<String> availableColors = availableColorsDynamic
+                .map((c) => c.toString())
+                .toList();
 
             return Card(
-              margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: ListTile(
                 leading:
                     imageUrl != null &&
@@ -436,15 +497,15 @@ class _SellerProductPageState extends State<SellerProductPage>
                         width: 50,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
-                            Icon(Icons.broken_image),
+                            const Icon(Icons.broken_image),
                       )
-                    : Icon(Icons.image_not_supported),
+                    : const Icon(Icons.image_not_supported),
                 title: Text(productName),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Price: R${currentPrice.toStringAsFixed(2)} • Quantity: ${quantity}",
+                      "Price: R${currentPrice.toStringAsFixed(2)}", // Quantity removed here
                     ),
                     Text(
                       "Location: ${data['location'] ?? 'N/A'}",
@@ -452,9 +513,14 @@ class _SellerProductPageState extends State<SellerProductPage>
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      "Views: $productViews", // Display views here
+                      "Views: $productViews",
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
+                    if (availableColors.isNotEmpty)
+                      Text(
+                        "Colors: ${availableColors.join(', ')}",
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
                   ],
                 ),
                 trailing: IconButton(
@@ -471,10 +537,10 @@ class _SellerProductPageState extends State<SellerProductPage>
                           title: Text("Update Price for $productName"),
                           content: TextField(
                             controller: newPriceController,
-                            keyboardType: TextInputType.numberWithOptions(
+                            keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            decoration: InputDecoration(
+                            decoration: const InputDecoration(
                               labelText: "New Price (R)",
                               hintText: "e.g., 175.50",
                             ),
@@ -484,7 +550,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                               onPressed: () {
                                 Navigator.pop(context);
                               },
-                              child: Text("Cancel"),
+                              child: const Text("Cancel"),
                             ),
                             ElevatedButton(
                               onPressed: () async {
@@ -496,18 +562,22 @@ class _SellerProductPageState extends State<SellerProductPage>
                                     docId,
                                     updatedPrice,
                                   );
-                                  Navigator.pop(context);
+                                  if (mounted) {
+                                    Navigator.pop(context);
+                                  }
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Please enter a valid positive number for price.',
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please enter a valid positive number for price.',
+                                        ),
                                       ),
-                                    ),
-                                  );
+                                    );
+                                  }
                                 }
                               },
-                              child: Text("Update"),
+                              child: const Text("Update"),
                             ),
                           ],
                         );
@@ -523,160 +593,370 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
+  // --- UPDATED: addProductTab Widget (with filtering, dynamic colors, and BottomSheet) ---
   Widget addProductTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('products').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+    if (user == null) {
+      return const Center(child: Text("Please log in to add products."));
+    }
+
+    final String sellerId = user!.uid;
+
+    return FutureBuilder<List<String>>(
+      future: FirebaseFirestore.instance
+          .collection('seller_products')
+          .where('sellerId', isEqualTo: sellerId)
+          .get()
+          .then(
+            (snapshot) =>
+                snapshot.docs.map((doc) => doc['productId'] as String).toList(),
+          ),
+      builder: (context, existingProductIdsSnapshot) {
+        if (existingProductIdsSnapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
         }
-        if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}"));
+        if (existingProductIdsSnapshot.hasError) {
+          return Center(
+            child: Text(
+              "Error fetching existing products: ${existingProductIdsSnapshot.error}",
+            ),
+          );
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text("No products available to add."));
-        }
 
-        final products = snapshot.data!.docs;
+        final List<String> existingProductIds =
+            existingProductIdsSnapshot.data ?? [];
 
-        return ListView.builder(
-          itemCount: products.length,
-          itemBuilder: (context, index) {
-            final prod = products[index];
-            final String adminProductName =
-                prod['name'] ?? 'Unnamed Product (Admin)';
-            final String adminProductDescription =
-                prod['description'] ?? 'No description (Admin)';
-            final dynamic adminProductImageUrl = prod['imageUrl'];
+        return FutureBuilder<QuerySnapshot>(
+          future: FirebaseFirestore.instance.collection('products').get(),
+          builder: (context, allProductsSnapshot) {
+            if (allProductsSnapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (allProductsSnapshot.hasError) {
+              return Center(child: Text("Error: ${allProductsSnapshot.error}"));
+            }
+            if (!allProductsSnapshot.hasData ||
+                allProductsSnapshot.data!.docs.isEmpty) {
+              return const Center(
+                child: Text("No base products available to add."),
+              );
+            }
 
-            return Card(
-              margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: ListTile(
-                leading:
-                    adminProductImageUrl != null &&
-                        (adminProductImageUrl is String ||
-                            (adminProductImageUrl is List &&
-                                adminProductImageUrl.isNotEmpty))
-                    ? Image.network(
-                        (adminProductImageUrl is List)
-                            ? adminProductImageUrl[0]
-                            : adminProductImageUrl,
-                        height: 50,
-                        width: 50,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Icon(Icons.broken_image),
-                      )
-                    : Icon(Icons.image_not_supported),
-                title: Text(adminProductName),
-                subtitle: Text(adminProductDescription),
-                onTap: () {
-                  priceController.clear();
-                  locationController.clear();
-                  quantityController.clear();
+            final availableProducts = allProductsSnapshot.data!.docs.where((
+              prod,
+            ) {
+              return !existingProductIds.contains(prod.id);
+            }).toList();
 
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: Text(
-                        "Add Your Price, Quantity & Location for: ${adminProductName}",
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Text(
-                              "Product: ${adminProductName}",
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          TextField(
-                            controller: priceController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: "Price (R)",
-                              hintText: "e.g., 150.00",
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          TextField(
-                            controller: quantityController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: "Quantity in Stock",
-                              hintText: "e.g., 100",
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          TextField(
-                            controller: locationController,
-                            decoration: InputDecoration(
-                              labelText: "Location (e.g., Shop A12, Market St)",
-                              hintText: "e.g., My Store Front, City",
-                            ),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          child: Text("Cancel"),
-                        ),
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (priceController.text.isEmpty ||
-                                locationController.text.isEmpty ||
-                                quantityController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Please fill in all fields: price, quantity, and location.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
+            if (availableProducts.isEmpty) {
+              return const Center(
+                child: Text("You have added all available products."),
+              );
+            }
 
-                            final int? quantity = int.tryParse(
-                              quantityController.text,
-                            );
-                            if (quantity == null || quantity <= 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Please enter a valid positive number for quantity.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
+            return ListView.builder(
+              itemCount: availableProducts.length,
+              itemBuilder: (context, index) {
+                final prod = availableProducts[index];
+                final String adminProductName =
+                    prod['name'] ?? 'Unnamed Product (Admin)';
+                final String adminProductDescription =
+                    prod['description'] ?? 'No description (Admin)';
+                final dynamic adminProductImageUrl = prod['imageUrl'];
 
-                            try {
-                              await addSellerProduct(
-                                prod.id,
-                                adminProductName,
-                                adminProductDescription,
-                                quantity,
-                                adminProductImageUrl,
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error adding product: $e'),
-                                ),
-                              );
-                            }
-                          },
-                          child: Text("Submit"),
-                        ),
-                      ],
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: ListTile(
+                    leading:
+                        adminProductImageUrl != null &&
+                            (adminProductImageUrl is String ||
+                                (adminProductImageUrl is List &&
+                                    adminProductImageUrl.isNotEmpty))
+                        ? Image.network(
+                            (adminProductImageUrl is List)
+                                ? adminProductImageUrl[0]
+                                : adminProductImageUrl,
+                            height: 50,
+                            width: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.broken_image),
+                          )
+                        : const Icon(Icons.image_not_supported),
+                    title: Text(
+                      adminProductName,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  );
-                },
-              ),
+                    subtitle: Text(
+                      adminProductDescription,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      // Clear controllers and temp colors when opening the bottom sheet
+                      priceController.clear();
+                      locationController.clear();
+                      singleColorController.clear();
+                      setState(() {
+                        _tempColors
+                            .clear(); // Clear temp colors for new product
+                      });
+
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (context) {
+                          return StatefulBuilder(
+                            // Use StatefulBuilder to update sheet content
+                            builder: (BuildContext context, StateSetter setModalState) {
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: MediaQuery.of(
+                                    context,
+                                  ).viewInsets.bottom,
+                                  top: 20,
+                                  left: 20,
+                                  right: 20,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Center(
+                                        child: Text(
+                                          "Add Your Price, Location & Colors for:",
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Theme.of(
+                                              context,
+                                            ).primaryColor,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 16.0,
+                                          ),
+                                          child: Text(
+                                            adminProductName,
+                                            style: TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(
+                                                context,
+                                              ).primaryColor,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                      TextField(
+                                        controller: priceController,
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          labelText: "Price (R)",
+                                          hintText: "e.g., 150.00",
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      // Removed: Quantity TextField
+                                      TextField(
+                                        controller: locationController,
+                                        decoration: const InputDecoration(
+                                          labelText:
+                                              "Location (e.g., Shop A12, Market St)",
+                                          hintText:
+                                              "e.g., My Store Front, City",
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      // NEW: Color Input with Add Button
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: singleColorController,
+                                              decoration: const InputDecoration(
+                                                labelText: "Add a Color",
+                                                hintText: "e.g., Red",
+                                                border: OutlineInputBorder(),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          ElevatedButton(
+                                            onPressed: () {
+                                              final String color =
+                                                  singleColorController.text
+                                                      .trim();
+                                              if (color.isNotEmpty &&
+                                                  !_tempColors.contains(
+                                                    color,
+                                                  )) {
+                                                setModalState(() {
+                                                  _tempColors.add(color);
+                                                  singleColorController.clear();
+                                                });
+                                              } else if (_tempColors.contains(
+                                                color,
+                                              )) {
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Color already added!',
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 20,
+                                                    vertical: 15,
+                                                  ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            child: const Text("Add"),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      // Display Added Colors
+                                      if (_tempColors.isNotEmpty)
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              "Colors Added:",
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.grey[700],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Wrap(
+                                              spacing: 8.0,
+                                              runSpacing: 4.0,
+                                              children: _tempColors.map((
+                                                color,
+                                              ) {
+                                                return Chip(
+                                                  label: Text(color),
+                                                  deleteIcon: const Icon(
+                                                    Icons.close,
+                                                  ),
+                                                  onDeleted: () {
+                                                    setModalState(() {
+                                                      _tempColors.remove(color);
+                                                    });
+                                                  },
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ],
+                                        )
+                                      else
+                                        const Text(
+                                          "No colors added yet.",
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+
+                                      const SizedBox(height: 20),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                            },
+                                            child: const Text("Cancel"),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          ElevatedButton(
+                                            onPressed: () async {
+                                              if (priceController
+                                                      .text
+                                                      .isEmpty ||
+                                                  locationController
+                                                      .text
+                                                      .isEmpty) {
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Please fill in all fields: price and location.',
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                                return;
+                                              }
+
+                                              try {
+                                                await addSellerProduct(
+                                                  prod.id,
+                                                  adminProductName,
+                                                  adminProductDescription,
+                                                  // Removed: quantity,
+                                                  adminProductImageUrl,
+                                                  _tempColors, // Pass the dynamically built list of colors
+                                                );
+                                              } catch (e) {
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        'Error adding product: $e',
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            child: const Text("Submit"),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                );
+              },
             );
           },
         );
@@ -684,27 +964,28 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
+  // --- Orders Tab Widget ---
   Widget ordersTab() {
     final currentSellerId = user?.uid;
 
     if (currentSellerId == null) {
-      return Center(child: Text("Please log in to view orders."));
+      return const Center(child: Text("Please log in to view orders."));
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
           .collection('orders')
           .orderBy('createdAt', descending: true)
-          .snapshots(),
+          .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
           return Center(child: Text("Error: ${snapshot.error}"));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text("No orders found."));
+          return const Center(child: Text("No orders found."));
         }
 
         final allOrders = snapshot.data!.docs;
@@ -728,7 +1009,9 @@ class _SellerProductPageState extends State<SellerProductPage>
         }
 
         if (relevantOrders.isEmpty) {
-          return Center(child: Text("No orders found for your products."));
+          return const Center(
+            child: Text("No orders found for your products."),
+          );
         }
 
         return ListView.builder(
@@ -763,7 +1046,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                 .toList();
 
             if (sellerSpecificProducts.isEmpty) {
-              return SizedBox.shrink();
+              return const SizedBox.shrink();
             }
 
             double sellerProductsTotal = 0.0;
@@ -773,12 +1056,12 @@ class _SellerProductPageState extends State<SellerProductPage>
             }
 
             return Card(
-              margin: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               elevation: 2,
               child: ExpansionTile(
                 title: Text(
                   'Order #${orderRef}',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -788,7 +1071,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                     Chip(
                       label: Text(
                         'Status: ${currentStatus.toUpperCase().replaceAll('_', ' ')}',
-                        style: TextStyle(color: Colors.white),
+                        style: const TextStyle(color: Colors.white),
                       ),
                       backgroundColor: _getStatusColor(currentStatus),
                     ),
@@ -809,9 +1092,12 @@ class _SellerProductPageState extends State<SellerProductPage>
                       children: [
                         Text(
                           'Full Order ID: $orderId',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
                           'Customer Email: ${orderData['customerEmail'] ?? 'N/A'}',
                         ),
@@ -822,16 +1108,16 @@ class _SellerProductPageState extends State<SellerProductPage>
                           'Total Paid by Customer (Full Order): R${totalPaid.toStringAsFixed(2)}',
                         ),
                         if (deliveryNeeded) ...[
-                          Text('Delivery Needed: Yes'),
+                          const Text('Delivery Needed: Yes'),
                           Text('Delivery Address: ${deliveryAddress}'),
                           Text(
                             'Delivery Charge: R${(orderData['deliveryCharge'] as num?)?.toDouble().toStringAsFixed(2) ?? '0.00'}',
                           ),
                         ] else ...[
-                          Text('Delivery Needed: No (Collection)'),
+                          const Text('Delivery Needed: No (Collection)'),
                         ],
-                        SizedBox(height: 10),
-                        Text(
+                        const SizedBox(height: 10),
+                        const Text(
                           'Your Products in this Order:',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
@@ -851,8 +1137,8 @@ class _SellerProductPageState extends State<SellerProductPage>
                             );
                           }).toList(),
                         ),
-                        SizedBox(height: 10),
-                        Divider(),
+                        const SizedBox(height: 10),
+                        const Divider(),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
@@ -861,14 +1147,13 @@ class _SellerProductPageState extends State<SellerProductPage>
                                 showDialog(
                                   context: context,
                                   builder: (context) {
-                                    // **Crucial Fix:**
-                                    // Declare tempSelectedStatus here, inside the builder,
-                                    // so it maintains its state across setDialogState calls.
                                     String? tempSelectedStatus = currentStatus;
                                     return StatefulBuilder(
                                       builder: (context, setDialogState) {
                                         return AlertDialog(
-                                          title: Text("Update Order Status"),
+                                          title: const Text(
+                                            "Update Order Status",
+                                          ),
                                           content: SingleChildScrollView(
                                             child: Column(
                                               mainAxisSize: MainAxisSize.min,
@@ -883,11 +1168,11 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                   ),
                                                   value: status,
                                                   groupValue:
-                                                      tempSelectedStatus, // Use the state variable
+                                                      tempSelectedStatus,
                                                   onChanged: (value) {
                                                     setDialogState(() {
                                                       tempSelectedStatus =
-                                                          value; // Update state and rebuild dialog
+                                                          value;
                                                     });
                                                   },
                                                 );
@@ -899,9 +1184,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                                               onPressed: () {
                                                 Navigator.pop(context);
                                               },
-                                              child: Text("Cancel"),
+                                              child: const Text("Cancel"),
                                             ),
-                                            ElevatedButton(
+                                            ElevatedButton.icon(
                                               onPressed: () async {
                                                 if (tempSelectedStatus !=
                                                         null &&
@@ -911,20 +1196,27 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                     orderId,
                                                     tempSelectedStatus!,
                                                   );
-                                                  Navigator.pop(context);
+                                                  if (mounted) {
+                                                    Navigator.pop(context);
+                                                  }
                                                 } else {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        'No status selected or no change.',
+                                                  if (mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'No status selected or no change.',
+                                                        ),
                                                       ),
-                                                    ),
-                                                  );
+                                                    );
+                                                  }
                                                 }
                                               },
-                                              child: Text("Confirm Update"),
+                                              icon: const Icon(Icons.update),
+                                              label: const Text(
+                                                "Confirm Update",
+                                              ),
                                             ),
                                           ],
                                         );
@@ -933,8 +1225,8 @@ class _SellerProductPageState extends State<SellerProductPage>
                                   },
                                 );
                               },
-                              icon: Icon(Icons.update),
-                              label: Text('Update Status'),
+                              icon: const Icon(Icons.edit),
+                              label: const Text("Update Status"),
                             ),
                           ],
                         ),
@@ -950,39 +1242,38 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
+  // --- Main Build Method ---
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
     return Scaffold(
       backgroundColor: color.scaffoldBackgroundColor,
-      body: Expanded(
-        child: Column(
-          children: [
-            TabBar(
+      body: Column(
+        children: [
+          TabBar(
+            controller: _tabController,
+            labelColor: color.primaryColor,
+            unselectedLabelColor: color.hintColor,
+            indicatorColor: color.primaryColor,
+            tabs: const [
+              Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
+              Tab(text: "My Products", icon: Icon(Icons.inventory)),
+              Tab(text: "Add Product", icon: Icon(Icons.add_shopping_cart)),
+              Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
               controller: _tabController,
-              labelColor: color.primaryColor,
-              unselectedLabelColor: color.hintColor,
-              indicatorColor: color.primaryColor,
-              tabs: [
-                Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
-                Tab(text: "My Products", icon: Icon(Icons.inventory)),
-                Tab(text: "Add Product", icon: Icon(Icons.add_shopping_cart)),
-                Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
+              children: [
+                dashboardTab(),
+                myProductsTab(),
+                addProductTab(), // This is now the updated addProductTab
+                ordersTab(),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  dashboardTab(),
-                  myProductsTab(),
-                  addProductTab(),
-                  ordersTab(),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

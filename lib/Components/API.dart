@@ -45,6 +45,10 @@ class Api {
     String selectedMemberUid,
 
     String role,
+    String selectedProvince,
+    String selectedDistrictElder,
+    String selectedCommunityElder,
+    String selectedCommunityName, 
 
     BuildContext context,
   ) async {
@@ -67,14 +71,18 @@ class Api {
           "surname": surname, 
           "email": email, 
           "profileUrl": "", 
-          "Address": txtAddress, 
-          "Contact Number": txtContactNumber,
+          "address": txtAddress, 
+          "phone": txtContactNumber,
           "overseerUid": selectedMemberUid,
           'week1': 0.00,
           'week2': 0.00,
           'week3': 0.00,
           'week4': 0.00, 
           "role": role,
+          "province": selectedProvince,
+          "districtElderName": selectedDistrictElder,
+          "communityElderName": selectedCommunityElder,
+          "communityName": selectedCommunityName,
         });
       }
 

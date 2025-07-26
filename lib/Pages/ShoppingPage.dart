@@ -1,28 +1,31 @@
 import 'dart:convert';
-import 'package:flutter/material.dart'; // Keep this for basic Flutter types
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:badges/badges.dart'
-    as badges; // Keep as it's used in ShoppingPage
-import 'package:toastification/toastification.dart'; // Keep as it's used
-import 'package:cloud_firestore/cloud_firestore.dart'; // Keep as it's used
-import 'package:ttact/Components/API.dart'; // Keep as it's used
-import 'package:ttact/Components/ProductCard.dart'; // Keep as it's used
-import 'package:ttact/Components/Product_Details.dart'; // Keep as it's used
-import 'package:ttact/Pages/CartPage.dart'; // Keep as it's used
+import 'package:badges/badges.dart' as badges;
+import 'package:toastification/toastification.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/ProductCard.dart';
+import 'package:ttact/Components/Product_Details.dart';
+import 'package:ttact/Pages/CartPage.dart';
+import 'package:shimmer/shimmer.dart'; // Import the shimmer package
 
 // REMOVED AppColors class definition as per your request
 
 class CartHelper {
   static const String _cartKey = 'cart';
 
-  static Future<void> addToCart(Map<String, dynamic> product) async {
+  // --- UPDATED: addToCart now accepts a selectedColor ---
+  static Future<void> addToCart(
+    Map<String, dynamic> product,
+    String? selectedColor,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final String? cartData = prefs.getString(_cartKey);
 
     List<Map<String, dynamic>> cart = [];
 
     if (cartData != null) {
-      // Decode with a type cast to ensure correct map types
       cart = List<Map<String, dynamic>>.from(
         (json.decode(cartData) as List).map(
           (item) => item as Map<String, dynamic>,
@@ -32,18 +35,17 @@ class CartHelper {
 
     final String? productId = product['productId'];
     if (productId == null) {
-      // It's good practice to log or handle this error
       print(
         "Error: Product ID is missing for product: ${product['productName']}",
       );
-      return; // Cannot process without a product ID
+      return;
     }
 
     bool productFound = false;
     for (int i = 0; i < cart.length; i++) {
-      if (cart[i]['productId'] == productId) {
-        // Product already in cart, increase quantity and update price
-        // Ensure quantity exists and is an int, default to 0 if not
+      // --- IMPORTANT: Include selectedColor in the comparison for uniqueness ---
+      if (cart[i]['productId'] == productId &&
+          cart[i]['selectedColor'] == selectedColor) {
         int currentQuantity = (cart[i]['quantity'] as int?) ?? 0;
         double productPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
 
@@ -55,17 +57,17 @@ class CartHelper {
     }
 
     if (!productFound) {
-      // Product not in cart, add it with quantity 1
       double productPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
       product['quantity'] = 1;
-      product['itemTotalPrice'] = productPrice; // Initial item total
+      product['itemTotalPrice'] = productPrice;
+      // --- Store the selected color in the cart item ---
+      product['selectedColor'] = selectedColor;
       cart.add(product);
     }
 
     await prefs.setString(_cartKey, json.encode(cart));
   }
 
-  // Method to decrease quantity or remove item from cart (still relevant for cart management)
   static Future<void> removeFromCart(String productId) async {
     final prefs = await SharedPreferences.getInstance();
     final String? cartData = prefs.getString(_cartKey);
@@ -78,15 +80,19 @@ class CartHelper {
       ),
     );
 
+    // --- Note: This removeFromCart currently removes by productId only.
+    // If you need to remove a specific color variant, this method will need modification
+    // to also accept a color or to iterate based on both product ID and color.
+    // For now, it will remove any item matching the product ID. ---
     for (int i = 0; i < cart.length; i++) {
       if (cart[i]['productId'] == productId) {
+        // Check only by productId for now
         int currentQuantity = (cart[i]['quantity'] as int?) ?? 0;
         if (currentQuantity > 1) {
           cart[i]['quantity'] = currentQuantity - 1;
           double productPrice = (cart[i]['price'] as num?)?.toDouble() ?? 0.0;
           cart[i]['itemTotalPrice'] = cart[i]['quantity'] * productPrice;
         } else {
-          // Remove the item if quantity becomes 1 (or less)
           cart.removeAt(i);
         }
         break;
@@ -127,25 +133,21 @@ class ShoppingPage extends StatefulWidget {
 class _ShoppingPageState extends State<ShoppingPage> {
   int cartCount = 0;
   List<Map<String, dynamic>> products = [];
+  List<Map<String, dynamic>> _filteredProducts = [];
 
-  // REMOVED _favoriteProductIds Set as per your request
-  // REMOVED _loadFavorites() and _saveFavorites() as per your request
-  // REMOVED toggleFavorite() as per your request
+  String _selectedCategory = 'All';
 
   @override
   void initState() {
     super.initState();
     loadCartCount();
-    // REMOVED _loadFavorites() call
     fetchAllSellerProducts();
   }
 
-  // Calculate total distinct items in cart for badge count
   void loadCartCount() async {
     List<Map<String, dynamic>> cart = await CartHelper.getCart();
     int totalItems = 0;
     for (var item in cart) {
-      // Sum up quantities. Ensure quantity is treated as int, default to 0.
       totalItems += (item['quantity'] as int? ?? 0);
     }
     setState(() {
@@ -174,126 +176,306 @@ class _ShoppingPageState extends State<ShoppingPage> {
           'imageUrl': (productData['imageUrl'] is List)
               ? productData['imageUrl'][0]
               : productData['imageUrl'],
-          'categoryName': productData['category'] ?? 'Other',
+          'category': productData['category'] ?? 'Other',
           'productName': productData['name'],
-          'price': (sellerData['price'] as num)
-              .toDouble(), // Ensure price is double
+          'price': (sellerData['price'] as num).toDouble(),
           'location': sellerData['location'],
           'sellerId': sellerData['sellerId'],
-          'productId':
-              sellerData['productId'], // Make sure productId is included
+          'productId': sellerData['productId'],
           'description':
-              productData['description'] ??
-              'No description provided', // Add description
-          'isAvailable': productData['isAvailable'] ?? true, // Add isAvailable
+              productData['description'] ?? 'No description provided',
+          'isAvailable': productData['isAvailable'] ?? true,
+          'discountPercentage':
+              (sellerData['discountPercentage'] as num?)?.toDouble() ?? 0.0,
+          // --- NEW: Fetch availableColors from productData ---
+          'availableColors': productData['availableColors'] ?? [],
+          // Ensure it's a List<String>, default to empty list
         });
       }
     }
 
     setState(() {
       products = loadedProducts;
+      _applyFilter();
     });
   }
 
-  void addToCart(Map<String, dynamic> product) async {
-    final themeColor = Theme.of(context); // Get theme colors dynamically
-    await CartHelper.addToCart(product);
-    loadCartCount(); // Recalculate cart count to reflect quantity changes
+  void _applyFilter() {
+    if (_selectedCategory == 'All') {
+      _filteredProducts = products;
+    } else {
+      _filteredProducts = products
+          .where((product) => product['category'] == _selectedCategory)
+          .toList();
+    }
+  }
+
+  // --- UPDATED: addToCart now accepts selectedColor from ProductDetails ---
+  void addToCartFromProductDetails(
+    Map<String, dynamic> product,
+    String? selectedColor,
+  ) async {
+    final theme = Theme.of(context);
+    await CartHelper.addToCart(product, selectedColor); // Pass selectedColor
+    loadCartCount();
 
     toastification.dismissAll();
-    // Assuming Api().showMessage is designed to use a BuildContext for theming
     Api().showMessage(
       context,
-      '${product['productName']} added to the cart', // More specific message
+      '${product['productName']} (${selectedColor ?? 'Default'}) added to the cart', // Indicate color in message
       'Success',
-      themeColor.splashColor, // Use themeColor as requested
+      theme.primaryColor,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Ensure 'color' is accessed within build for dynamic theming
-    final themeColor = Theme.of(context); // Get theme colors dynamically
+    final theme = Theme.of(context);
 
     return Scaffold(
-      floatingActionButton:
-          cartCount ==
-              0 // Check for 0 directly, no isNaN needed if int
+      floatingActionButton: cartCount == 0
           ? FloatingActionButton(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => CartPage()),
+                  MaterialPageRoute(builder: (context) => const CartPage()),
                 );
               },
-              backgroundColor: themeColor.primaryColor,
+              backgroundColor: theme.primaryColor,
               child: Icon(
                 Icons.shopping_cart_outlined,
-                color: themeColor.scaffoldBackgroundColor,
+                color: theme.scaffoldBackgroundColor,
               ),
             )
           : badges.Badge(
               badgeContent: Text(
                 '$cartCount',
-                style: TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.white),
               ),
               child: FloatingActionButton(
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => CartPage()),
+                    MaterialPageRoute(builder: (context) => const CartPage()),
                   );
                 },
-
-                backgroundColor: themeColor.primaryColor,
+                backgroundColor: theme.primaryColor,
                 child: Icon(
                   Icons.shopping_cart_outlined,
-                  color: themeColor.scaffoldBackgroundColor,
+                  color: theme.scaffoldBackgroundColor,
                 ),
               ),
             ),
       body: products.isEmpty
-          ? const Center(
-              child: CircularProgressIndicator(),
-            ) // Show loading indicator if products are empty
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(10),
-              child: Wrap(
-                spacing: 10.0, // Horizontal space between cards
-                runSpacing: 10.0, // Vertical space between rows of cards
-                alignment:
-                    WrapAlignment.start, // Align items to the start of the row
-                children: products.map((product) {
-                  return SizedBox(
-                    width: (MediaQuery.of(context).size.width / 2) - 15,
-                    child: GestureDetector(
-                      onTap: () {
-                        showModalBottomSheet(
-                          scrollControlDisabledMaxHeightRatio: 0.8,
-                          context: context,
-                          builder: (context) {
-                            return ProductDetails(
-                              productDetails: product,
-                            ); // Pass the correct product data
-                          },
-                        );
-                      },
-                      child: Product_Card(
-                        onCartPressed: () {
-                          addToCart(product);
-                        },
-                        imageUrl: product['imageUrl'],
-                        categoryName: product['categoryName'],
-                        productName: product['productName'],
-                        price: product['price'],
-                        location: product['location'] ?? '',
-                        isAvailable:
-                            product['isAvailable'] ??
-                            true, // Use actual availability from data
+          ? Shimmer.fromColors(
+              baseColor: theme.colorScheme.onSurface.withOpacity(0.1),
+              highlightColor: theme.colorScheme.onSurface.withOpacity(0.05),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 70,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      margin: const EdgeInsets.only(bottom: 10),
+                    ),
+                    Wrap(
+                      spacing: 10.0,
+                      runSpacing: 10.0,
+                      alignment: WrapAlignment.start,
+                      children: List.generate(
+                        6,
+                        (index) => SizedBox(
+                          width: (MediaQuery.of(context).size.width / 2) - 15,
+                          child: Card(
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  height: 230,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: 14,
+                                        width: double.infinity,
+                                        color: Colors.white,
+                                        margin: const EdgeInsets.only(
+                                          bottom: 5,
+                                        ),
+                                      ),
+                                      Container(
+                                        height: 12,
+                                        width: 80,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Container(
+                                        height: 16,
+                                        width: 100,
+                                        color: Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
+                  ],
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(10),
+              child: DefaultTabController(
+                length: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TabBar(
+                      isScrollable: true,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      labelColor: theme.scaffoldBackgroundColor,
+                      dividerColor: Colors.transparent,
+                      indicatorColor: theme.primaryColor,
+                      unselectedLabelColor: theme.hintColor,
+                      overlayColor: WidgetStatePropertyAll(theme.primaryColor),
+                      indicator: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        color: theme.primaryColor,
+                      ),
+                      onTap: (index) {
+                        setState(() {
+                          switch (index) {
+                            case 0:
+                              _selectedCategory = 'All';
+                              break;
+                            case 1:
+                              _selectedCategory = 'Shirts & Polos';
+                              break;
+                            case 2:
+                              _selectedCategory = 'Suits & Jackets';
+                              break;
+                            case 3:
+                              _selectedCategory = 'Trousers & Skirts';
+                              break;
+                            case 4:
+                              _selectedCategory = 'Footwear';
+                              break;
+                            case 5:
+                              _selectedCategory = 'Accessories';
+                              break;
+                            case 6:
+                              _selectedCategory = 'Hats';
+                              break;
+                            case 7:
+                              _selectedCategory = 'Shoes';
+                              break;
+                          }
+                          _applyFilter();
+                        });
+                      },
+                      tabs: const [
+                        Tab(text: 'All'),
+                        Tab(text: 'Shirts & Polos'),
+                        Tab(text: 'Suits & Jackets'),
+                        Tab(text: 'Trousers & Skirts'),
+                        Tab(text: 'Footwear'),
+                        Tab(text: 'Accessories'),
+                        Tab(text: 'Hats'),
+                        Tab(text: 'Shoes'),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 10.0,
+                      runSpacing: 10.0,
+                      alignment: WrapAlignment.start,
+                      children: _filteredProducts.map((product) {
+                        return SizedBox(
+                          width: (MediaQuery.of(context).size.width / 2) - 15,
+                          child: GestureDetector(
+                            onTap: () {
+                              showModalBottomSheet(
+                                scrollControlDisabledMaxHeightRatio: 0.8,
+                                context: context,
+                                builder: (context) {
+                                  return ProductDetails(
+                                    productDetails: product,
+                                    sellerProductId:
+                                        product['sellerProductId'] ?? '',
+                                    // --- NEW: Pass the addToCart callback with color ---
+                                    onAddToCart: (selectedColor) {
+                                      addToCartFromProductDetails(
+                                        product,
+                                        selectedColor,
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                            child: Product_Card(
+                              // --- No direct add to cart on ProductCard anymore, it's done via details ---
+                              onCartPressed: () {
+                                // This won't directly add to cart anymore without a color
+                                // You might want to remove this or make it open details
+                                showModalBottomSheet(
+                                  scrollControlDisabledMaxHeightRatio: 0.8,
+                                  context: context,
+                                  builder: (context) {
+                                    return ProductDetails(
+                                      productDetails: product,
+                                      sellerProductId:
+                                          product['sellerProductId'] ?? '',
+                                      onAddToCart: (selectedColor) {
+                                        addToCartFromProductDetails(
+                                          product,
+                                          selectedColor,
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                              },
+                              imageUrl: product['imageUrl'],
+                              categoryName: product['category'],
+                              productName: product['productName'],
+                              price: product['price'],
+                              discountPercentage: product['discountPercentage'],
+                              location: product['location'] ?? '',
+                              isAvailable: product['isAvailable'] ?? true,
+                              availableColors:
+                                  product['availableColors'] as dynamic,
+                              // No need to pass availableColors to ProductCard itself unless it displays them
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
             ),
     );

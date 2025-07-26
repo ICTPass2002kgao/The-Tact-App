@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_image_slider/carousel.dart';
-import 'package:ttact/Components/Buttons/Buttons.dart'; 
-import 'Images/Images.dart'; 
+import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'Images/Images.dart';
 
 class Introductionpage extends StatefulWidget {
   const Introductionpage({super.key});
@@ -22,15 +22,14 @@ class _IntroductionpageState extends State<Introductionpage> {
         padding: const EdgeInsets.all(20.0),
         child: Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              SizedBox(height: 30),
+              Spacer(),
               Center(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Carousel(
-                    width: double.infinity,
-                    height: 500,
-                    animationPageCurve: Curves.fastOutSlowIn,
+                    animationPageCurve: Curves.easeInOut,
                     autoScroll: true,
                     autoScrollDuration: Duration(seconds: 5),
                     indicatorBarColor: Colors.transparent,
@@ -46,15 +45,17 @@ class _IntroductionpageState extends State<Introductionpage> {
                 ),
               ),
               SizedBox(height: 20),
-              Buttons(
-                function: () {
-                
-              Navigator.pushNamed(context, '/login');
+              Spacer(),
+              CustomOutlinedButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/login');
                 },
-                buttonText: 'Get started',
-                backgroundcolor: color.primaryColor,
-                foregroundcolor: color.scaffoldBackgroundColor,
+                text: 'Get started',
+                backgroundColor: color.primaryColor,
+                foregroundColor: color.scaffoldBackgroundColor,
+                width: double.infinity,
               ),
+              Spacer(flex: 2),
             ],
           ),
         ),

@@ -159,9 +159,9 @@ class _OrdersPageState extends State<OrdersPage> {
         foregroundColor: colorScheme.scaffoldBackgroundColor,
         centerTitle: true,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: FutureBuilder<QuerySnapshot>(
         // Listen to orders for the current user, ordered by creation time
-        stream: FirebaseFirestore.instance
+        future: FirebaseFirestore.instance
             .collection('orders')
             .where(
               'userId',
@@ -169,7 +169,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   '${_currentUser!.uid}', // Adjust this to your user ID logic
             ) // Adjust this to your sellerId logic
             .orderBy('createdAt', descending: true)
-            .snapshots(),
+            .get(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

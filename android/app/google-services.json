@@ -12,7 +12,20 @@
           "package_name": "com.example.ttact"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "219784074240-23o21l36dlqig3s0klonbdskf24o2sck.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ttact",
+            "certificate_hash": "16321dc3f35f39106216d5336cec8b1fa4f39e96"
+          }
+        },
+        {
+          "client_id": "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "219784074240-541mlg2sfbt70rltaijrrs70c8kt8h32.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ttact"
+              }
+            }
+          ]
         }
       }
     }

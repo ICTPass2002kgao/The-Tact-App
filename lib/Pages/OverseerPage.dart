@@ -5,6 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:ionicons/ionicons.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:pdf/pdf.dart'; // Import for PDF generation
@@ -24,11 +25,7 @@ class _OverseerPageState extends State<OverseerPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Variable to hold logo image bytes for PDF generation
   Uint8List? _logoBytes;
-
-  // Add this variable to hold filtered members for search functionality
-  Map<String, dynamic> _filteredMembers = {};
 
   @override
   void initState() {
@@ -37,26 +34,36 @@ class _OverseerPageState extends State<OverseerPage>
     _loadLogoBytes();
   }
 
-  // Load logo image bytes from assets
   Future<void> _loadLogoBytes() async {
     try {
-      final ByteData bytes = await rootBundle.load(
-        'assets/tact_logo.PNG',
-      ); // Update path as needed
+      final ByteData bytes = await rootBundle.load('assets/tact_logo.PNG');
       setState(() {
         _logoBytes = bytes.buffer.asUint8List();
       });
     } catch (e) {
-      // If logo not found or error, just leave _logoBytes as null
       _logoBytes = null;
     }
   }
+
+  List<DocumentSnapshot> _allMembers = [];
+  TextEditingController _searchController = TextEditingController();
 
   final TextEditingController memberNameController = TextEditingController();
   final TextEditingController memberEmailController = TextEditingController();
   final TextEditingController memberAddressController = TextEditingController();
   final TextEditingController memberContactController = TextEditingController();
   final TextEditingController memberSurnameController = TextEditingController();
+  final TextEditingController week1Controller = TextEditingController();
+  final TextEditingController week2Controller = TextEditingController();
+  final TextEditingController week3Controller = TextEditingController();
+  final TextEditingController week4Controller = TextEditingController();
+  double week1 = 0.0;
+  double week2 = 0.0;
+  double week3 = 0.0;
+  double week4 = 0.0;
+  String? selectedDistrictElder;
+  String? selectedCommunityElder;
+  String? selectedCommunityName;
 
   @override
   Widget build(BuildContext context) {
@@ -148,283 +155,165 @@ class _OverseerPageState extends State<OverseerPage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 20),
-                        Container(
-                          height: 300,
-                          padding: const EdgeInsets.all(16.0),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.2),
-                                spreadRadius: 2,
-                                blurRadius: 5,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: BarChart(
-                            BarChartData(
-                              alignment: BarChartAlignment.spaceAround,
-                              maxY: 5000,
-                              barGroups: [
-                                BarChartGroupData(
-                                  x: 0,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: 3000,
-                                      color: color.primaryColor,
+                        SizedBox(height: 10),
+                        FutureBuilder(
+                          future: FirebaseFirestore.instance
+                              .collection('users')
+                              .where(
+                                'overseerUid',
+                                isEqualTo:
+                                    FirebaseAuth.instance.currentUser?.uid,
+                              )
+                              .get(),
+                          builder: (context, asyncSnapshot) {
+                            if (asyncSnapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return Center(child: CircularProgressIndicator());
+                            }
+                            if (asyncSnapshot.hasError) {
+                              return Center(
+                                child: Text('Error: ${asyncSnapshot.error}'),
+                              );
+                            }
+                            if (!asyncSnapshot.hasData ||
+                                asyncSnapshot.data!.docs.isEmpty) {
+                              return Center(child: Text('No members found.'));
+                            }
+                            var totalMembers = asyncSnapshot.data!.docs.length;
+                            var data = asyncSnapshot.data!.docs;
+                            return Column(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: color.primaryColor.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(18.0),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                'Total Overseer Members:',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 23,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: color
+                                                      .scaffoldBackgroundColor,
+                                                ),
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.person,
+                                              color:
+                                                  color.scaffoldBackgroundColor,
+                                              size: 60,
+                                            ),
+                                          ],
+                                        ),
+                                        Center(
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                '$totalMembers',
+                                                style: TextStyle(
+                                                  fontSize: 50,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: color
+                                                      .scaffoldBackgroundColor,
+                                                ),
+                                              ),
+                                              SizedBox(width: 20),
+                                              Icon(
+                                                Icons.group,
+                                                color: color
+                                                    .scaffoldBackgroundColor,
+                                                size: 60,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
-                                BarChartGroupData(
-                                  x: 1,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: 4500,
-                                      color: color.primaryColor,
+                                SizedBox(height: 15),
+                                Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: color.primaryColor.withBlue(130),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(18.0),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                'Total Overseer Districts:',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 23,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: color
+                                                      .scaffoldBackgroundColor,
+                                                ),
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.person,
+                                              color:
+                                                  color.scaffoldBackgroundColor,
+                                              size: 60,
+                                            ),
+                                          ],
+                                        ),
+                                        Center(
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              for (var info in data)
+                                                Text(
+                                                  '${info.data()['districts'] ?? ''}',
+                                                  style: TextStyle(
+                                                    fontSize: 50,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: color
+                                                        .scaffoldBackgroundColor,
+                                                  ),
+                                                ),
+                                              SizedBox(width: 20),
+                                              Icon(
+                                                Icons.group,
+                                                color: color
+                                                    .scaffoldBackgroundColor,
+                                                size: 60,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                BarChartGroupData(
-                                  x: 2,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: 2500,
-                                      color: color.primaryColor,
-                                    ),
-                                  ],
-                                ),
-                                BarChartGroupData(
-                                  x: 3,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: 3800,
-                                      color: color.primaryColor,
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ],
-                              titlesData: FlTitlesData(
-                                show: true,
-                                bottomTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      const style = TextStyle(
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      );
-                                      Widget text;
-                                      switch (value.toInt()) {
-                                        case 0:
-                                          text = const Text(
-                                            'Week 1',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 1:
-                                          text = const Text(
-                                            'Week 2',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 2:
-                                          text = const Text(
-                                            'Week 3',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 3:
-                                          text = const Text(
-                                            'Week 4',
-                                            style: style,
-                                          );
-                                          break;
-                                        default:
-                                          text = const Text('', style: style);
-                                          break;
-                                      }
-                                      return SideTitleWidget(
-                                        space: 4,
-                                        meta: meta,
-                                        child: text,
-                                      );
-                                    },
-                                  ),
-                                ),
-                                leftTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      return Text(
-                                        '${value.toInt()}',
-                                        style: const TextStyle(fontSize: 12),
-                                      );
-                                    },
-                                    interval: 1000,
-                                  ),
-                                ),
-                                topTitles: const AxisTitles(
-                                  sideTitles: SideTitles(showTitles: false),
-                                ),
-                                rightTitles: const AxisTitles(
-                                  sideTitles: SideTitles(showTitles: false),
-                                ),
-                              ),
-                              gridData: FlGridData(
-                                show: true,
-                                drawVerticalLine: false,
-                                drawHorizontalLine: true,
-                                getDrawingHorizontalLine: (value) =>
-                                    const FlLine(
-                                      color: Colors.grey,
-                                      strokeWidth: 0.5,
-                                    ),
-                              ),
-                              borderData: FlBorderData(
-                                show: true,
-                                border: Border.all(
-                                  color: Colors.black,
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 30),
-                        Text(
-                          'Member Growth',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        Container(
-                          height: 300,
-                          padding: const EdgeInsets.all(16.0),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.2),
-                                spreadRadius: 2,
-                                blurRadius: 5,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: LineChart(
-                            LineChartData(
-                              gridData: FlGridData(show: false),
-                              titlesData: FlTitlesData(
-                                show: true,
-                                bottomTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      const style = TextStyle(
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      );
-                                      Widget text;
-                                      switch (value.toInt()) {
-                                        case 0:
-                                          text = const Text(
-                                            'Jan',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 1:
-                                          text = const Text(
-                                            'Feb',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 2:
-                                          text = const Text(
-                                            'Mar',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 3:
-                                          text = const Text(
-                                            'Apr',
-                                            style: style,
-                                          );
-                                          break;
-                                        case 4:
-                                          text = const Text(
-                                            'May',
-                                            style: style,
-                                          );
-                                          break;
-                                        default:
-                                          text = const Text('', style: style);
-                                          break;
-                                      }
-                                      return SideTitleWidget(
-                                        space: 4,
-                                        meta: meta,
-                                        child: text,
-                                      );
-                                    },
-                                  ),
-                                ),
-                                leftTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      return Text(
-                                        '${value.toInt()}',
-                                        style: const TextStyle(fontSize: 12),
-                                      );
-                                    },
-                                    interval: 5,
-                                  ),
-                                ),
-                                topTitles: const AxisTitles(
-                                  sideTitles: SideTitles(showTitles: false),
-                                ),
-                                rightTitles: const AxisTitles(
-                                  sideTitles: SideTitles(showTitles: false),
-                                ),
-                              ),
-                              borderData: FlBorderData(
-                                show: true,
-                                border: Border.all(
-                                  color: Colors.black,
-                                  width: 1,
-                                ),
-                              ),
-                              minX: 0,
-                              maxX: 4,
-                              minY: 0,
-                              maxY: 50,
-                              lineBarsData: [
-                                LineChartBarData(
-                                  spots: const [
-                                    FlSpot(0, 10),
-                                    FlSpot(1, 15),
-                                    FlSpot(2, 25),
-                                    FlSpot(3, 30),
-                                    FlSpot(4, 45),
-                                  ],
-                                  isCurved: true,
-                                  color: color.splashColor,
-                                  barWidth: 3,
-                                  isStrokeCapRound: true,
-                                  dotData: const FlDotData(show: true),
-                                  belowBarData: BarAreaData(show: false),
-                                ),
-                              ],
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -514,8 +403,15 @@ class _OverseerPageState extends State<OverseerPage>
                               'Contact Number': memberContactController.text,
                               'overseerUid':
                                   FirebaseAuth.instance.currentUser?.uid,
-                              'profileUrl': '',
                               'role': 'Member',
+                              'week1': 0.00,
+                              'week2': 0.00,
+                              'week3': 0.00,
+                              'week4': 0.00,
+                              // "province": selectedProvince,
+                              // "districtElderName": selectedDistrictElder,
+                              // "communityElderName": selectedCommunityElder,
+                              // "communityName": selectedCommunityName,
                             });
                             Api().showMessage(
                               context,
@@ -548,14 +444,14 @@ class _OverseerPageState extends State<OverseerPage>
                 ),
 
                 // All Members Tab
-                StreamBuilder(
-                  stream: FirebaseFirestore.instance
+                FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
                       .collection('users')
                       .where(
                         'overseerUid',
                         isEqualTo: FirebaseAuth.instance.currentUser?.uid,
                       )
-                      .snapshots(),
+                      .get(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
@@ -564,116 +460,185 @@ class _OverseerPageState extends State<OverseerPage>
                       return Center(child: Text('No members found.'));
                     }
                     final members = snapshot.data!.docs;
-                    return ListView.builder(
-                      itemCount: members.length,
-                      itemBuilder: (context, index) {
-                        final member = members[index];
-                        return Padding(
+                    return Column(
+                      children: [
+                        Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              CupertinoTextField(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  border: Border.all(color: color.primaryColor),
-                                ),
-                                placeholder: 'Search Members',
-                                onChanged: (value) {
-                                  //Please implement search functionality
-                                  // This is a placeholder for search functionality
-                                  // Implement search functionality
-                                  final query = value.toLowerCase();
-                                  final filteredMembers = members.where((
-                                    member,
-                                  ) {
-                                    return member['name']
-                                                .toLowerCase()
-                                                .contains(query) ||
-                                            member['surname']
-                                                ?.toLowerCase()
-                                                .contains(query) ??
-                                        false;
-                                  }).toList();
-                                  setState(() {
-                                    _filteredMembers = filteredMembers
-                                        .asMap()
-                                        .map(
-                                          (i, member) => MapEntry(
-                                            i.toString(),
-                                            member.data(),
-                                          ),
-                                        );
-                                  });
-                                },
-                              ),
-                              Card(
-                                color: color.scaffoldBackgroundColor
-                                    .withOpacity(0.7),
-                                elevation: 5,
-                                margin: EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                child: ListTile(
-                                  leading: Icon(
-                                    Icons.person,
-                                    color: color.primaryColor,
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${member['name']} ${member['surname'] ?? ''}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: color.primaryColor,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${member['email'] ?? 'N/A'}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${member['Address'] ?? 'N/A'}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${member['Contact Number'] ?? 'N/A'}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: IconButton(
-                                    icon: Icon(Icons.edit, color: Colors.blue),
-                                    onPressed: () {
-                                      Api().showMessage(
-                                        context,
-                                        'Edit functionality coming soon!',
-                                        'Info',
-                                        Colors.blue,
-                                      );
-                                    },
-                                  ),
-                                  onTap: () {
-                                    Api().showMessage(
-                                      context,
-                                      'Tapped on ${member['name']}',
-                                      'Info',
-                                      color.primaryColor,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
+                          child: CupertinoTextField(
+                            controller:
+                                _searchController, // Assign the controller
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10.0),
+                              border: Border.all(color: color.primaryColor),
+                            ),
+                            placeholder: 'Search Members',
+                            // onChanged is now handled by the listener on _searchController
                           ),
-                        );
-                      },
+                        ),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: members.length,
+                            itemBuilder: (context, index) {
+                              final member = members[index];
+                              return Column(
+                                children: [
+                                  Card(
+                                    color: color.scaffoldBackgroundColor
+                                        .withOpacity(0.7),
+                                    elevation: 5,
+                                    margin: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.person,
+                                        color: color.primaryColor,
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${member['name']} ${member['surname'] ?? ''}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color.primaryColor,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            '${member['email'] ?? 'N/A'}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            '${member['Address'] ?? 'N/A'}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            '${member['Contact Number'] ?? 'N/A'}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: IconButton(
+                                        icon: Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                        ),
+                                        onPressed: () async {
+                                          showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: Text('Edit Member'),
+                                              content: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  CupertinoTextField(
+                                                    controller: week1Controller,
+                                                    placeholder: 'Week 1',
+                                                  ),
+                                                  SizedBox(height: 10),
+                                                  CupertinoTextField(
+                                                    controller: week2Controller,
+                                                    placeholder: 'Week 2',
+                                                  ),
+                                                  SizedBox(height: 10),
+                                                  CupertinoTextField(
+                                                    controller: week3Controller,
+                                                    placeholder: 'Week 3',
+                                                  ),
+                                                  SizedBox(height: 10),
+                                                  CupertinoTextField(
+                                                    controller: week4Controller,
+                                                    placeholder: 'Week 4',
+                                                  ),
+                                                ],
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Text('Cancel'),
+                                                ),
+                                                SizedBox(height: 10),
+
+                                                TextButton(
+                                                  onPressed: () async {
+                                                    Api().showLoading(context);
+                                                    week1 =
+                                                        double.tryParse(
+                                                          week1Controller.text,
+                                                        ) ??
+                                                        0.0;
+                                                    week2 =
+                                                        double.tryParse(
+                                                          week2Controller.text,
+                                                        ) ??
+                                                        0.0;
+                                                    week3 =
+                                                        double.tryParse(
+                                                          week3Controller.text,
+                                                        ) ??
+                                                        0.0;
+                                                    week4 =
+                                                        double.tryParse(
+                                                          week4Controller.text,
+                                                        ) ??
+                                                        0.0;
+
+                                                    await FirebaseFirestore
+                                                        .instance
+                                                        .collection('users')
+                                                        .doc(member.id)
+                                                        .update({
+                                                          'week1': week1,
+                                                          'week2': week2,
+                                                          'week3': week3,
+                                                          'week4': week4,
+                                                        });
+                                                    Navigator.pop(context);
+                                                    Navigator.pop(context);
+
+                                                    week1Controller.clear();
+                                                    week2Controller.clear();
+                                                    week3Controller.clear();
+                                                    week4Controller.clear();
+                                                    Api().showMessage(
+                                                      context,
+                                                      'Member updated successfully',
+                                                      'Success',
+                                                      color.splashColor,
+                                                    );
+                                                  },
+                                                  child: Text('Save'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      onTap: () {
+                                        Api().showMessage(
+                                          context,
+                                          'Tapped on ${member['name']}',
+                                          'Info',
+                                          color.primaryColor,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -681,10 +646,10 @@ class _OverseerPageState extends State<OverseerPage>
                 // Reports Tab
                 SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
-                  child: StreamBuilder(
-                    stream: FirebaseFirestore.instance
+                  child: FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance
                         .collection('overseers')
-                        .snapshots(),
+                        .get(),
                     builder: (context, asyncSnapshot) {
                       var overseerData = asyncSnapshot.data?.docs ?? [];
                       if (asyncSnapshot.connectionState ==
@@ -694,214 +659,331 @@ class _OverseerPageState extends State<OverseerPage>
                       if (overseerData.isEmpty) {
                         return Center(child: Text('No overseers found.'));
                       }
-                      var overseer = overseerData.first.data();
-                      String overseerName = overseer['name'] ?? 'N/A';
-                      String codeNo = overseer['codeNo'] ?? 'N/A';
-                      String districtElder = overseer['districtElder'] ?? 'N/A';
-                      String communityElder =
-                          overseer['communityElder'] ?? 'N/A';
-                      String communityName = overseer['communityName'] ?? 'N/A';
-                      String region = overseer['region'] ?? 'N/A';
-                      String province = overseer['province'] ?? 'N/A';
-                      String overseerSurname = overseer['surname'] ?? 'N/A';
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Income and Expenditure Statement',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            'For the Month: ${DateTime.now().month} Year: ${DateTime.now().year}',
-                          ),
-                          Text(
-                            'Overseer: ${overseerName} ${overseerSurname} Code No: ${codeNo}',
-                          ),
-                          Text('District Elder: ${districtElder}'),
-                          Text('Community Elder: ${communityElder}'),
-                          Text('Community Name: ${communityName}'),
-                          Text('Province: ${province} Region: ${region}'),
-                          SizedBox(height: 20),
-                          Divider(),
-                          Text(
-                            'Income / Receipts',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          _buildReportRow('Tithe Offerings - Week 1', 'R', 'c'),
-                          _buildReportRow('Tithe Offerings - Week 2', 'R', 'c'),
-                          _buildReportRow('Tithe Offerings - Week 3', 'R', 'c'),
-                          _buildReportRow('Tithe Offerings - Week 4', 'R', 'c'),
-                          _buildReportRow('Others', 'R', 'c'),
-                          _buildReportRow('Month End', 'R', 'c'),
-                          SizedBox(height: 10),
-                          _buildReportRow(
-                            'Total Income',
-                            'R',
-                            'c',
-                            isTotal: true,
-                          ),
-                          SizedBox(height: 20),
-                          Divider(),
-                          Text(
-                            'Expenditure',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          _buildReportRow('Rent Period', 'R', 'c'),
-                          _buildReportRow('Wine and Priest Wafers', 'R', 'c'),
-                          _buildReportRow('Power and Lights', 'R', 'c'),
-                          _buildReportRow('Sundries/Repairs', 'R', 'c'),
-                          _buildReportRow('Central Council', 'R', 'c'),
-                          _buildReportRow('Equipment / General', 'R', 'c'),
-                          SizedBox(height: 10),
-                          _buildReportRow(
-                            'Total Expenditure',
-                            'R',
-                            'c',
-                            isTotal: true,
-                          ),
-                          SizedBox(height: 20),
-                          Divider(),
-                          _buildReportRow(
-                            'Credit Balance (Amount Banked)',
-                            'R',
-                            'c',
-                            isTotal: true,
-                            isCreditBalance: true,
-                          ),
-                          SizedBox(height: 20),
-                          Text('Bank Name: Standard Bank'),
-                          Text('Account Name: The TACT'),
-                          Text('Account No: 051074958'),
-                          Text('Branch Name: Kingsmead'),
-                          Text('Branch Code: 040026'),
-                          SizedBox(height: 20),
-                          Text(
-                            'Please write your name and the name of your Community in the Deposit Slip Senders Details Column.',
-                          ),
-                          SizedBox(height: 30),
-                          Text(
-                            'Balance Sheet',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Text('For the Month of: __________ Year: __________'),
-                          Text('Overseer: __________'),
-                          Text('District Elder: __________'),
-                          Text('Community Elder: __________'),
-                          Text('Community Name: __________'),
-                          SizedBox(height: 20),
-                          Text(
-                            'Members Tithe Offerings',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          StreamBuilder(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .where(
-                                  'overseerUid',
-                                  isEqualTo:
-                                      FirebaseAuth.instance.currentUser?.uid,
-                                )
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return CircularProgressIndicator();
+                      var overseer =
+                          overseerData.first.data() as Map<String, dynamic>?;
+                      String province = overseer?['province'] ?? 'N/A';
+                      return Center(
+                        child: GestureDetector(
+                          onTap: () async {
+                            FirebaseFirestore firestore =
+                                FirebaseFirestore.instance;
+                            QuerySnapshot<Map<String, dynamic>> snapshot =
+                                await firestore
+                                    .collection('overseers')
+                                    .where(
+                                      'uid',
+                                      isEqualTo: FirebaseAuth
+                                          .instance
+                                          .currentUser
+                                          ?.uid,
+                                    )
+                                    .get();
+
+                            var overseerData = snapshot.docs.isNotEmpty
+                                ? snapshot.docs.first.data()
+                                : null;
+                            String overseerName =
+                                overseerData?['name'] ?? 'N/A';
+                            String overseerSurname =
+                                overseerData?['surname'] ?? 'N/A';
+
+                            // Assuming these are declared in your State class
+                            String? selectedProvince = province;
+
+                            // You'll also need a way to store the currently selected district object
+                            // so you can filter communities based on it.
+                            Map<String, dynamic>? selectedDistrict;
+
+                            // Function to get distinct district elder names
+                            List<String> getDistrictElderNames(
+                              Map<String, dynamic>? data,
+                            ) {
+                              if (data == null ||
+                                  !data.containsKey('districts') ||
+                                  data['districts'] == null) {
+                                return [];
                               }
-                              if (snapshot.hasError) {
-                                return Text('Error: ${snapshot.error}');
-                              }
-                              if (!snapshot.hasData ||
-                                  snapshot.data!.docs.isEmpty) {
-                                return Text('No data available');
-                              }
-                              var members = snapshot.data!.docs
-                                  .map((doc) => doc.data())
+                              return (data['districts'] as List<dynamic>)
+                                  .map(
+                                    (district) =>
+                                        district['districtElderName']
+                                            as String?,
+                                  )
+                                  .where((name) => name != null)
+                                  .cast<String>()
+                                  .toSet() // Use a Set to get unique names
                                   .toList();
-                              return Column(
-                                children: [
-                                  _buildBalanceSheetHeader(),
-                                  ...members.map((member) {
-                                    return _buildBalanceSheetRow(
-                                      '${member['name'] ?? 'N/A'} ${member['surname'] ?? ''}',
-                                      'R',
-                                      'c',
-                                      'R',
-                                      'c',
-                                      'R',
-                                      'c',
-                                      'R',
-                                      'c',
-                                      'R',
-                                      'c',
-                                    );
-                                  }).toList(),
-                                ],
-                              );
-                            },
-                          ),
-                          SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'GRAND TOTAL: R _________ c _________',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            }
+
+                            // Function to get community elder names for a given district
+                            List<String> getCommunityElderNamesForDistrict(
+                              Map<String, dynamic>? district,
+                            ) {
+                              if (district == null ||
+                                  !district.containsKey('communities') ||
+                                  district['communities'] == null) {
+                                return [];
+                              }
+                              return (district['communities'] as List<dynamic>)
+                                  .map(
+                                    (community) =>
+                                        community['communityElderName']
+                                            as String?,
+                                  )
+                                  .where((name) => name != null)
+                                  .cast<String>()
+                                  .toSet() // Use a Set to get unique names
+                                  .toList();
+                            }
+
+                            // Function to get community names for a given district
+                            List<String> getCommunityNamesForDistrict(
+                              Map<String, dynamic>? district,
+                            ) {
+                              if (district == null ||
+                                  !district.containsKey('communities') ||
+                                  district['communities'] == null) {
+                                return [];
+                              }
+                              return (district['communities'] as List<dynamic>)
+                                  .map(
+                                    (community) =>
+                                        community['communityName'] as String?,
+                                  )
+                                  .where((name) => name != null)
+                                  .cast<String>()
+                                  .toSet() // Use a Set to get unique names
+                                  .toList();
+                            }
+
+                            // Your showBottomSheet function
+                            showModalBottomSheet(
+                              showDragHandle: true,
+                              sheetAnimationStyle: AnimationStyle(
+                                duration: Duration(milliseconds: 300),
+                                reverseDuration: Duration(milliseconds: 300),
                               ),
+                              context: context,
+                              builder: (context) {
+                                return StatefulBuilder(
+                                  builder: (context, setState) {
+                                    // Prepare lists for dropdowns
+                                    final List<String> districtElderNames =
+                                        getDistrictElderNames(overseerData);
+                                    final List<String> communityElderNames =
+                                        getCommunityElderNamesForDistrict(
+                                          selectedDistrict,
+                                        );
+                                    final List<String> communityNames =
+                                        getCommunityNamesForDistrict(
+                                          selectedDistrict,
+                                        );
+
+                                    return Center(
+                                      child: Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.all(
+                                          16.0,
+                                        ), // This creates the horizontal margin, making it "fuller" within the screen
+                                        decoration: BoxDecoration(
+                                          color: color
+                                              .scaffoldBackgroundColor, // Background color of the sheet
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ), // Rounded corners
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(
+                                                0.1,
+                                              ),
+                                              blurRadius: 10,
+                                              spreadRadius: 5,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                            children: [
+                                              DropdownButton<String>(
+                                                value: selectedDistrictElder,
+                                                hint: Text(
+                                                  'Choose a District Elder',
+                                                ),
+                                                items: districtElderNames
+                                                    .map(
+                                                      (e) => DropdownMenuItem(
+                                                        value: e,
+                                                        child: Text(e),
+                                                      ),
+                                                    )
+                                                    .toList(),
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    selectedDistrictElder =
+                                                        value;
+                                                    // When a district elder is selected, find the corresponding district
+                                                    // and update the selectedDistrict. This allows filtering communities.
+                                                    selectedDistrict =
+                                                        (overseerData?['districts']
+                                                                    as List<
+                                                                      dynamic
+                                                                    >?)
+                                                                ?.firstWhere(
+                                                                  (district) =>
+                                                                      district['districtElderName'] ==
+                                                                      value,
+                                                                  orElse: () =>
+                                                                      null,
+                                                                )
+                                                            as Map<
+                                                              String,
+                                                              dynamic
+                                                            >?;
+
+                                                    // Reset community selections if district changes
+                                                    selectedCommunityElder =
+                                                        null;
+                                                    selectedCommunityName =
+                                                        null;
+                                                  });
+                                                },
+                                              ),
+                                              if (selectedDistrictElder !=
+                                                  null) ...[
+                                                DropdownButton<String>(
+                                                  value: selectedCommunityElder,
+                                                  hint: Text(
+                                                    'Choose a Community Elder',
+                                                  ),
+                                                  items: communityElderNames
+                                                      .map(
+                                                        (e) => DropdownMenuItem(
+                                                          value: e,
+                                                          child: Text(e),
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                                  onChanged: (value) {
+                                                    setState(() {
+                                                      selectedCommunityElder =
+                                                          value;
+                                                    });
+                                                  },
+                                                ),
+                                                DropdownButton<String>(
+                                                  value: selectedCommunityName,
+                                                  hint: Text(
+                                                    'Choose a Community Name',
+                                                  ),
+                                                  items: communityNames
+                                                      .map(
+                                                        (e) => DropdownMenuItem(
+                                                          value: e,
+                                                          child: Text(e),
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                                  onChanged: (value) {
+                                                    setState(() {
+                                                      selectedCommunityName =
+                                                          value;
+                                                    });
+                                                  },
+                                                ),
+                                              ],
+                                              SizedBox(height: 20),
+                                              CustomOutlinedButton(
+                                                onPressed: () async {
+                                                  // Add validation here if needed to ensure all are selected
+                                                  if (selectedDistrictElder !=
+                                                          null &&
+                                                      selectedCommunityElder !=
+                                                          null &&
+                                                      selectedCommunityName !=
+                                                          null) {
+                                                    Navigator.pop(context);
+                                                    await _generatePdfAndDownload(
+                                                      selectedDistrictElder!,
+                                                      selectedCommunityElder!,
+                                                      selectedCommunityName!,
+                                                      selectedProvince,
+                                                      overseerName,
+                                                      overseerSurname,
+                                                      overseerData!,
+                                                    );
+                                                  } else {
+                                                    // Show a snackbar or alert to inform the user to select all fields
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Please select all fields.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                                text:
+                                                    'Generate Balance sheet (PDF)',
+                                                backgroundColor: color
+                                                    .scaffoldBackgroundColor,
+                                                foregroundColor:
+                                                    color.primaryColor,
+                                                width: double.infinity,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            );
+                          },
+
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 200,
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(width: 2),
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20.0),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Center(
+                                          child: Icon(
+                                            Icons.file_download_outlined,
+                                            size: 50,
+                                          ),
+                                        ),
+                                        SizedBox(height: 20),
+                                        Center(
+                                          child: Text(
+                                            'Download Balance Sheet a PDF',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          SizedBox(height: 30),
-                          Text(
-                            'NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details',
-                            style: TextStyle(fontStyle: FontStyle.italic),
-                          ),
-                          SizedBox(height: 20),
-                          Text(
-                            'Signatures:',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          _buildSignatureRow('Overseer'),
-                          _buildSignatureRow('Community Elder'),
-                          _buildSignatureRow('Secretary'),
-                          _buildSignatureRow('District Elder'),
-                          _buildSignatureRow('Treasurer'),
-                          _buildSignatureRow('Contact Person'),
-                          SizedBox(height: 20),
-                          Text('Telephone No: __________'),
-                          Text('Email Address: __________'),
-                          SizedBox(height: 30),
-                          CustomOutlinedButton(
-                            onPressed: () => _generatePdfAndDownload(),
-                            text: 'Download Report as PDF',
-                            backgroundColor: color.primaryColor,
-                            foregroundColor: Colors.white,
-                            width: double.infinity,
-                          ),
-                        ],
+                        ),
                       );
                     },
                   ),
@@ -914,215 +996,28 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-  // --- Helper methods (unchanged from previous response) ---
-  Widget _buildReportRow(
-    String label,
-    String rText,
-    String cText, {
-    bool isTotal = false,
-    bool isCreditBalance = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: isTotal || isCreditBalance
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '$rText _______',
-                style: TextStyle(
-                  fontWeight: isTotal || isCreditBalance
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '$cText _______',
-                style: TextStyle(
-                  fontWeight: isTotal || isCreditBalance
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBalanceSheetHeader() {
-    return Table(
-      border: TableBorder.all(color: Colors.grey),
-      children: [
-        TableRow(
-          decoration: BoxDecoration(color: Colors.grey[200]),
-          children: [
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Members Name and Surname',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'WEEK 1',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'WEEK 2',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'WEEK 3',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'WEEK 4',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'MONTHLY',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBalanceSheetRow(
-    String name,
-    String week1R,
-    String week1C,
-    String week2R,
-    String week2C,
-    String week3R,
-    String week3C,
-    String week4R,
-    String week4C,
-    String monthlyR,
-    String monthlyC,
-  ) {
-    return Table(
-      border: TableBorder.all(color: Colors.grey),
-      children: [
-        TableRow(
-          children: [
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(name),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('$week1R.$week1C'),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('$week2R.$week2C'),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('$week3R.$week3C'),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('$week4R.$week4C'),
-              ),
-            ),
-            TableCell(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('$monthlyR.$monthlyC'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSignatureRow(String role) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          Expanded(flex: 2, child: Text('$role:')),
-          Expanded(flex: 3, child: Text('_________________________')),
-          SizedBox(width: 10),
-          Expanded(flex: 1, child: Text('Signature:')),
-          Expanded(flex: 3, child: Text('_________________________')),
-        ],
-      ),
-    );
-  }
-
   // --- PDF Generation Logic ---
-  Future<void> _generatePdfAndDownload() async {
-    final pdf = pw.Document();
-
+  Future<void> _generatePdfAndDownload(
+    String selectedDistrictElder,
+    String selectedCommunityElder,
+    String selectedCommunityName,
+    String selectedProvince,
+    String overseerName,
+    String overseerSurname,
+    Map<String, dynamic> overseerData,
+  ) async {
     // Await the balance sheet table widget before building the PDF
-    final balanceSheetTable = await _buildPdfBalanceSheetTable();
-
+    final balanceSheetTable = await _buildPdfBalanceSheetTable(
+      context,
+      selectedDistrictElder,
+      selectedCommunityName,
+      selectedCommunityElder,
+    );
+    final pdf = pw.Document();
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+
         build: (pw.Context context) {
           return [
             if (_logoBytes != null)
@@ -1169,11 +1064,21 @@ class _OverseerPageState extends State<OverseerPage>
               'Year:',
               '${DateTime.now().year}',
             ),
-            _buildPdfTextRow('Overseer:', '', 'Code No:', '__________'),
-            _buildPdfTextRow('District Elder:', '__________'),
-            _buildPdfTextRow('Community Elder:', '__________'),
-            _buildPdfTextRow('Community Name:', '__________'),
-            _buildPdfTextRow('Province: Gauteng', '', 'Region:', '__________'),
+            _buildPdfTextRow(
+              'Overseer:',
+              '$overseerName $overseerSurname',
+              'Code No:',
+              '________',
+            ),
+            _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
+            _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+            _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
+            _buildPdfTextRow(
+              'Province: ${overseerData?['province']}',
+              '',
+              'Region:',
+              '__________',
+            ),
             pw.SizedBox(height: 20),
             pw.Divider(),
             pw.Text(
@@ -1231,14 +1136,14 @@ class _OverseerPageState extends State<OverseerPage>
             pw.SizedBox(height: 10),
             _buildPdfTextRow(
               'For the Month of:',
-              '__________',
+              '${DateTime.now().month}',
               'Year:',
-              '__________',
+              '${DateTime.now().year}',
             ),
-            _buildPdfTextRow('Overseer:', '__________'),
-            _buildPdfTextRow('District Elder:', '__________'),
-            _buildPdfTextRow('Community Elder:', '__________'),
-            _buildPdfTextRow('Community Name:', '__________'),
+            _buildPdfTextRow('Overseer:', '$overseerName $overseerSurname'),
+            _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
+            _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+            _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
             pw.SizedBox(height: 20),
             pw.Text(
               'Members Tithe Offerings',
@@ -1248,16 +1153,7 @@ class _OverseerPageState extends State<OverseerPage>
             // Insert the awaited balance sheet table here
             balanceSheetTable,
             pw.SizedBox(height: 10),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                'GRAND TOTAL: R _________ c _________',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            ),
+
             pw.SizedBox(height: 30),
             pw.Text(
               'NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details',
@@ -1269,12 +1165,15 @@ class _OverseerPageState extends State<OverseerPage>
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
-            _buildPdfSignatureRow('Overseer'),
-            _buildPdfSignatureRow('Community Elder'),
-            _buildPdfSignatureRow('Secretary'),
-            _buildPdfSignatureRow('District Elder'),
-            _buildPdfSignatureRow('Treasurer'),
-            _buildPdfSignatureRow('Contact Person'),
+            _buildPdfSignatureRow(
+              'Overseer',
+              overseerName + ' ' + overseerSurname,
+            ),
+            _buildPdfSignatureRow('Community Elder', selectedCommunityElder),
+            _buildPdfSignatureRow('Secretary', '_____________'),
+            _buildPdfSignatureRow('District Elder', selectedDistrictElder),
+            _buildPdfSignatureRow('Treasurer', '_____________'),
+            _buildPdfSignatureRow('Contact Person', '_____________'),
             pw.SizedBox(height: 20),
             pw.Text('Telephone No: __________'),
             pw.Text('Email Address: __________'),
@@ -1376,66 +1275,115 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   // Helper for PDF Balance Sheet Table
-  Future<pw.Widget> _buildPdfBalanceSheetTable() async {
+  Future<pw.Widget> _buildPdfBalanceSheetTable(
+    BuildContext context, // Pass context to the function
+    String selectedDistrictElder,
+    String selectedCommunityName,
+    String selectedCommunityElder,
+  ) async {
     FirebaseFirestore firestore = FirebaseFirestore.instance;
-    var overseerData = await firestore
+
+    var memberLatestData = await firestore
         .collection('users')
+        .where('districtElderName', isEqualTo: selectedDistrictElder)
+        .where('communityName', isEqualTo: selectedCommunityName)
+        .where('communityElderName', isEqualTo: selectedCommunityElder)
         .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
         .get();
-    if (overseerData.docs.isEmpty) {
+
+    if (memberLatestData.docs.isEmpty) {
       Api().showMessage(
         context,
-        'No overseer data found for the current user.',
+        'No overseer data found for the current user, district, community, and community elder.',
         'Error',
         Theme.of(context).primaryColorDark,
       );
-      return pw.Text('No member data found.');
+      return pw.Text('No data available');
     }
-    var member = overseerData.docs.first.data();
-    String memberName = member['name'] ?? 'N/A';
-    String memberSurname = member['surname'] ?? 'N/A';
-    String memberWeek1 = member['week1']?.toString() ?? '0.00';
-    String memberWeek2 = member['week2']?.toString() ?? '0.00';
-    String memberWeek3 = member['week3']?.toString() ?? '0.00';
-    String memberWeek4 = member['week4']?.toString() ?? '0.00';
-    return pw.TableHelper.fromTextArray(
-      cellAlignment: pw.Alignment.centerLeft,
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-      cellPadding: const pw.EdgeInsets.all(8),
-      data: <List<String>>[
-        <String>[
-          'Members Name and Surname',
-          'WEEK 1',
-          'WEEK 2',
-          'WEEK 3',
-          'WEEK 4',
-          'MONTHLY',
-        ],
 
-        <String>[
-          '${memberName} ${memberSurname}',
-          'R ${memberWeek1.split('.')[0]} c ${memberWeek1.split('.')[1]}',
-          'R ${memberWeek2.split('.')[0]} c ${memberWeek2.split('.')[1]}',
-          'R ${memberWeek3.split('.')[0]} c ${memberWeek3.split('.')[1]}',
-          'R ${memberWeek4.split('.')[0]} c ${memberWeek4.split('.')[1]}',
-          'R ${(double.parse(memberWeek1) + double.parse(memberWeek2) + double.parse(memberWeek3) + double.parse(memberWeek4)).toStringAsFixed(2)}',
-        ],
+    // Create a list to hold all member data
+    List<Map<String, dynamic>> allMembersData = [];
+
+    for (var d in memberLatestData.docs) {
+      allMembersData.add(d.data());
+    }
+
+    // Prepare data for the PDF table
+    List<List<String>> tableData = [
+      <String>[
+        'Members Name and Surname',
+        'WEEK 1',
+        'WEEK 2',
+        'WEEK 3',
+        'WEEK 4',
+        'MONTHLY',
+      ],
+    ];
+
+    double grandTotal = 0.00;
+
+    for (var memberData in allMembersData) {
+      String memberName = memberData['name'] ?? 'N/A';
+      String memberSurname = memberData['surname'] ?? 'N/A';
+      String memberWeek1 = memberData['week1']?.toString() ?? '0.00';
+      String memberWeek2 = memberData['week2']?.toString() ?? '0.00';
+      String memberWeek3 = memberData['week3']?.toString() ?? '0.00';
+      String memberWeek4 = memberData['week4']?.toString() ?? '0.00';
+
+      var total =
+          (double.parse(memberWeek1) +
+                  double.parse(memberWeek2) +
+                  double.parse(memberWeek3) +
+                  double.parse(memberWeek4))
+              .toStringAsFixed(2);
+
+      tableData.add(<String>[
+        '${memberName} ${memberSurname}',
+        'R${double.parse(memberWeek1).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek2).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek3).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek4).toStringAsFixed(2)}',
+        'R${total}',
+      ]);
+
+      grandTotal += double.parse(total);
+    }
+
+    return pw.Column(
+      children: [
+        pw.TableHelper.fromTextArray(
+          cellAlignment: pw.Alignment.centerLeft,
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          headerStyle: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 14,
+          ),
+          cellPadding: const pw.EdgeInsets.all(2),
+          data: tableData, // Use the dynamically built tableData
+        ),
+        pw.SizedBox(height: 10),
+        pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'GRAND TOTAL: R ${grandTotal.toStringAsFixed(2)}',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
       ],
     );
   }
 
   // Helper for PDF signature rows
-  pw.Widget _buildPdfSignatureRow(String role) {
+  pw.Widget _buildPdfSignatureRow(String role, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
       child: pw.Row(
         children: [
           pw.Expanded(flex: 2, child: pw.Text('$role:')),
-          pw.Expanded(flex: 3, child: pw.Text('_________________________')),
+          pw.Expanded(flex: 3, child: pw.Text('$value')),
           pw.SizedBox(width: 10),
           pw.Expanded(flex: 1, child: pw.Text('Signature:')),
-          pw.Expanded(flex: 3, child: pw.Text('_________________________')),
+          pw.Expanded(flex: 3, child: pw.Text('___________________')),
         ],
       ),
     );
@@ -1443,6 +1391,7 @@ class _OverseerPageState extends State<OverseerPage>
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController.dispose();
     memberNameController.dispose();
     memberSurnameController.dispose();

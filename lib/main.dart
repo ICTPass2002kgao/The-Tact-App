@@ -4,9 +4,10 @@ import 'package:ttact/Pages/Admin_Portal.dart';
 import 'package:ttact/Pages/CartPage.dart';
 import 'package:ttact/Pages/Login.dart';
 import 'package:ttact/Pages/MotherPage.dart';
-import 'package:ttact/Pages/OverseerPage.dart'; 
+import 'package:ttact/Pages/OverseerPage.dart';
 import 'package:ttact/Pages/SignUpPage.dart'; // Corrected import from Tact_Seller
 import 'package:ttact/Pages/Tact_Seller.dart';
+import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
 import 'package:ttact/Pages/orders.dart'; // Corrected import for the actual OrdersPage
 import 'package:ttact/firebase_options.dart';
 import 'package:ttact/introductionPage.dart';
@@ -102,19 +103,18 @@ class _MyAppState extends State<MyApp> {
         ), // Dark dialog background
         // Add more specific colors for dark mode to match your design
       ),
-      themeMode: _themeMode, // Use the state variable to control the theme
+      themeMode: _themeMode,
       initialRoute: '/',
       routes: {
         '/tact_seller': (context) => SellerProductPage(),
-        '/main-menu': (context) =>
-            MotherPage(onToggleTheme: toggleTheme), // Pass the callback
+        '/main-menu': (context) => MotherPage(onToggleTheme: toggleTheme),
         '/signup': (context) => SignUpPage(),
         '/cart': (context) => CartPage(),
-        '/orders': (context) =>
-            OrdersPage(), // Corrected this route to point to OrdersPage
+        '/orders': (context) => OrdersPage(),
         '/admin': (context) => AdminPortal(),
         '/login': (context) => Login_Page(),
         '/overseer': (context) => OverseerPage(),
+        '/tactso-branches': (context) => TactsoBranchesApplications(),
         '/': (context) => Introductionpage(),
       },
     );

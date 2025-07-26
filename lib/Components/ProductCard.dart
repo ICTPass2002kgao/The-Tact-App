@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
-// Remove the unused import if it's not being used anywhere else in this file.
-// import 'package:flutter_launcher_icons/xml_templates.dart';
+import 'package:ionicons/ionicons.dart';
+import 'package:share_plus/share_plus.dart';
 
 class Product_Card extends StatefulWidget {
   final String? imageUrl;
-  final String? categoryName; // This seems unused in your current build method.
+  final String? categoryName;
   final String? productName;
-  final double? price;
+  final double? price; // This is the actual selling price from the database
   final VoidCallback onCartPressed;
   final String location;
   final bool isAvailable;
+  final double? discountPercentage;
+  final List<dynamic>?
+  availableColors; // Now contains color names like "blue", "red"
 
   const Product_Card({
     super.key,
     this.imageUrl,
-    this.categoryName, // Still exists but not used in the UI directly here
+    this.categoryName,
     this.productName,
     this.price,
     required this.location,
     required this.isAvailable,
     required this.onCartPressed,
+    this.discountPercentage,
+    required this.availableColors,
   });
 
   @override
@@ -27,36 +32,83 @@ class Product_Card extends StatefulWidget {
 }
 
 class _Product_CardState extends State<Product_Card> {
-  // Internal state for the favorite button
-  bool _isFavorite =
-      false; // Changed to _isFavorite for internal state management
+  bool _isFavorite = false;
+  late double _calculatedOriginalPrice;
+
+  // --- NEW: Map for converting color names to Flutter Colors ---
+  static final Map<String, Color> _colorNameMap = {
+    'Red': Colors.red,
+    'Blue': Colors.blue,
+    'Green': Colors.green,
+    'Yellow': Colors.yellow,
+    'Orange': Colors.orange,
+    'Purple': Colors.purple,
+    'Pink': Colors.pink,
+    'Brown': Colors.brown,
+    'Black': Colors.black,
+    'White': Colors.white,
+    'Grey': Colors.grey, // Using standard grey for simplicity
+    'Teal': Colors.teal,
+    'light blue': Colors.lightBlue,
+    'light green': Colors.lightGreen,
+    // Add more color mappings as needed based on your database values
+    // For white color swatch, you might want to add a visible border
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _isFavorite = false;
+    _calculateOriginalPrice();
+  }
+
+  void _calculateOriginalPrice() {
+    if (widget.price == null || widget.price! <= 0) {
+      _calculatedOriginalPrice = 0.0;
+      return;
+    }
+
+    final double effectiveDiscountRate =
+        (widget.discountPercentage ?? 0.0) / 100.0;
+
+    if (effectiveDiscountRate >= 1.0 || effectiveDiscountRate < 0) {
+      _calculatedOriginalPrice = widget.price!;
+    } else {
+      _calculatedOriginalPrice = widget.price! / (1 - effectiveDiscountRate);
+    }
+
+    if (_calculatedOriginalPrice <= widget.price! + 0.01) {
+      _calculatedOriginalPrice = widget.price!;
+    }
+  }
+
+  // --- NEW: Helper function to get Color from name ---
+  Color _getColorFromName(String colorName) {
+    return _colorNameMap[colorName.toLowerCase()] ??
+        Colors.transparent; // Fallback to transparent for unrecognized names
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context);
+    final theme = Theme.of(context);
+
     return Card(
-      elevation: 5, // Reduced elevation slightly for a softer look
-      color: color.scaffoldBackgroundColor,
+      elevation: 5,
+      color: theme.scaffoldBackgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      clipBehavior: Clip.antiAlias, // Ensures content respects rounded corners
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Stack(
             children: [
-              // Product Image
               AspectRatio(
-                // Use AspectRatio to give the image a consistent height relative to its width
-                aspectRatio:
-                    1.0, // Or whatever ratio fits your design (e.g., 4/3, 16/9)
+                aspectRatio: 1.0,
                 child: Image.network(
-                  // Use a placeholder if imageUrl is null or empty
                   widget.imageUrl != null && widget.imageUrl!.isNotEmpty
                       ? widget.imageUrl!
-                      : 'https://via.placeholder.com/150', // Good default placeholder
-                  fit: BoxFit.cover,
-                  // height: 150, // Removed fixed height as AspectRatio handles it
-                  width: double.infinity,
+                      : 'https://via.placeholder.com/150',
+                  fit: BoxFit.fill,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       color: Colors.grey[200],
@@ -64,28 +116,22 @@ class _Product_CardState extends State<Product_Card> {
                         Icons.broken_image,
                         color: Colors.grey,
                         size: 50,
-                      ), // Larger icon for error
+                      ),
                     );
                   },
                 ),
               ),
-              // Favorite Button
               Positioned(
                 right: 8,
                 top: 8,
                 child: IconButton.filledTonal(
                   icon: Icon(
                     _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite
-                        ? Colors.red
-                        : color
-                              .primaryColorDark, // Apply primaryColorDark when not favorited
+                    color: _isFavorite ? Colors.red : theme.primaryColorDark,
                   ),
                   onPressed: () {
                     setState(() {
-                      _isFavorite = !_isFavorite; // Toggle the favorite state
-                      // You can add logic here to save the like status to a local database (e.g., SharedPreferences)
-                      // or perform other actions based on the new state, if this card needs to persist its own state.
+                      _isFavorite = !_isFavorite;
                       if (_isFavorite) {
                         print('${widget.productName ?? 'Product'} liked!');
                       } else {
@@ -95,37 +141,28 @@ class _Product_CardState extends State<Product_Card> {
                   },
                   style: ButtonStyle(
                     backgroundColor: WidgetStatePropertyAll(
-                      color.scaffoldBackgroundColor.withOpacity(0.2),
+                      theme.scaffoldBackgroundColor.withOpacity(0.2),
                     ),
-                    shape: const WidgetStatePropertyAll(
-                      CircleBorder(),
-                    ), // Make the button round
-                    padding: WidgetStateProperty.all(
-                      EdgeInsets.zero,
-                    ), // Adjust padding if needed
+                    shape: const WidgetStatePropertyAll(CircleBorder()),
+                    padding: WidgetStateProperty.all(EdgeInsets.zero),
                   ),
                 ),
               ),
             ],
           ),
-          // Product Details
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8.0,
-              vertical: 4.0,
-            ), // Added vertical padding
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment
-                      .start, // Align top for better text flow
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
                         widget.productName ?? 'Product Name',
-                        maxLines: 2, // Allow up to 2 lines for product name
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,
@@ -133,115 +170,139 @@ class _Product_CardState extends State<Product_Card> {
                         ),
                       ),
                     ),
-                    // Shopping Cart Button
-                    SizedBox(
-                      width: 8,
-                    ), // Small space between text and cart button
+                    SizedBox(width: 8),
                     Card(
-                      elevation: 2, // Small elevation for cart button
+                      elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
-                      ), // Rounded corners for cart button card
-                      margin: EdgeInsets.zero, // Remove default margin
+                      ),
+                      margin: EdgeInsets.zero,
                       child: InkWell(
-                        // Use InkWell for better visual feedback on tap
                         onTap: widget.onCartPressed,
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Icon(
                             Icons.shopping_cart_outlined,
-                            color: color.primaryColor,
-                          ), // Color the icon
+                            color: theme.primaryColor,
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: 4), // Space after product name/cart button row
+                SizedBox(height: 4),
                 Text(
                   'From:${widget.location}',
-                  maxLines: 2, // Allow up to 2 lines for description
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14, // Slightly smaller font size
-                    color: color.primaryColor,
+                    fontSize: 14,
+                    color: theme.primaryColor,
                     fontStyle: FontStyle.normal,
-                    fontWeight: FontWeight.w900, // Slightly bolder than w100
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                SizedBox(height: 8), // Space before availability/price row
+                SizedBox(height: 8),
                 Row(
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.isAvailable ? 'Available' : 'UnAvailable',
+                          widget.isAvailable ? 'Available' : 'Unavailable',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontStyle: FontStyle.italic,
-                            fontSize: 13, // Consistent font size
-                            fontWeight:
-                                FontWeight.w500, // Make it a bit more prominent
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
                             color: widget.isAvailable
-                                ? const Color.fromARGB(
-                                    255,
-                                    41,
-                                    143,
-                                    45,
-                                  ) // Green for available
-                                : Colors.red, // Red for unavailable
+                                ? const Color.fromARGB(255, 41, 143, 45)
+                                : Colors.red,
                           ),
                         ),
-                        // Star Rating - Consider making this dynamic based on actual product rating
-                        Row(
-                          children: List.generate(
-                            5,
-                            (index) => Icon(
-                              Icons.star,
-                              color:
-                                  index <
-                                      4 // Assuming 4 stars is default for now
-                                  ? Colors.amber
-                                  : Colors
-                                        .grey[300], // Grey for un-filled stars
-                              size: 14,
+                        // --- REPLACED WITH COLOR SWATCHES FROM NAMES ---
+                        if (widget.availableColors != null &&
+                            widget.availableColors!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Row(
+                              children: widget.availableColors!
+                                  .map(
+                                    (colorName) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: 4.0,
+                                      ),
+                                      child: Container(
+                                        width: 16,
+                                        height: 16,
+                                        decoration: BoxDecoration(
+                                          color: _getColorFromName(colorName),
+                                          shape: BoxShape.circle,
+                                          // Add a border for white colors to make them visible
+                                          border: Border.all(
+                                            color:
+                                                colorName.toLowerCase() ==
+                                                    'White'
+                                                ? Colors
+                                                      .grey // Visible border for white
+                                                : Colors.grey.shade300,
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                           ),
-                        ),
+                        // --- END REPLACEMENT ---
                       ],
                     ),
-                    const Spacer(), // Pushes price to the right
+                    const Spacer(),
+
                     Padding(
-                      padding: const EdgeInsets.all(
-                        4.0,
-                      ), // Smaller padding around price/discount
+                      padding: const EdgeInsets.all(4.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment
-                            .end, // Align price/discount to the right
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Text(
-                            '30% OFF', // This is hardcoded; consider making it dynamic
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                            ), // Smaller, bolder for discount
-                          ),
+                          if (_calculatedOriginalPrice >
+                                  (widget.price ?? 0.0) &&
+                              (widget.discountPercentage ?? 0.0) > 0)
+                            Text(
+                              'R${_calculatedOriginalPrice.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.normal,
+                                color: theme.hintColor,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: theme.hintColor,
+                              ),
+                            ),
+                          if (widget.discountPercentage != null &&
+                              widget.discountPercentage! > 0)
+                            Text(
+                              '${widget.discountPercentage!.toInt()}% OFF',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          Row(children: [SizedBox(width: 4)]),
                           Text(
                             widget.price != null
-                                ? 'R${widget.price!.toStringAsFixed(2)}' // Corrected currency symbol to R
-                                : 'Price N/A', // Shorter text for price not available
+                                ? 'R${widget.price!.toStringAsFixed(2)}'
+                                : 'Price N/A',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 18, // Slightly larger for price
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: color.primaryColor,
+                              color: theme.primaryColor,
                             ),
                           ),
                         ],

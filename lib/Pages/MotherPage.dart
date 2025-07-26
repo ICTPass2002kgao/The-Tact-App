@@ -5,13 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
+import 'package:ttact/Pages/MyProfile.dart';
+import 'package:ttact/Pages/Rate.dart';
 // These imports will need to be correctly resolved based on your project structure
 import 'package:ttact/Pages/ShoppingPage.dart';
 import 'package:ttact/Pages/Tact_Seller.dart';
 import 'package:ttact/Pages/orders.dart'; // Ensure correct import for OrdersPage
 import 'Events.dart';
 import 'HistoryPage.dart';
-import 'HomePage.dart';  // Ensure this is imported correctly
+import 'HomePage.dart'; // Ensure this is imported correctly
 
 class MotherPage extends StatefulWidget {
   // NEW: Add onToggleTheme callback
@@ -104,7 +106,8 @@ class _MotherPageState extends State<MotherPage>
                     descriptionController.text.isNotEmpty) {
                   await FirebaseFirestore.instance.collection('UserHelp').add({
                     'userId': userId,
-                    'userEmail': FirebaseAuth.instance.currentUser?.email ?? 'N/A',
+                    'userEmail':
+                        FirebaseAuth.instance.currentUser?.email ?? 'N/A',
                     'subject': subjectController.text,
                     'description': descriptionController.text,
                     'timestamp': FieldValue.serverTimestamp(),
@@ -113,52 +116,22 @@ class _MotherPageState extends State<MotherPage>
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Your issue has been submitted. We will get back to you!'),
+                      content: Text(
+                        'Your issue has been submitted. We will get back to you!',
+                      ),
                     ),
                   );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Please fill in both subject and description.'),
+                      content: Text(
+                        'Please fill in both subject and description.',
+                      ),
                     ),
                   );
                 }
               },
               child: Text('Submit'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Function to show "Rate the App" dialog
-  void _showRateAppDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Rate Our App'),
-          content: Text('Enjoying our app? Please take a moment to rate us on the app store! Your feedback helps us improve.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: Text('Later'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // TODO: Implement logic to open app store link
-                // For example, using url_launcher:
-                // launchUrl(Uri.parse('market://details?id=YOUR_APP_PACKAGE_NAME')); // Android
-                // launchUrl(Uri.parse('itms-apps://itunes.apple.com/app/idYOUR_APP_ID')); // iOS
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Opening app store... (Feature not fully implemented)')),
-                );
-              },
-              child: Text('Rate Now'),
             ),
           ],
         );
@@ -184,7 +157,7 @@ class _MotherPageState extends State<MotherPage>
         foregroundColor: color.scaffoldBackgroundColor,
         title: Text('W E L C O M E'),
         actions: [
-          if (_userData['role'] != 'Seller')
+          if (_userData['role'] != 'Seller' && userId != null)
             IconButton(
               onPressed: () {
                 Navigator.push(
@@ -214,11 +187,35 @@ class _MotherPageState extends State<MotherPage>
                   ),
                 ),
                 Divider(color: color.scaffoldBackgroundColor),
+
+                ListTile(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => MyProfile()),
+                    );
+                  },
+                  textColor: color.scaffoldBackgroundColor,
+                  title: Text('Profile'),
+                  leading: Icon(
+                    Ionicons.person_outline,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                ),
+                Divider(),
                 // Dark/Light Mode Switch
                 SwitchListTile(
-                  title: Text('Dark Mode', style: TextStyle(color: color.scaffoldBackgroundColor)),
-                  secondary: Icon(Icons.brightness_2, color: color.scaffoldBackgroundColor),
-                  value: Theme.of(context).brightness == Brightness.dark, // Get current theme brightness
+                  title: Text(
+                    'Light/Dark Mode',
+                    style: TextStyle(color: color.scaffoldBackgroundColor),
+                  ),
+                  secondary: Icon(
+                    Icons.brightness_2,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                  value:
+                      Theme.of(context).brightness ==
+                      Brightness.dark, // Get current theme brightness
                   onChanged: (value) {
                     widget.onToggleTheme(value); // Call the callback from MyApp
                   },
@@ -237,7 +234,12 @@ class _MotherPageState extends State<MotherPage>
                 ),
                 Divider(color: color.scaffoldBackgroundColor),
                 ListTile(
-                  onTap: _showRateAppDialog,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => RateUsDialog()),
+                    );
+                  },
                   textColor: color.scaffoldBackgroundColor,
                   tileColor: Colors.transparent,
                   iconColor: color.scaffoldBackgroundColor,
@@ -265,7 +267,11 @@ class _MotherPageState extends State<MotherPage>
                     Navigator.pushNamed(context, '/login');
                   } else {
                     FirebaseAuth.instance.signOut();
-                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                      (route) => false,
+                    );
                   }
                 },
                 textColor: color.scaffoldBackgroundColor,

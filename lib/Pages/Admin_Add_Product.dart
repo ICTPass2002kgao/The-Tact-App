@@ -33,6 +33,8 @@ class _AdminAddProductState extends State<AdminAddProduct> {
   }
 
   Future<void> uploadProduct() async {
+    final color = Theme.of(context);
+
     if (nameController.text.isEmpty || imageFiles.isEmpty) return;
     Api().showLoading(context);
     List<String> imageUrls = [];
@@ -51,16 +53,16 @@ class _AdminAddProductState extends State<AdminAddProduct> {
       'description': descController.text,
       'imageUrl': imageUrls,
       'createdAt': FieldValue.serverTimestamp(),
+      'category': selectedCategory,
     });
-    final color = Theme.of(context);
 
+    Navigator.of(context);
     Api().showMessage(
       context,
       'The ${nameController.text} have been added',
       '',
       color.splashColor,
     );
-    Navigator.of(context);
 
     nameController.clear();
     descController.clear();
@@ -69,6 +71,16 @@ class _AdminAddProductState extends State<AdminAddProduct> {
     });
   }
 
+  String selectedCategory = '';
+  List categories = [
+    'Shirts & Polos',
+    'Suits & Jackets',
+    'Trousers & Skirts',
+    'Footwear',
+    'Accessories',
+    'Hats',
+    'Shoes',
+  ];
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
@@ -129,6 +141,28 @@ class _AdminAddProductState extends State<AdminAddProduct> {
             placeholder: 'Product Name',
             controller: nameController,
           ),
+
+          DropdownButtonFormField<String>(
+            value: selectedCategory.isNotEmpty ? selectedCategory : null,
+            items: categories
+                .map<DropdownMenuItem<String>>(
+                  (category) => DropdownMenuItem<String>(
+                    value: category,
+                    child: Text(category),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedCategory = value ?? '';
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'Select Category',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          SizedBox(height: 10),
           AuthTextField(
             onValidate: TextFieldValidation.name,
             placeholder: 'Product Description',
