@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"   package="com.thetact.ttact">
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
@@ -6,9 +6,13 @@
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
 
     <application 
-        android:label="TTACT"
+        android:label="DANKIE"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
+           <meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="ca-app-pub-6759693957212853~5704923982"/> <!-- Your Dankie App ID -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

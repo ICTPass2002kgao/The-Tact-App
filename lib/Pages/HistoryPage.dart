@@ -8,22 +8,28 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+  // This variable will control whether the history text is visible.
+  // Set it to `true` when you want to make the text available.
+  final bool isContentAvailable = false;
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: color.scaffoldBackgroundColor,
-      child: ListView(
-        children: [
-          Text(
-            "The Twelve Apostles Church In Christ",
-            style: color.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle("""  The Twelve Apostles Church In Christ History
+      child: isContentAvailable
+          ? ListView(
+              children: [
+                Text(
+                  "The Twelve Apostles Church In Christ",
+                  style: color.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _sectionTitle("""  The Twelve Apostles Church In Christ History
 
 1832 - First Apostle J.B. Cardale
 1835 - Catholic Apostolic Church founded
@@ -222,9 +228,27 @@ Apostle Miangeni has ordained ten Apostles up to today. In South Africa we have
 Apostles J.E.Hlongwane, J.R.Magano, D.S.Msane,S.D.Ndlovu and E.Mzamo.
 In Mozambique Apostles Ntimbane, Mthise, Bazar and the late apostles"""),
 
-          const SizedBox(height: 24),
-        ],
-      ),
+                const SizedBox(height: 24),
+              ],
+            )
+          : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Spacer(),
+                const Icon(Icons.lock, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    "This will be unlocked on Apostle Day",
+                    style: color.textTheme.titleMedium?.copyWith(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
     );
   }
 

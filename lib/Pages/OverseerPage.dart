@@ -1,11 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:ionicons/ionicons.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:pdf/pdf.dart'; // Import for PDF generation
@@ -45,7 +42,6 @@ class _OverseerPageState extends State<OverseerPage>
     }
   }
 
-  List<DocumentSnapshot> _allMembers = [];
   TextEditingController _searchController = TextEditingController();
 
   final TextEditingController memberNameController = TextEditingController();
@@ -64,7 +60,7 @@ class _OverseerPageState extends State<OverseerPage>
   String? selectedDistrictElder;
   String? selectedCommunityElder;
   String? selectedCommunityName;
-
+  String selectedProvince = '';
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
@@ -199,7 +195,7 @@ class _OverseerPageState extends State<OverseerPage>
                                           children: [
                                             Flexible(
                                               child: Text(
-                                                'Total Overseer Members:',
+                                                'Total Overseer Members',
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
@@ -247,69 +243,94 @@ class _OverseerPageState extends State<OverseerPage>
                                   ),
                                 ),
                                 SizedBox(height: 15),
-                                Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: color.primaryColor.withBlue(130),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(18.0),
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                FutureBuilder(
+                                  future: FirebaseFirestore.instance
+                                      .collection('overseers')
+                                      .where(
+                                        'uid',
+                                        isEqualTo: FirebaseAuth
+                                            .instance
+                                            .currentUser
+                                            ?.uid,
+                                      )
+                                      .get(),
+                                  builder: (context, asyncSnapshot) {
+                                    if (asyncSnapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    }
+                                    var oveerData = asyncSnapshot.data!.docs;
+                                    return Container(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: color.primaryColor.withBlue(130),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(18.0),
+                                        child: Column(
                                           children: [
-                                            Flexible(
-                                              child: Text(
-                                                'Total Overseer Districts:',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 23,
-                                                  fontWeight: FontWeight.bold,
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    'Total Overseer Districts:',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 23,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: color
+                                                          .scaffoldBackgroundColor,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Icon(
+                                                  Icons.person,
                                                   color: color
                                                       .scaffoldBackgroundColor,
+                                                  size: 60,
                                                 ),
-                                              ),
+                                              ],
                                             ),
-                                            Icon(
-                                              Icons.person,
-                                              color:
-                                                  color.scaffoldBackgroundColor,
-                                              size: 60,
+                                            Center(
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  for (var info in oveerData)
+                                                    Text(
+                                                      '${info?['districts'].length ?? 0}',
+                                                      style: TextStyle(
+                                                        fontSize: 50,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: color
+                                                            .scaffoldBackgroundColor,
+                                                      ),
+                                                    ),
+                                                  SizedBox(width: 20),
+                                                  Icon(
+                                                    Icons.group,
+                                                    color: color
+                                                        .scaffoldBackgroundColor,
+                                                    size: 60,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        Center(
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              for (var info in data)
-                                                Text(
-                                                  '${info.data()['districts'] ?? ''}',
-                                                  style: TextStyle(
-                                                    fontSize: 50,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: color
-                                                        .scaffoldBackgroundColor,
-                                                  ),
-                                                ),
-                                              SizedBox(width: 20),
-                                              Icon(
-                                                Icons.group,
-                                                color: color
-                                                    .scaffoldBackgroundColor,
-                                                size: 60,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ],
                             );
@@ -323,7 +344,7 @@ class _OverseerPageState extends State<OverseerPage>
                 // Add Member Tab
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Column(
+                  child: ListView(
                     children: [
                       CupertinoTextField(
                         decoration: BoxDecoration(
@@ -353,7 +374,7 @@ class _OverseerPageState extends State<OverseerPage>
                           border: Border.all(color: color.primaryColor),
                         ),
                         controller: memberEmailController,
-                        placeholder: 'Enter Member Email',
+                        placeholder: 'Enter Member Email (Optional)',
                         padding: EdgeInsets.all(16.0),
                       ),
                       SizedBox(height: 10),
@@ -376,12 +397,162 @@ class _OverseerPageState extends State<OverseerPage>
                         placeholder: 'Enter Contact Number',
                         padding: EdgeInsets.all(16.0),
                       ),
-                      SizedBox(height: 20),
+                      SizedBox(height: 10),
+
+                      // Dropdown selection for District Elder, Community Elder, and Community Name
+                      FutureBuilder<QuerySnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('overseers')
+                            .where(
+                              'uid',
+                              isEqualTo: FirebaseAuth.instance.currentUser!.uid,
+                            )
+                            .get(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return Center(
+                              child: Text('No overseer data found.'),
+                            );
+                          }
+                          var overseerData =
+                              snapshot.data!.docs.first.data()
+                                  as Map<String, dynamic>;
+
+                          selectedProvince = overseerData['province'];
+
+                          List<dynamic> districts =
+                              overseerData['districts'] ?? [];
+
+                          // Find the selected district object
+                          Map<String, dynamic>? selectedDistrict = districts
+                              .firstWhere(
+                                (d) =>
+                                    d['districtElderName'] ==
+                                    selectedDistrictElder,
+                                orElse: () => null,
+                              );
+
+                          // Get unique district elder names
+                          List<String> districtElderNames = districts
+                              .map((d) => d['districtElderName'] as String?)
+                              .where((name) => name != null)
+                              .cast<String>()
+                              .toSet()
+                              .toList();
+
+                          // Get unique community elder names and community names for selected district
+                          List<String> communityElderNames =
+                              selectedDistrict != null
+                              ? (selectedDistrict['communities']
+                                            as List<dynamic>?)
+                                        ?.map(
+                                          (c) =>
+                                              c['communityElderName']
+                                                  as String?,
+                                        )
+                                        .where((name) => name != null)
+                                        .cast<String>()
+                                        .toSet()
+                                        .toList() ??
+                                    []
+                              : [];
+                          List<String> communityNames = selectedDistrict != null
+                              ? (selectedDistrict['communities']
+                                            as List<dynamic>?)
+                                        ?.map(
+                                          (c) => c['communityName'] as String?,
+                                        )
+                                        .where((name) => name != null)
+                                        .cast<String>()
+                                        .toSet()
+                                        .toList() ??
+                                    []
+                              : [];
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              DropdownButton<String>(
+                                menuWidth: double.infinity,
+                                value: selectedDistrictElder,
+                                hint: Text('Choose a District Elder'),
+                                items: districtElderNames
+                                    .map(
+                                      (e) => DropdownMenuItem(
+                                        alignment: Alignment.center,
+                                        value: e,
+                                        child: Text(e),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedDistrictElder = value;
+                                    // Update selectedDistrict and reset community selections
+                                    selectedDistrict = districts.firstWhere(
+                                      (d) => d['districtElderName'] == value,
+                                      orElse: () => null,
+                                    );
+                                    selectedCommunityElder = null;
+                                    selectedCommunityName = null;
+                                  });
+                                },
+                              ),
+                              if (selectedDistrictElder != null) ...[
+                                DropdownButton<String>(
+                                  menuWidth: double.infinity,
+                                  value: selectedCommunityElder,
+                                  hint: Text('Choose a Community Elder'),
+                                  items: communityElderNames
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          alignment: Alignment.center,
+
+                                          value: e,
+                                          child: Text(e),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedCommunityElder = value;
+                                    });
+                                  },
+                                ),
+                                DropdownButton<String>(
+                                  menuWidth: double.infinity,
+                                  value: selectedCommunityName,
+                                  hint: Text('Choose a Community Name'),
+                                  items: communityNames
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          alignment: Alignment.center,
+                                          value: e,
+                                          child: Text(e),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedCommunityName = value;
+                                    });
+                                  },
+                                ),
+                              ],
+                              SizedBox(height: 20),
+                            ],
+                          );
+                        },
+                      ),
                       CustomOutlinedButton(
                         onPressed: () async {
                           if (memberNameController.text.isEmpty ||
                               memberSurnameController.text.isEmpty ||
-                              memberEmailController.text.isEmpty ||
                               memberAddressController.text.isEmpty ||
                               memberContactController.text.isEmpty) {
                             Api().showMessage(
@@ -393,14 +564,15 @@ class _OverseerPageState extends State<OverseerPage>
                             return;
                           }
                           try {
+                            Api().showLoading(context);
                             FirebaseFirestore firestore =
                                 FirebaseFirestore.instance;
                             await firestore.collection('users').add({
                               'name': memberNameController.text,
                               'surname': memberSurnameController.text,
                               'email': memberEmailController.text,
-                              'Address': memberAddressController.text,
-                              'Contact Number': memberContactController.text,
+                              'address': memberAddressController.text,
+                              'phone': memberContactController.text,
                               'overseerUid':
                                   FirebaseAuth.instance.currentUser?.uid,
                               'role': 'Member',
@@ -408,11 +580,12 @@ class _OverseerPageState extends State<OverseerPage>
                               'week2': 0.00,
                               'week3': 0.00,
                               'week4': 0.00,
-                              // "province": selectedProvince,
-                              // "districtElderName": selectedDistrictElder,
-                              // "communityElderName": selectedCommunityElder,
-                              // "communityName": selectedCommunityName,
+                              "province": selectedProvince,
+                              "districtElderName": selectedDistrictElder,
+                              "communityElderName": selectedCommunityElder,
+                              "communityName": selectedCommunityName,
                             });
+                            Navigator.of(context);
                             Api().showMessage(
                               context,
                               'Member added successfully',
@@ -495,35 +668,39 @@ class _OverseerPageState extends State<OverseerPage>
                                         Icons.person,
                                         color: color.primaryColor,
                                       ),
-                                      subtitle: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${member['name']} ${member['surname'] ?? ''}',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: color.primaryColor,
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${member['name']} ${member['surname'] ?? ''}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: color.primaryColor,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            '${member['email'] ?? 'N/A'}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            '${member['Address'] ?? 'N/A'}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            '${member['Contact Number'] ?? 'N/A'}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
+                                            if (member['email'].isNotEmpty)
+                                              Text(
+                                                '${member['email'] ?? 'N/A'}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            Text(
+                                              '${member['address'] ?? 'N/A'}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              '${member['phone'] ?? 'N/A'}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                       trailing: IconButton(
                                         icon: Icon(
@@ -534,6 +711,9 @@ class _OverseerPageState extends State<OverseerPage>
                                           showDialog(
                                             context: context,
                                             builder: (context) => AlertDialog(
+                                              backgroundColor: color
+                                                  .scaffoldBackgroundColor
+                                                  .withOpacity(0.8),
                                               title: Text('Edit Member'),
                                               content: Column(
                                                 mainAxisSize: MainAxisSize.min,
@@ -1074,7 +1254,7 @@ class _OverseerPageState extends State<OverseerPage>
             _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
             _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
             _buildPdfTextRow(
-              'Province: ${overseerData?['province']}',
+              'Province: ${overseerData['province']}',
               '',
               'Region:',
               '__________',

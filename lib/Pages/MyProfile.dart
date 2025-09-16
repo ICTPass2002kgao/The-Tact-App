@@ -6,7 +6,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart'; // Import Cupertino
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart'; // For formatting dates
+import 'package:intl/intl.dart';
+import 'package:ttact/Components/AdBanner.dart';
+import 'package:ttact/Components/Custom_Buttons.dart'; // For formatting dates
 
 class MyProfile extends StatefulWidget {
   const MyProfile({super.key});
@@ -140,8 +142,8 @@ class _MyProfileState extends State<MyProfile> {
   ) {
     _nameController.text = currentData['name'] ?? '';
     _surnameController.text = currentData['surname'] ?? '';
-    _addressController.text = currentData['Address'] ?? '';
-    _contactNumberController.text = currentData['Contact Number'] ?? '';
+    _addressController.text = currentData['address'] ?? '';
+    _contactNumberController.text = currentData['phone'] ?? '';
     _currentProfileImageUrl = currentData['profileUrl'];
     _pickedImage =
         null; // Clear picked image when opening sheet for existing data
@@ -331,9 +333,8 @@ class _MyProfileState extends State<MyProfile> {
                           final updatedData = {
                             'name': _nameController.text.trim(),
                             'surname': _surnameController.text.trim(),
-                            'Contact Number': _contactNumberController.text
-                                .trim(),
-                            'Address': _addressController.text.trim(),
+                            'phone': _contactNumberController.text.trim(),
+                            'address': _addressController.text.trim(),
                           };
                           _updateUserData(updatedData);
                           Navigator.of(context).pop(); // Close the bottom sheet
@@ -384,7 +385,23 @@ class _MyProfileState extends State<MyProfile> {
           foregroundColor: theme.scaffoldBackgroundColor,
           centerTitle: true,
         ),
-        body: const Center(child: Text('Please log in to view your profile.')),
+        body: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Center(child: Text('Please log in to view your profile.')),
+            const SizedBox(height: 20),
+            Custom_Button(
+              onPressed: () {
+                // Define your onPressed logic here
+                Navigator.of(context).pushNamed('/login');
+              },
+              text: 'Log In',
+              backgroundColor: theme.primaryColor,
+              foregroundColor: theme.scaffoldBackgroundColor,
+              minWidth: 200,
+            ),
+          ],
+        ),
       );
     }
 
@@ -663,6 +680,8 @@ class _MyProfileState extends State<MyProfile> {
                   ),
                 ),
               ),
+
+              AdManager().bannerAdWidget(),
             ],
           );
         },
@@ -724,7 +743,7 @@ class _MyProfileState extends State<MyProfile> {
             // Safely access data
             // These fields MUST be present directly in the university_applications document
             String universityName = applicationData['universityName'] ?? 'N/A';
-            String programName = applicationData['programName'] ?? 'N/A';
+            String programName = applicationData['primaryProgram'] ?? 'N/A';
             String status = applicationData['status'] ?? 'N/A';
             Timestamp? submissionDate =
                 applicationData['submissionDate'] as Timestamp?;
@@ -737,7 +756,12 @@ class _MyProfileState extends State<MyProfile> {
               elevation: 2,
               child: ListTile(
                 leading: Icon(Icons.school, color: theme.primaryColor),
-                title: Text(universityName, style: theme.textTheme.titleMedium),
+                title: Text(
+                  universityName,
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -3,8 +3,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Play_Song.dart';
 import 'package:ttact/Components/Tactso_Branch_Details.dart';
 import 'package:ttact/Components/UniversityCard.dart';
@@ -22,11 +24,14 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  AdManager adManager = AdManager();
+  int _songPlayCount = 0;
   @override
   void initState() {
     super.initState();
 
     _tabController = TabController(length: 3, vsync: this);
+    adManager.loadRewardedInterstitialAd();
   }
 
   String _searchQuery = '';
@@ -346,7 +351,7 @@ class _HomePageState extends State<HomePage>
                                         universityDetails:
                                             representativeCampusData, // Pass a single campus map for universityDetails
                                         campusListForUniversity:
-                                            campuses, // Pass the list of all campuses
+                                            representativeCampusData['campuses'], // Pass the list of all campuses
                                       );
                                     },
                                   );
@@ -371,7 +376,7 @@ class _HomePageState extends State<HomePage>
                                           universityDetails:
                                               campuses as dynamic,
                                           campusListForUniversity:
-                                              campuses, // Pass the list of all campuses
+                                              representativeCampusData['campuses'], // Pass the list of all campuses
                                         );
                                       },
                                     );
@@ -547,28 +552,52 @@ class _HomePageState extends State<HomePage>
                                             border: Border.all(width: 1.5),
                                           ),
                                           child: ListTile(
-                                            onTap: () {
-                                              showCupertinoSheet(
-                                                enableDrag: true,
-                                                context: context,
-                                                pageBuilder: (context) {
-                                                  return PlaySong(
-                                                    songs: filteredSongs
-                                                        .map(
-                                                          (doc) =>
-                                                              doc.data()
-                                                                  as Map<
-                                                                    String,
-                                                                    dynamic
-                                                                  >,
-                                                        )
-                                                        .toList(),
-                                                    initialIndex: index,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                            minVerticalPadding: 1,
+                                           // Your song list widget's onTap function
+// ...
+onTap: () {
+  _songPlayCount++;
+  print('Song play count: $_songPlayCount');
+
+  // Function to play the song, regardless of ad status
+  void playSong() {
+    showCupertinoSheet(
+      enableDrag: true,
+      context: context,
+      pageBuilder: (context) {
+        return PlaySong(
+          songs: filteredSongs.map((doc) => doc.data() as Map<String, dynamic>).toList(),
+          initialIndex: index,
+        );
+      },
+    );
+  }
+
+  if (_songPlayCount >= 4) {
+    // Show the rewarded ad with a failure callback
+    adManager.showRewardedInterstitialAd(
+      (ad, reward) {
+        // Ad success: play the song and reset count
+        print('User earned reward: ${reward.amount} ${reward.type}');
+        playSong();
+        _songPlayCount = 0;
+      },
+    );
+
+    // **NEW:** Listen for ad load failure
+    adManager.loadRewardedInterstitialAd(
+      onAdFailed: () {
+        // Ad failure: still play the song, but don't reset count.
+        // This is a business decision. You might want to let the user
+        // try again for a reward.
+        playSong();
+        _songPlayCount = 0; // Or don't reset it, it's your call.
+      },
+    );
+  } else {
+    // If ad counter is not met, just play the song
+    playSong();
+  }
+}, minVerticalPadding: 1,
                                             trailing: Icon(
                                               Icons.more_vert_outlined,
                                             ),

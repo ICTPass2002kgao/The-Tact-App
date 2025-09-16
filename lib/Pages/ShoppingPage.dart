@@ -8,18 +8,16 @@ import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/ProductCard.dart';
 import 'package:ttact/Components/Product_Details.dart';
 import 'package:ttact/Pages/CartPage.dart';
-import 'package:shimmer/shimmer.dart'; // Import the shimmer package
+import 'package:shimmer/shimmer.dart';
 
-// REMOVED AppColors class definition as per your request
+// No need to define AppColors here as it's not in the provided code
 
 class CartHelper {
   static const String _cartKey = 'cart';
 
   // --- UPDATED: addToCart now accepts a selectedColor ---
   static Future<void> addToCart(
-    Map<String, dynamic> product,
-    String? selectedColor,
-  ) async {
+      Map<String, dynamic> product, String? selectedColor) async {
     final prefs = await SharedPreferences.getInstance();
     final String? cartData = prefs.getString(_cartKey);
 
@@ -35,17 +33,14 @@ class CartHelper {
 
     final String? productId = product['productId'];
     if (productId == null) {
-      print(
-        "Error: Product ID is missing for product: ${product['productName']}",
-      );
+      print("Error: Product ID is missing for product: ${product['productName']}");
       return;
     }
 
     bool productFound = false;
     for (int i = 0; i < cart.length; i++) {
       // --- IMPORTANT: Include selectedColor in the comparison for uniqueness ---
-      if (cart[i]['productId'] == productId &&
-          cart[i]['selectedColor'] == selectedColor) {
+      if (cart[i]['productId'] == productId && cart[i]['selectedColor'] == selectedColor) {
         int currentQuantity = (cart[i]['quantity'] as int?) ?? 0;
         double productPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
 
@@ -62,6 +57,7 @@ class CartHelper {
       product['itemTotalPrice'] = productPrice;
       // --- Store the selected color in the cart item ---
       product['selectedColor'] = selectedColor;
+      // The `subAccountCode` is already in the `product` map and is automatically added here.
       cart.add(product);
     }
 
@@ -80,10 +76,9 @@ class CartHelper {
       ),
     );
 
-    // --- Note: This removeFromCart currently removes by productId only.
-    // If you need to remove a specific color variant, this method will need modification
-    // to also accept a color or to iterate based on both product ID and color.
-    // For now, it will remove any item matching the product ID. ---
+    // This removeFromCart method removes a product by ID, which can be an issue if there are multiple
+    // items with the same product ID but different colors. A more robust solution would be to
+    // remove based on a unique identifier that includes both product ID and color.
     for (int i = 0; i < cart.length; i++) {
       if (cart[i]['productId'] == productId) {
         // Check only by productId for now
@@ -134,7 +129,6 @@ class _ShoppingPageState extends State<ShoppingPage> {
   int cartCount = 0;
   List<Map<String, dynamic>> products = [];
   List<Map<String, dynamic>> _filteredProducts = [];
-
   String _selectedCategory = 'All';
 
   @override
@@ -182,13 +176,14 @@ class _ShoppingPageState extends State<ShoppingPage> {
           'location': sellerData['location'],
           'sellerId': sellerData['sellerId'],
           'productId': sellerData['productId'],
-          'description':
-              productData['description'] ?? 'No description provided',
+          'description': productData['description'] ?? 'No description provided',
           'isAvailable': productData['isAvailable'] ?? true,
           'discountPercentage':
               (sellerData['discountPercentage'] as num?)?.toDouble() ?? 0.0,
           // --- NEW: Fetch availableColors from productData ---
           'availableColors': productData['availableColors'] ?? [],
+          // --- NEW: Fetch subAccountCode from productData ---
+          'subAccountCode': productData['subAccountCode'] ?? '',
           // Ensure it's a List<String>, default to empty list
         });
       }
@@ -212,9 +207,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
   // --- UPDATED: addToCart now accepts selectedColor from ProductDetails ---
   void addToCartFromProductDetails(
-    Map<String, dynamic> product,
-    String? selectedColor,
-  ) async {
+      Map<String, dynamic> product, String? selectedColor) async {
     final theme = Theme.of(context);
     await CartHelper.addToCart(product, selectedColor); // Pass selectedColor
     loadCartCount();
@@ -312,16 +305,13 @@ class _ShoppingPageState extends State<ShoppingPage> {
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Container(
                                         height: 14,
                                         width: double.infinity,
                                         color: Colors.white,
-                                        margin: const EdgeInsets.only(
-                                          bottom: 5,
-                                        ),
+                                        margin: const EdgeInsets.only(bottom: 5),
                                       ),
                                       Container(
                                         height: 12,
@@ -357,10 +347,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
                     TabBar(
                       isScrollable: true,
                       indicatorSize: TabBarIndicatorSize.tab,
-                      labelColor: theme.scaffoldBackgroundColor,
+                      labelColor: theme.hintColor,
                       dividerColor: Colors.transparent,
                       indicatorColor: theme.primaryColor,
-                      unselectedLabelColor: theme.hintColor,
+                      unselectedLabelColor: theme.cardColor,
                       overlayColor: WidgetStatePropertyAll(theme.primaryColor),
                       indicator: BoxDecoration(
                         borderRadius: BorderRadius.circular(18),
@@ -423,9 +413,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
                                 builder: (context) {
                                   return ProductDetails(
                                     productDetails: product,
-                                    sellerProductId:
-                                        product['sellerProductId'] ?? '',
-                                    // --- NEW: Pass the addToCart callback with color ---
+                                    // The `sellerProductId` key is not used in the provided code,
+                                    // but if it's needed elsewhere, ensure it's fetched correctly.
+                                    sellerProductId: product['sellerProductId'] ?? '',
                                     onAddToCart: (selectedColor) {
                                       addToCartFromProductDetails(
                                         product,
@@ -437,18 +427,16 @@ class _ShoppingPageState extends State<ShoppingPage> {
                               );
                             },
                             child: Product_Card(
-                              // --- No direct add to cart on ProductCard anymore, it's done via details ---
                               onCartPressed: () {
-                                // This won't directly add to cart anymore without a color
-                                // You might want to remove this or make it open details
+                                // This button will open the product details to allow the user
+                                // to select a color before adding to the cart.
                                 showModalBottomSheet(
                                   scrollControlDisabledMaxHeightRatio: 0.8,
                                   context: context,
                                   builder: (context) {
                                     return ProductDetails(
                                       productDetails: product,
-                                      sellerProductId:
-                                          product['sellerProductId'] ?? '',
+                                      sellerProductId: product['sellerProductId'] ?? '',
                                       onAddToCart: (selectedColor) {
                                         addToCartFromProductDetails(
                                           product,
@@ -466,9 +454,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
                               discountPercentage: product['discountPercentage'],
                               location: product['location'] ?? '',
                               isAvailable: product['isAvailable'] ?? true,
-                              availableColors:
-                                  product['availableColors'] as dynamic,
-                              // No need to pass availableColors to ProductCard itself unless it displays them
+                              availableColors: product['availableColors'] as dynamic,
                             ),
                           ),
                         );

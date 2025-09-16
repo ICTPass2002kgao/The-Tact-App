@@ -7,18 +7,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:219784074240:android:558671265ae7d1a407b4e5",
+        "mobilesdk_app_id": "1:219784074240:android:242aea938dfeb6d907b4e5",
         "android_client_info": {
-          "package_name": "com.example.ttact"
+          "package_name": "com.thetact.ttact"
         }
       },
       "oauth_client": [
         {
-          "client_id": "219784074240-23o21l36dlqig3s0klonbdskf24o2sck.apps.googleusercontent.com",
+          "client_id": "219784074240-lqnl15gqj62rcdk1v01v6hakpik81usa.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.ttact",
-            "certificate_hash": "16321dc3f35f39106216d5336cec8b1fa4f39e96"
+            "package_name": "com.thetact.ttact",
+            "certificate_hash": "4b9ee7f8571977abadaee8239e4eb3832c9d0be5"
           }
         },
         {

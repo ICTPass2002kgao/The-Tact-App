@@ -44,15 +44,14 @@ class _CartPageState extends State<CartPage> {
 
     if (cartItems.length < initialLength) {
       await updateCart();
-      setState(() {}); // Rebuild to reflect the removed item
+      setState(() {});
     }
   }
 
   void increaseQty(int index) {
     setState(() {
       int currentQuantity = (cartItems[index]['quantity'] as int?) ?? 0;
-      double productPrice =
-          (cartItems[index]['price'] as num?)?.toDouble() ?? 0.0;
+      double productPrice = (cartItems[index]['price'] as num?)?.toDouble() ?? 0.0;
       cartItems[index]['quantity'] = currentQuantity + 1;
       cartItems[index]['itemTotalPrice'] = (currentQuantity + 1) * productPrice;
     });
@@ -63,11 +62,9 @@ class _CartPageState extends State<CartPage> {
     setState(() {
       int currentQuantity = (cartItems[index]['quantity'] as int?) ?? 0;
       if (currentQuantity > 1) {
-        double productPrice =
-            (cartItems[index]['price'] as num?)?.toDouble() ?? 0.0;
+        double productPrice = (cartItems[index]['price'] as num?)?.toDouble() ?? 0.0;
         cartItems[index]['quantity'] = currentQuantity - 1;
-        cartItems[index]['itemTotalPrice'] =
-            (currentQuantity - 1) * productPrice;
+        cartItems[index]['itemTotalPrice'] = (currentQuantity - 1) * productPrice;
         updateCart();
       } else {
         // If quantity is 1 and user tries to decrease, remove the item
@@ -91,7 +88,7 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context); //Access your defined theme colors
+    final color = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: color.primaryColor,
@@ -101,7 +98,7 @@ class _CartPageState extends State<CartPage> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,
-        elevation: 0, // Remove shadow for a flat, modern look
+        elevation: 0,
       ),
       body: cartItems.isEmpty
           ? Center(
@@ -110,7 +107,7 @@ class _CartPageState extends State<CartPage> {
                 children: [
                   Lottie.network(
                     'https://lottie.host/4f43b42d-3e11-4aaf-b07e-c3352b086a45/9QoklefHek.json',
-                    width: 250, // Slightly larger Lottie
+                    width: 250,
                     height: 250,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
@@ -118,7 +115,7 @@ class _CartPageState extends State<CartPage> {
                         Icons.shopping_cart_outlined,
                         size: 100,
                         color: Colors.grey,
-                      ); // Fallback icon
+                      );
                     },
                   ),
                   const SizedBox(height: 30),
@@ -141,7 +138,7 @@ class _CartPageState extends State<CartPage> {
                   const SizedBox(height: 30),
                   ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.pop(context); // Go back to shopping
+                      Navigator.pop(context);
                     },
                     icon: const Icon(Icons.shopping_bag_outlined),
                     label: const Text('Start Shopping'),
@@ -164,9 +161,7 @@ class _CartPageState extends State<CartPage> {
               children: [
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(
-                      16.0,
-                    ), // Padding for the entire list
+                    padding: const EdgeInsets.all(16.0),
                     itemCount: cartItems.length,
                     itemBuilder: (context, index) {
                       final item = cartItems[index];
@@ -176,18 +171,14 @@ class _CartPageState extends State<CartPage> {
                           'uniqueId_${index}_${DateTime.now().microsecondsSinceEpoch}';
 
                       return Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: 12.0,
-                        ), // Space between cards
+                        padding: const EdgeInsets.only(bottom: 12.0),
                         child: Dismissible(
                           key: ValueKey(productId),
                           direction: DismissDirection.endToStart,
                           background: Container(
                             decoration: BoxDecoration(
                               color: Colors.red,
-                              borderRadius: BorderRadius.circular(
-                                12,
-                              ), // Match card border radius
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             alignment: Alignment.centerRight,
                             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -208,9 +199,6 @@ class _CartPageState extends State<CartPage> {
                                 action: SnackBarAction(
                                   label: 'UNDO',
                                   onPressed: () {
-                                    // A simple undo would re-add the item.
-                                    // For a robust undo, you'd save the dismissed item and re-insert it.
-                                    // For now, reloading the cart is the simplest way.
                                     loadCartItems();
                                   },
                                 ),
@@ -234,49 +222,43 @@ class _CartPageState extends State<CartPage> {
                 Container(
                   padding: const EdgeInsets.all(20.0),
                   decoration: BoxDecoration(
-                    color: color
-                        .scaffoldBackgroundColor, // Background for the summary
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(20),
-                    ),
+                    color: color.scaffoldBackgroundColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.grey.withOpacity(0.2),
                         spreadRadius: 2,
                         blurRadius: 10,
-                        offset: const Offset(0, -3), // Shadow at the top
+                        offset: const Offset(0, -3),
                       ),
                     ],
                   ),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,  
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Total (${cartItems.length} items):', // Show item count
+                            'Total (${cartItems.length} items):',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: color
-                                  .primaryColorDark, // Use a darker color for emphasis
+                              color: color.primaryColorDark,
                             ),
                           ),
                           Text(
                             'R${getTotalPrice().toStringAsFixed(2)}',
                             style: TextStyle(
-                              fontSize: 22, // Larger for total price
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
-                              color:
-                                  Colors.green[700], // Stronger green for total
+                              color: Colors.green[700],
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 20),
                       SizedBox(
-                        // Make button full width
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
@@ -284,22 +266,16 @@ class _CartPageState extends State<CartPage> {
                             foregroundColor: color.scaffoldBackgroundColor,
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                12,
-                              ), // More rounded corners
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            elevation: 5, // Add some elevation to the button
+                            elevation: 5,
                           ),
-                          onPressed:
-                              cartItems
-                                  .isEmpty // Disable button if cart is empty
+                          onPressed: cartItems.isEmpty
                               ? null
                               : () {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                        'Proceeding to checkout...',
-                                      ),
+                                      content: Text('Proceeding to checkout...'),
                                       duration: Duration(seconds: 1),
                                     ),
                                   );
@@ -307,7 +283,9 @@ class _CartPageState extends State<CartPage> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => PaymentGatewayPage(
-                                        cartProducts: cartItems, selectedColor: '', selectedSize: '',
+                                        cartProducts: cartItems,
+                                        selectedColor: '',
+                                        selectedSize: '',
                                       ),
                                     ),
                                   );

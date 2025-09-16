@@ -25,28 +25,26 @@ class AuthTextField extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: TextFormField(
-        
         onChanged: (value) => onChange?.call(value),
         controller: controller,
         validator: (value) => onValidate(value),
         obscureText: visible ?? false,
         decoration: InputDecoration(
-          
           border: OutlineInputBorder(
-            borderSide: BorderSide(color: color.hintColor),
+            borderSide: BorderSide(color: color.cardColor),
             borderRadius: BorderRadius.circular(15),
           ),
           focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: color.hintColor),
+            borderSide: BorderSide(color: color.cardColor),
             borderRadius: BorderRadius.circular(15),
           ),
-          focusColor: color.hintColor,
+          focusColor: color.cardColor,
           fillColor: color.scaffoldBackgroundColor,
           filled: true,
           suffixIcon: suffixIcon,
-          prefixIcon: icon != null ? Icon(icon, color: color.hintColor) : null,
+          prefixIcon: icon != null ? Icon(icon, color: color.cardColor) : null,
           hintText: placeholder,
-          hintStyle: TextStyle(color: color.hintColor),
+          hintStyle: TextStyle(color: color.cardColor),
         ),
       ),
     );

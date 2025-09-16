@@ -1,20 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/cupertino.dart'; // Import for Cupertino widgets
+import 'package:flutter/cupertino.dart';  
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart'; // For DateFormat
+import 'package:image_picker/image_picker.dart'; 
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/AdBanner.dart';
 import 'dart:io';
 
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-
-// Assuming these are your custom widgets/helpers or similar implementations
-// You might need to adjust paths if they are in different files.
-
-// Placeholder for _LoginBottomSheet
+import 'package:ttact/Components/ViewApplicationsBottomSheet.dart';
+ 
 class _LoginBottomSheet extends StatefulWidget {
   final VoidCallback onLoginSuccess;
   const _LoginBottomSheet({required this.onLoginSuccess});
@@ -108,19 +105,20 @@ class _LoginBottomSheetState extends State<_LoginBottomSheet> {
     );
   }
 }
-
-// Global instances for Firebase
+ 
 final FirebaseAuth _auth = FirebaseAuth.instance;
 final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-final FirebaseStorage _storage = FirebaseStorage.instance;
-
-// Your main StatefulWidget
-class UniversityApplicationScreen extends StatefulWidget {
-  // universityData should contain the 'uid' of the university
+final FirebaseStorage _storage = FirebaseStorage.instance; 
+class UniversityApplicationScreen extends StatefulWidget { 
   final Map<String, dynamic> universityData;
 
-  const UniversityApplicationScreen({Key? key, required this.universityData})
-    : super(key: key);
+  final Map<String, dynamic>? selectedCampus;
+
+  const UniversityApplicationScreen({
+    Key? key,
+    required this.universityData,
+    this.selectedCampus,
+  }) : super(key: key);
 
   @override
   _UniversityApplicationScreenState createState() =>
@@ -133,14 +131,12 @@ class _UniversityApplicationScreenState
   bool _isLoggedIn = false;
   bool _isLoadingAuth = false;
   bool _hasExistingApplication =
-      false; // Flag to check for existing applications
+      false; 
 
   final _formKey =
       GlobalKey<
         FormState
-      >(); // Still useful for tracking field states, though validation is manual
-
-  // Text Controllers
+      >();  
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _idPassportController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -161,40 +157,36 @@ class _UniversityApplicationScreenState
       TextEditingController();
   final TextEditingController _parent2IncomeController =
       TextEditingController();
-
-  // New controllers for "Other" course names
+ 
   final TextEditingController _otherPrimaryProgramController =
       TextEditingController();
   final TextEditingController _otherSecondChoiceProgramController =
       TextEditingController();
   final TextEditingController _otherThirdChoiceProgramController =
-      TextEditingController(); // New controller
-
-  // Selected values for dropdowns/radio buttons
-  DateTime? _dateOfBirth;
-  String? _selectedGender;
-  String? _selectedNationality;
-  String? _highestQualification;
-  List<Map<String, String>> _subjects =
-      []; // This will remain but won't be filled by user
+      TextEditingController();  
+  String? _highestQualification; 
   String? _primaryProgram;
   String? _secondChoiceProgram;
-  String? _thirdChoiceProgram; // New state variable
+  String? _thirdChoiceProgram; 
   String? _preferredStartDate;
   bool _applyingForResidence = false;
   bool _applyingForFunding = false;
-
-  // File variables
+ 
   File? _idPassportFile;
   File? _schoolResultsFile;
   File? _proofOfRegistrationFile;
   List<File> _otherQualificationFiles = [];
-  File? _passportPhotoFile;
-
+  File? _passportPhotoFile; 
+  String? _idPassportUrl;
+  String? _schoolResultsUrl;
+  String? _passportPhotoUrl;
+  AdManager adManager = AdManager();
   @override
   void initState() {
     super.initState();
     _checkCurrentUserAndApplications();
+    adManager.loadRewardedInterstitialAd();
+    adManager.loadInterstitialAd();
   }
 
   @override
@@ -214,7 +206,7 @@ class _UniversityApplicationScreenState
     _parent2IncomeController.dispose();
     _otherPrimaryProgramController.dispose();
     _otherSecondChoiceProgramController.dispose();
-    _otherThirdChoiceProgramController.dispose(); // Dispose new controller
+    _otherThirdChoiceProgramController.dispose();  
     super.dispose();
   }
 
@@ -226,7 +218,17 @@ class _UniversityApplicationScreenState
     if (_currentUser != null) {
       _isLoggedIn = true;
       await _fetchUserDetails();
-      await _checkExistingApplications(); // Check for existing applications
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .get();
+      if (userDoc.exists &&
+          userDoc.data()!.containsKey('isFirstApplication') &&
+          userDoc.data()!['isFirstApplication'] == false) {
+        await _preFillApplicationData();  
+      }
+
+      await _checkExistingApplications();  
     } else {
       _isLoggedIn = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -250,12 +252,49 @@ class _UniversityApplicationScreenState
             '${userData['name'] ?? ''} ${userData['surname'] ?? ''}';
         _emailController.text = userData['email'] ?? '';
         _physicalAddressController.text = userData['address'] ?? '';
+        _phoneController.text = userData['phone'] ?? '';
       }
-      setState(() {}); // Update UI with pre-filled data
+      setState(() {}); 
     }
   }
 
-  // New method to check for existing applications, using university's UID
+  Future<void> _preFillApplicationData() async {
+    if (_currentUser != null) {
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .get();
+      if (userDoc.exists) {
+        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+ 
+        _fullNameController.text = userData['fullName'] ?? '';
+        _idPassportController.text = userData['idPassport'] ?? '';
+        _phoneController.text = userData['phone'] ?? '';
+        _emailController.text = userData['email'] ?? '';
+        _physicalAddressController.text = userData['physicalAddress'] ?? '';
+        _previousSchoolsController.text = userData['previousSchools'] ?? '';
+        _yearCompletionController.text = userData['yearOfCompletion'] ?? '';
+        _parent1NameController.text = userData['parent1Name'] ?? '';
+        _parent1OccupationController.text = userData['parent1Occupation'] ?? '';
+        _parent1IncomeController.text = userData['parent1Income'] ?? '';
+        _parent2NameController.text = userData['parent2Name'] ?? '';
+        _parent2OccupationController.text = userData['parent2Occupation'] ?? '';
+        _parent2IncomeController.text = userData['parent2Income'] ?? '';
+ 
+        final Map<String, dynamic>? profileDocs = userData['profileDocuments'];
+        if (profileDocs != null) {
+          _idPassportUrl = profileDocs['idPassportUrl'];
+          _schoolResultsUrl = profileDocs['schoolResultsUrl'];
+          _passportPhotoUrl = profileDocs['passportPhotoUrl'];
+        }
+
+        setState(() {
+          _highestQualification = userData['highestQualification'];
+        });
+      }
+    }
+  }
+ 
   Future<void> _checkExistingApplications() async {
     if (_currentUser != null && widget.universityData.containsKey('uid')) {
       final String uid = widget.universityData['uid'];
@@ -263,14 +302,13 @@ class _UniversityApplicationScreenState
           .collection('users')
           .doc(_currentUser!.uid)
           .collection('university_applications')
-          .where('applicationDetails.uid', isEqualTo: uid) // Use uid here
+          .where('applicationDetails.uid', isEqualTo: uid)  
           .limit(1)
           .get();
       setState(() {
         _hasExistingApplication = applicationSnapshot.docs.isNotEmpty;
       });
-    } else {
-      // Handle case where universityData might not have 'uid' (though it should)
+    } else { 
       print(
         "Warning: universityData does not contain 'uid'. Cannot check for existing applications.",
       );
@@ -291,21 +329,19 @@ class _UniversityApplicationScreenState
           ),
           child: _LoginBottomSheet(
             onLoginSuccess: () {
-              Navigator.pop(context); // Close bottom sheet
-              _checkCurrentUserAndApplications(); // Re-check user status and applications
+              Navigator.pop(context);  
+              _checkCurrentUserAndApplications(); 
             },
           ),
         );
       },
-    ).whenComplete(() {
-      // Only pop if the user hasn't successfully logged in after closing the sheet
+    ).whenComplete(() { 
       if (!_isLoggedIn) {
-        Navigator.pop(context); // Go back if not logged in after closing
+        Navigator.pop(context);  
       }
     });
   }
-
-  // --- File Picking Functions ---
+ 
   Future<void> _pickImage(ImageSource source, Function(File?) onPicked) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source);
@@ -361,16 +397,12 @@ class _UniversityApplicationScreenState
 
   Future<void> _submitApplication() async {
     // Manual validation for CupertinoTextFields
+
     if (_fullNameController.text.isEmpty ||
-        _idPassportController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _emailController.text.isEmpty ||
         _physicalAddressController.text.isEmpty ||
-        _previousSchoolsController.text.isEmpty ||
         _yearCompletionController.text.isEmpty ||
-        _dateOfBirth == null ||
-        _selectedGender == null ||
-        _selectedNationality == null ||
         _highestQualification == null ||
         _primaryProgram == null) {
       Api().showMessage(
@@ -414,8 +446,7 @@ class _UniversityApplicationScreenState
       );
       return;
     }
-
-    // Additional validation for numbers and emails
+ 
     if (int.tryParse(_yearCompletionController.text) == null) {
       Api().showMessage(
         context,
@@ -437,9 +468,7 @@ class _UniversityApplicationScreenState
 
     if (_applyingForFunding == true) {
       if (_parent1NameController.text.isEmpty ||
-          _parent1OccupationController.text.isEmpty ||
-          _parent1IncomeController.text.isEmpty ||
-          double.tryParse(_parent1IncomeController.text) == null) {
+          _parent1OccupationController.text.isEmpty) {
         Api().showMessage(
           context,
           'Missing Funding Details',
@@ -451,12 +480,28 @@ class _UniversityApplicationScreenState
     }
 
     // Basic file validation
-    if (_idPassportFile == null ||
-        _schoolResultsFile == null ||
-        _passportPhotoFile == null) {
+    if (_idPassportFile == null && _idPassportUrl == null) {
       Api().showMessage(
         context,
-        'Please upload all mandatory documents (ID/Passport, School Results, Passport Photo).',
+        'Please upload a certified copy of your ID or Passport.',
+        '',
+        Theme.of(context).primaryColorDark,
+      );
+      return;
+    }
+    if (_schoolResultsFile == null && _schoolResultsUrl == null) {
+      Api().showMessage(
+        context,
+        'Please upload your latest school or final Grade 12 results.',
+        '',
+        Theme.of(context).primaryColorDark,
+      );
+      return;
+    }
+    if (_passportPhotoFile == null && _passportPhotoUrl == null) {
+      Api().showMessage(
+        context,
+        'Please upload a passport-sized photo.',
         '',
         Theme.of(context).primaryColorDark,
       );
@@ -479,20 +524,30 @@ class _UniversityApplicationScreenState
       '',
       Theme.of(context).primaryColor,
     );
-
+    Api().showLoading(context);
     try {
-      // 1. Upload Documents to Firebase Storage
-      // Use _currentUser!.uid to create unique paths for each user
+      // 1. Upload new documents if they don't already exist
       String storagePathPrefix = 'applications/${_fullNameController.text}/';
 
-      String? idPassportUrl = await _uploadFile(
-        _idPassportFile!,
-        '${storagePathPrefix}id_passport.pdf',
-      );
-      String? schoolResultsUrl = await _uploadFile(
-        _schoolResultsFile!,
-        '${storagePathPrefix}school_results.pdf',
-      );
+      String? idPassportUrl =
+          _idPassportUrl ??
+          await _uploadFile(
+            _idPassportFile!,
+            '${storagePathPrefix}id_passport.pdf',
+          );
+      String? schoolResultsUrl =
+          _schoolResultsUrl ??
+          await _uploadFile(
+            _schoolResultsFile!,
+            '${storagePathPrefix}school_results.pdf',
+          );
+      String? passportPhotoUrl =
+          _passportPhotoUrl ??
+          await _uploadFile(
+            _passportPhotoFile!,
+            '${storagePathPrefix}passport_photo.jpg',
+          );
+
       String? proofOfRegistrationUrl = _proofOfRegistrationFile != null
           ? await _uploadFile(
               _proofOfRegistrationFile!,
@@ -507,12 +562,31 @@ class _UniversityApplicationScreenState
         );
         if (url != null) otherQualificationUrls.add(url);
       }
-      String? passportPhotoUrl = await _uploadFile(
-        _passportPhotoFile!,
-        '${storagePathPrefix}passport_photo.jpg',
-      );
 
-      // Determine final program names (handle "Other" selection)
+      // 1.1 Save user's personal and academic data to their main profile
+      await _firestore.collection('users').doc(_currentUser!.uid).set({
+        'fullName': _fullNameController.text,
+        'idPassport': _idPassportController.text,
+        'phone': _phoneController.text,
+        'email': _emailController.text,
+        'physicalAddress': _physicalAddressController.text,
+        'highestQualification': _highestQualification,
+        'previousSchools': _previousSchoolsController.text,
+        'yearOfCompletion': _yearCompletionController.text,
+        'parent1Name': _parent1NameController.text,
+        'parent1Occupation': _parent1OccupationController.text,
+        'parent1Income': _parent1IncomeController.text,
+        'parent2Name': _parent2NameController.text,
+        'parent2Occupation': _parent2OccupationController.text,
+        'parent2Income': _parent2IncomeController.text,
+        'profileDocuments': {
+          'idPassportUrl': idPassportUrl,
+          'schoolResultsUrl': schoolResultsUrl,
+          'passportPhotoUrl': passportPhotoUrl,
+        },
+        'isFirstApplication': false,
+      }, SetOptions(merge: true));
+ 
       String finalPrimaryProgram = _primaryProgram == 'Other'
           ? _otherPrimaryProgramController.text
           : _primaryProgram!;
@@ -523,9 +597,7 @@ class _UniversityApplicationScreenState
           _thirdChoiceProgram ==
               'Other' // New final program
           ? _otherThirdChoiceProgramController.text
-          : _thirdChoiceProgram;
-
-      // Get the uid (which is the document ID for the university/branch)
+          : _thirdChoiceProgram; 
       final String? uid = widget.universityData['uid'];
 
       if (uid == null) {
@@ -535,23 +607,17 @@ class _UniversityApplicationScreenState
           'Please ensure the university data passed has a "uid" field.',
           Theme.of(context).primaryColorDark,
         );
-        return; // Abort if we can't identify the university/branch
-      }
-
-      // 2. Prepare Application Data for Firestore
+        Navigator.pop(context);
+        return;   }
+ 
       Map<String, dynamic> applicationData = {
         'userId': _currentUser!.uid,
         'email': _emailController.text,
         'fullName': _fullNameController.text,
-        'idPassportNumber': _idPassportController.text,
-        'dateOfBirth': _dateOfBirth?.toIso8601String(),
-        'gender': _selectedGender,
-        'nationality': _selectedNationality,
         'phone': _phoneController.text,
         'physicalAddress': _physicalAddressController.text,
         'previousSchools': _previousSchoolsController.text,
         'highestQualification': _highestQualification,
-        'subjectsAndMarks': _subjects, // This remains, but won't be user-filled
         'yearOfCompletion': _yearCompletionController.text,
         'primaryProgram': finalPrimaryProgram, // Use final program name
         'secondChoiceProgram':
@@ -577,10 +643,9 @@ class _UniversityApplicationScreenState
         'submissionDate': FieldValue.serverTimestamp(),
         'status': 'Submitted', // Initial status for user's record
         'uid': uid, // Use university's UID here
-      };
+        'selectedUniversity': widget.selectedCampus,
+      }; 
 
-      // 3. Save to `application_requests` collection (for a global view)
-      // This collection can be used for admin dashboards that need to see all requests.
       DocumentReference globalApplicationRequestRef = await _firestore
           .collection('application_requests')
           .add({
@@ -588,39 +653,33 @@ class _UniversityApplicationScreenState
             'universityName': widget.universityData['universityName'],
             'campus': widget.universityData['campusName'],
             'primaryProgram': widget.universityData['primaryProgram'],
-            'applicationDetails': applicationData, // Embed all details
+            'applicationDetails': applicationData,  
             'submissionDate': FieldValue.serverTimestamp(),
-            'status': 'New', // Status for university's queue
-            'uid': uid, // Link to the specific university using UID
-          });
-
-      // 4. Save to the specific university's (tactso_branch's) application_requests subcollection
-      // This is for the university itself to easily retrieve its incoming applications.
+            'status': 'New', 
+            'uid': uid,  
+          }); 
       await _firestore
           .collection('tactso_branches')
-          .doc(uid) // Use the uid as the document ID for the branch
+          .doc(uid) 
           .collection(
             'application_requests',
-          ) // The subcollection for applications
+          )  
           .doc(
             globalApplicationRequestRef.id,
-          ) // Use the same ID as the global request
+          )  
           .set({
             'userId': _currentUser!.uid,
             'applicationDetails': applicationData,
             'universityName': widget.universityData['universityName'],
             'campus': widget.universityData['campusName'],
             'primaryProgram':
-                widget.universityData['primaryProgram'], // Embed all details
+                widget.universityData['primaryProgram'] ,
             'submissionDate': FieldValue.serverTimestamp(),
             'status': 'New',
-            'uid': uid, // Use university's UID here
+            'uid': uid, 
             'globalApplicationRequestId': globalApplicationRequestRef
-                .id, // Reference back to global request
-          });
-
-      // 5. Save to user's `university_applications` sub-collection
-      // This is for the user to track their own applications.
+                .id,  
+          }); 
       await _firestore
           .collection('users')
           .doc(_currentUser!.uid)
@@ -630,28 +689,28 @@ class _UniversityApplicationScreenState
             'universityName': widget.universityData['universityName'],
             'campus': widget.universityData['campusName'],
             'primaryProgram':
-                widget.universityData['primaryProgram'], // Embed all details
+                widget.universityData['primaryProgram'], 
             'submissionDate': FieldValue.serverTimestamp(),
-            'status': 'Submitted', // Status for user's record
+            'status': 'Submitted',  
             'applicationRequestId':
-                globalApplicationRequestRef.id, // Reference to central request
+                globalApplicationRequestRef.id, 
           });
-
+      Navigator.pop(context);
+      adManager.showRewardedInterstitialAd((ad, reward) {
+        print('User earned reward: ${reward.amount} ${reward.type}');
+      });
       Api().showMessage(
         context,
         'Application Submitted Successfully!',
         'Your application for ${widget.universityData['name'] ?? 'the university'} has been sent.',
         Theme.of(context).splashColor,
-      );
-
-      // Update local state to prevent re-submission from the same page
+      ); 
       setState(() {
         _hasExistingApplication = true;
-      });
-
-      // Optionally navigate away or provide option to view status
-      Navigator.pop(context); // Go back to the previous page
+      }); 
+      Navigator.pop(context);  
     } catch (e) {
+      Navigator.pop(context);
       Api().showMessage(
         context,
         'Error submitting your application: ${e.toString()}',
@@ -692,7 +751,6 @@ class _UniversityApplicationScreenState
     );
   }
 
-  // New helper for CupertinoTextField
   Widget _buildCupertinoTextField({
     required TextEditingController controller,
     required String placeholder,
@@ -726,25 +784,38 @@ class _UniversityApplicationScreenState
     );
   }
 
-  // Removed _buildSubjectList() as it's no longer needed
-
   Widget _buildFilePickerTile({
     required String title,
     required File? file,
+    required String? url, // Added url parameter
     required Function(File?) onPick,
     bool isOptional = false,
   }) {
+    final bool hasFile = file != null || url != null;
+    final String subtitleText = hasFile
+        ? 'Already uploaded'
+        : 'No file selected';
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       child: CupertinoListTile(
-        // Using CupertinoListTile for consistency
         title: Text(title + (isOptional ? ' (Optional)' : '')),
-        subtitle: Text(file?.path.split('/').last ?? 'No file selected'),
-        trailing: const Icon(CupertinoIcons.paperclip), // Cupertino icon
-        onTap: () async {
-          await onPick(null); // Passing null to indicate re-picking or clearing
-          setState(() {}); // Refresh UI after picking
-        },
+        subtitle: Text(subtitleText),
+        trailing: Icon(
+          hasFile
+              ? CupertinoIcons.check_mark_circled_solid
+              : CupertinoIcons.paperclip,
+          color: hasFile
+              ? CupertinoColors.activeGreen
+              : CupertinoColors.systemGrey,
+        ),
+        onTap: hasFile
+            ? null
+            : () async {
+                // Disable onTap if file exists
+                await onPick(null);
+                setState(() {});
+              },
       ),
     );
   }
@@ -776,12 +847,43 @@ class _UniversityApplicationScreenState
     );
   }
 
+  void _showApplicationDetailsSheet() {
+    if (_currentUser == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent, // Makes the background transparent
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: ViewApplicationBottomSheet(
+            userId: _currentUser!.uid,
+            universityUid: widget.universityData['uid'],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    final bool hasExistingData = _currentUser != null;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New University Application'),
+        title: Column(
+          children: [
+            const Text('New University Application at'),
+            Text(widget.selectedCampus?['campusName'] ?? ''),
+          ],
+        ),
         backgroundColor: color.primaryColor,
       ),
       body: _isLoadingAuth
@@ -797,18 +899,15 @@ class _UniversityApplicationScreenState
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'You have already submitted an application for ${widget.universityData['name'] ?? 'this university'}.',
+                            'You have already submitted an application for ${widget.universityData['universityName'] ?? 'this university'}.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontSize: 18),
                           ),
                           const SizedBox(height: 20),
                           CupertinoButton.filled(
-                            // Cupertino button
-                            onPressed: () {
-                              // Navigate to applications status page
-                              Navigator.pushNamed(context, '/my_applications');
-                            },
-                            child: const Text('View My Applications'),
+                            // This is the button to display the bottom sheet
+                            onPressed: _showApplicationDetailsSheet,
+                            child: const Text('View My Application'),
                           ),
                         ],
                       ),
@@ -827,140 +926,15 @@ class _UniversityApplicationScreenState
                             controller: _fullNameController,
                             placeholder: 'Full Name (as on ID/Passport)',
                             prefixIcon: CupertinoIcons.person,
-                            readOnly: _currentUser != null,
+                            readOnly: hasExistingData,
                             // Validation handled manually on submit
-                          ),
-                          _buildCupertinoTextField(
-                            controller: _idPassportController,
-                            placeholder: 'ID Number or Passport Number',
-                            prefixIcon: CupertinoIcons.creditcard,
-                            keyboardType: TextInputType.text,
-                            // Validation handled manually on submit
-                          ),
-                          CupertinoListTile(
-                            // CupertinoListTile for date picker
-                            title: Text(
-                              _dateOfBirth == null
-                                  ? 'Date of Birth'
-                                  : 'Date of Birth: ${DateFormat('yyyy-MM-dd').format(_dateOfBirth!)}',
-                            ),
-                            trailing: const Icon(CupertinoIcons.calendar),
-                            onTap: () async {
-                              await showCupertinoModalPopup(
-                                // Cupertino date picker
-                                context: context,
-                                builder: (BuildContext context) => Container(
-                                  height: 250,
-                                  padding: const EdgeInsets.only(top: 6.0),
-                                  margin: EdgeInsets.only(
-                                    bottom: MediaQuery.of(
-                                      context,
-                                    ).viewInsets.bottom,
-                                  ),
-                                  color: CupertinoColors.systemBackground
-                                      .resolveFrom(context),
-                                  child: SafeArea(
-                                    top: false,
-                                    child: CupertinoDatePicker(
-                                      initialDateTime:
-                                          _dateOfBirth ??
-                                          DateTime.now().subtract(
-                                            const Duration(days: 365 * 18),
-                                          ),
-                                      mode: CupertinoDatePickerMode.date,
-                                      use24hFormat: true,
-                                      onDateTimeChanged: (DateTime newDate) {
-                                        setState(() {
-                                          _dateOfBirth = newDate;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildExpansionTile(
-                            title: 'Gender',
-                            children: [
-                              CupertinoListTile(
-                                title: const Text('Male'),
-                                trailing: CupertinoRadio<String>(
-                                  value: 'Male',
-                                  groupValue: _selectedGender,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedGender = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                              CupertinoListTile(
-                                title: const Text('Female'),
-                                trailing: CupertinoRadio<String>(
-                                  value: 'Female',
-                                  groupValue: _selectedGender,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedGender = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                              CupertinoListTile(
-                                title: const Text('Prefer not to say'),
-                                trailing: CupertinoRadio<String>(
-                                  value: 'Prefer not to say',
-                                  groupValue: _selectedGender,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedGender = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                            currentValue: _selectedGender,
-                          ),
-                          _buildExpansionTile(
-                            title: 'Nationality',
-                            children: [
-                              // CupertinoPicker or CupertinoActionSheet would be more native here
-                              DropdownButtonFormField<String>(
-                                // Keeping this as a regular dropdown for simplicity with validation
-                                value: _selectedNationality,
-                                hint: const Text('Select Nationality'),
-                                items:
-                                    [
-                                          'South African',
-                                          'Zimbabwean',
-                                          'Botswanan',
-                                          'Other',
-                                        ]
-                                        .map(
-                                          (country) => DropdownMenuItem(
-                                            value: country,
-                                            child: Text(country),
-                                          ),
-                                        )
-                                        .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _selectedNationality = value;
-                                  });
-                                },
-                                validator: (value) => value == null
-                                    ? 'Required'
-                                    : null, // Still using validator here
-                              ),
-                            ],
-                            currentValue: _selectedNationality,
                           ),
                           _buildCupertinoTextField(
                             controller: _phoneController,
                             placeholder: 'Phone Number',
                             prefixIcon: CupertinoIcons.phone,
                             keyboardType: TextInputType.phone,
+                            readOnly: hasExistingData,
                             // Validation handled manually on submit
                           ),
                           _buildCupertinoTextField(
@@ -976,21 +950,13 @@ class _UniversityApplicationScreenState
                             placeholder: 'Physical & Postal Address',
                             prefixIcon: CupertinoIcons.location_solid,
                             maxLines: 3,
-                            readOnly: _currentUser != null,
+                            readOnly: hasExistingData,
                             // Validation handled manually on submit
                           ),
                           const SizedBox(height: 20),
 
                           // Academic History Section
                           _buildSectionTitle('2. Academic History'),
-                          _buildCupertinoTextField(
-                            controller: _previousSchoolsController,
-                            placeholder:
-                                'Name(s) of previous schools/institutions',
-                            prefixIcon: CupertinoIcons.building_2_fill,
-                            maxLines: 2,
-                            // Validation handled manually on submit
-                          ),
                           _buildExpansionTile(
                             title: 'Highest Qualification',
                             children: [
@@ -1017,11 +983,13 @@ class _UniversityApplicationScreenState
                                           ),
                                         )
                                         .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _highestQualification = value;
-                                  });
-                                },
+                                onChanged: hasExistingData
+                                    ? null
+                                    : (value) {
+                                        setState(() {
+                                          _highestQualification = value;
+                                        });
+                                      },
                                 validator: (value) =>
                                     value == null ? 'Required' : null,
                               ),
@@ -1035,6 +1003,7 @@ class _UniversityApplicationScreenState
                                 'Year of Completion of Last Qualification',
                             prefixIcon: CupertinoIcons.calendar,
                             keyboardType: TextInputType.number,
+                            readOnly: hasExistingData,
                             // Validation handled manually on submit
                           ),
                           const SizedBox(height: 20),
@@ -1044,6 +1013,7 @@ class _UniversityApplicationScreenState
                           _buildFilePickerTile(
                             title: 'Certified Copy of ID or Passport',
                             file: _idPassportFile,
+                            url: _idPassportUrl,
                             onPick: (file) =>
                                 _pickFile((p0) => _idPassportFile = p0),
                           ),
@@ -1051,12 +1021,15 @@ class _UniversityApplicationScreenState
                             title:
                                 'Latest School Results or Final Grade 12 Results',
                             file: _schoolResultsFile,
+                            url: _schoolResultsUrl,
                             onPick: (file) =>
                                 _pickFile((p0) => _schoolResultsFile = p0),
                           ),
                           _buildFilePickerTile(
                             title: 'Proof of Registration (if transferring)',
                             file: _proofOfRegistrationFile,
+                            url:
+                                null, // This document is always optional and can be re-uploaded
                             onPick: (file) => _pickFile(
                               (p0) => _proofOfRegistrationFile = p0,
                             ),
@@ -1074,6 +1047,7 @@ class _UniversityApplicationScreenState
                           _buildFilePickerTile(
                             title: 'Passport-sized Photo',
                             file: _passportPhotoFile,
+                            url: _passportPhotoUrl,
                             onPick: (file) => _pickImage(
                               ImageSource.gallery,
                               (p0) => _passportPhotoFile = p0,
@@ -1214,199 +1188,60 @@ class _UniversityApplicationScreenState
                             ],
                             currentValue: _thirdChoiceProgram,
                           ),
-                          CupertinoListTile(
-                            // CupertinoListTile for date picker
-                            title: Text(
-                              'Preferred Start Date: ${_preferredStartDate ?? 'Select'}',
-                            ),
-                            trailing: const Icon(CupertinoIcons.calendar),
-                            onTap: () async {
-                              await showCupertinoModalPopup(
-                                context: context,
-                                builder: (BuildContext context) => Container(
-                                  height: 250,
-                                  padding: const EdgeInsets.only(top: 6.0),
-                                  margin: EdgeInsets.only(
-                                    bottom: MediaQuery.of(
-                                      context,
-                                    ).viewInsets.bottom,
-                                  ),
-                                  color: CupertinoColors.systemBackground
-                                      .resolveFrom(context),
-                                  child: SafeArea(
-                                    top: false,
-                                    child: CupertinoDatePicker(
-                                      initialDateTime: DateTime.now(),
-                                      mode: CupertinoDatePickerMode.date,
-                                      use24hFormat: true,
-                                      onDateTimeChanged: (DateTime newDate) {
-                                        setState(() {
-                                          _preferredStartDate = DateFormat(
-                                            'yyyy-MM-dd',
-                                          ).format(newDate);
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                          // Checkboxes
-                          CupertinoListTile(
-                            // Using CupertinoListTile with CupertinoSwitch
-                            title: const Text('Applying for Residence?'),
-                            trailing: CupertinoSwitch(
-                              value: _applyingForResidence,
-                              onChanged: (bool value) {
-                                setState(() {
-                                  _applyingForResidence = value;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          CupertinoListTile(
-                            // Using CupertinoListTile with CupertinoSwitch
-                            title: const Text('Applying for Funding/Bursary?'),
-                            trailing: CupertinoSwitch(
-                              value: _applyingForFunding,
-                              onChanged: (bool value) {
-                                setState(() {
-                                  _applyingForFunding = value;
-                                });
-                              },
-                            ),
-                          ),
                           const SizedBox(height: 20),
 
                           // Financial & Residence Details Section
                           _buildSectionTitle(
                             '5. Financial & Residence Details',
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Are you applying for university residence/accommodation?',
-                                style: TextStyle(fontSize: 16),
-                              ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: CupertinoListTile(
-                                      // Using CupertinoListTile with Radio
-                                      title: const Text('Yes'),
-                                      trailing: CupertinoRadio<bool>(
-                                        value: true,
-                                        groupValue: _applyingForResidence,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _applyingForResidence = value!;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: CupertinoListTile(
-                                      // Using CupertinoListTile with Radio
-                                      title: const Text('No'),
-                                      trailing: CupertinoRadio<bool>(
-                                        value: false,
-                                        groupValue: _applyingForResidence,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _applyingForResidence = value!;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_applyingForResidence == true)
-                                const Padding(
-                                  padding: EdgeInsets.only(
-                                    left: 16.0,
-                                    bottom: 8.0,
-                                  ),
-                                  child: Text(
-                                    'Note: Complete a separate residence application.',
-                                    style: TextStyle(
-                                      fontStyle: FontStyle.italic,
-                                      color: CupertinoColors.systemGrey,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
+
                           const SizedBox(height: 10),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Are you applying for funding/bursaries?',
-                                style: TextStyle(fontSize: 16),
+                              // Checkboxes
+                              CupertinoListTile(
+                                // Using CupertinoListTile with CupertinoSwitch
+                                title: const Text('Applying for Residence?'),
+                                trailing: CupertinoSwitch(
+                                  value: _applyingForResidence,
+                                  onChanged: (bool value) {
+                                    setState(() {
+                                      _applyingForResidence = value;
+                                    });
+                                  },
+                                ),
                               ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: CupertinoListTile(
-                                      title: const Text('Yes'),
-                                      trailing: CupertinoRadio<bool>(
-                                        value: true,
-                                        groupValue: _applyingForFunding,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _applyingForFunding = value!;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: CupertinoListTile(
-                                      title: const Text('No'),
-                                      trailing: CupertinoRadio<bool>(
-                                        value: false,
-                                        groupValue: _applyingForFunding,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _applyingForFunding = value!;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(height: 8),
+                              CupertinoListTile(
+                                // Using CupertinoListTile with CupertinoSwitch
+                                title: const Text(
+                                  'Applying for Funding/Bursary?',
+                                ),
+                                trailing: CupertinoSwitch(
+                                  value: _applyingForFunding,
+                                  onChanged: (bool value) {
+                                    setState(() {
+                                      _applyingForFunding = value;
+                                    });
+                                  },
+                                ),
                               ),
-                              if (_applyingForFunding == true) ...[
-                                const Padding(
-                                  padding: EdgeInsets.only(
-                                    left: 16.0,
-                                    bottom: 8.0,
-                                  ),
-                                  child: Text(
-                                    'Additional forms may be needed for financial aid.',
-                                    style: TextStyle(
-                                      fontStyle: FontStyle.italic,
-                                      color: CupertinoColors.systemGrey,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                _buildCupertinoTextField(
-                                  controller: _parent1NameController,
-                                  placeholder: 'Parent/Guardian 1 Full Name',
-                                  prefixIcon: CupertinoIcons.person_solid,
-                                ),
-                                _buildCupertinoTextField(
-                                  controller: _parent1OccupationController,
-                                  placeholder: 'Parent/Guardian 1 Occupation',
-                                  prefixIcon: CupertinoIcons.bag_fill,
-                                ),
+
+                              const SizedBox(height: 10),
+                              _buildCupertinoTextField(
+                                controller: _parent1NameController,
+                                placeholder: 'Parent/Guardian 1 Full Name',
+                                prefixIcon: CupertinoIcons.person_solid,
+                                readOnly: hasExistingData,
+                              ),
+                              _buildCupertinoTextField(
+                                controller: _parent1OccupationController,
+                                placeholder: 'Parent/Guardian 1 Occupation',
+                                prefixIcon: CupertinoIcons.bag_fill,
+                                readOnly: hasExistingData,
+                              ),
+                              if (_applyingForFunding)
                                 _buildCupertinoTextField(
                                   controller: _parent1IncomeController,
                                   placeholder:
@@ -1414,29 +1249,8 @@ class _UniversityApplicationScreenState
                                   prefixIcon:
                                       CupertinoIcons.money_dollar_circle_fill,
                                   keyboardType: TextInputType.number,
+                                  readOnly: hasExistingData,
                                 ),
-                                const SizedBox(height: 10),
-                                _buildCupertinoTextField(
-                                  controller: _parent2NameController,
-                                  placeholder:
-                                      'Parent/Guardian 2 Full Name (Optional)',
-                                  prefixIcon: CupertinoIcons.person_solid,
-                                ),
-                                _buildCupertinoTextField(
-                                  controller: _parent2OccupationController,
-                                  placeholder:
-                                      'Parent/Guardian 2 Occupation (Optional)',
-                                  prefixIcon: CupertinoIcons.bag_fill,
-                                ),
-                                _buildCupertinoTextField(
-                                  controller: _parent2IncomeController,
-                                  placeholder:
-                                      'Parent/Guardian 2 Annual Income (Optional)',
-                                  prefixIcon:
-                                      CupertinoIcons.money_dollar_circle_fill,
-                                  keyboardType: TextInputType.number,
-                                ),
-                              ],
                             ],
                           ),
                           const SizedBox(height: 20),

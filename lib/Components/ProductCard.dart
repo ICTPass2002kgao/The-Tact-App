@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:flutter/material.dart'; 
 
 class Product_Card extends StatefulWidget {
   final String? imageUrl;

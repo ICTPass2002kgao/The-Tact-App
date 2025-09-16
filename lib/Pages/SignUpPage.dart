@@ -1,17 +1,21 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/cupertino.dart'; // Import for Cupertino widgets
-import 'package:flutter/material.dart'; // Still needed for Scaffold, Material, etc.
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:http/http.dart' as http;
+import 'package:ttact/Components/AdBanner.dart';
 
-// Assuming these are your custom components.
-// I'll re-implement their basic functionality using Cupertino widgets for consistency.
 import '../Components/CustomOutlinedButton.dart';
-import '../Components/API.dart'; // Your API class
+import '../Components/API.dart';
 
-// Custom CupertinoTextField Builder for reusability
-Widget _buildCupertinoTextField({
+// Custom platform-aware TextField Builder
+Widget _buildPlatformTextField({
   required TextEditingController controller,
   required String placeholder,
   IconData? prefixIcon,
@@ -20,48 +24,148 @@ Widget _buildCupertinoTextField({
   bool readOnly = false,
   int? maxLines = 1,
   String? Function(String?)? validator,
-  CupertinoButton? suffixIcon, // For manual validation
+  Widget? suffixIcon,
+  required BuildContext context,
 }) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 8.0),
-    child: CupertinoTextField(
-      controller: controller,
-      placeholder: placeholder,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      readOnly: readOnly,
-      maxLines: maxLines,
-      decoration: BoxDecoration(
-        border: Border.all(color: CupertinoColors.systemGrey4),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      padding: const EdgeInsets.all(12.0),
-      prefix: prefixIcon != null
-          ? Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
-            )
-          : null,
-      suffixMode:
-          OverlayVisibilityMode.editing, // Show suffix only when editing
-      suffix:
-          obscureText // Only show suffix if it's a password field
-          ? GestureDetector(
-              onTap: () {
-                // This will need to be handled by the parent widget's setState
-                // if you want to toggle visibility directly within this builder.
-                // For simplicity, I'm assuming obscureText is controlled externally.
-              },
-              child: Icon(
-                obscureText
-                    ? CupertinoIcons.eye_slash_fill
-                    : CupertinoIcons.eye_fill,
-                color: CupertinoColors.systemGrey,
+    child: Platform.isIOS
+        ? CupertinoTextField(
+            controller: controller,
+            placeholder: placeholder,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: BoxDecoration(
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(12.0),
+            prefix: prefixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+                  )
+                : null,
+            suffixMode: OverlayVisibilityMode.editing,
+            suffix: suffixIcon,
+          )
+        : TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: InputDecoration(
+              hintText: placeholder,
+              prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+              suffixIcon: suffixIcon,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.0),
               ),
-            )
-          : null,
-    ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 16.0,
+              ),
+            ),
+            validator: validator,
+          ),
   );
+}
+
+// Custom platform-aware ListTile Builder
+Widget _buildListTile({
+  required String title,
+  required String trailingText,
+  required VoidCallback onTap,
+  required BuildContext context,
+}) {
+  if (Platform.isIOS) {
+    return CupertinoListTile(
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText),
+          const Icon(CupertinoIcons.chevron_right),
+        ],
+      ),
+      onTap: onTap,
+    );
+  } else {
+    return ListTile(
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText),
+          const Icon(Icons.arrow_forward_ios, size: 16),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+// Custom platform-aware Action Sheet Builder
+void _buildActionSheet({
+  required BuildContext context,
+  required String title,
+  required List<String> actions,
+  required ValueChanged<String> onSelected,
+}) {
+  if (Platform.isIOS) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: Text(title),
+        actions: actions.map((item) {
+          return CupertinoActionSheetAction(
+            child: Text(item),
+            onPressed: () {
+              onSelected(item);
+              Navigator.pop(context);
+            },
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  } else {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) => Container(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const Divider(),
+            ...actions.map((item) {
+              return ListTile(
+                title: Text(item),
+                onTap: () {
+                  onSelected(item);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class SignUpPage extends StatefulWidget {
@@ -77,18 +181,20 @@ class _SignUpPageState extends State<SignUpPage> {
   TextEditingController txtSurname = TextEditingController();
   TextEditingController txtAddress = TextEditingController();
   TextEditingController txtContactNumber = TextEditingController();
+  TextEditingController txtAccountNumber = TextEditingController();
+  TextEditingController txtBankCodeController = TextEditingController();
 
   TextEditingController txtPassword = TextEditingController();
   TextEditingController txtConfirmPassword = TextEditingController();
-  final _formKey = GlobalKey<FormState>(); // Used for overall form state
+  final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool isChecked = false;
   Api backendService = Api();
-  List<String> roles = ['Member', 'Seller']; // Stronger type
-  String? role; // Made nullable to reflect initial no selection
+  List<String> roles = ['Member', 'Seller'];
+  String? role;
 
-  String? selectedMemberUid; // The UID of the selected overseer
+  String? selectedMemberUid;
   String? selectedProvince;
   List<String> provinces = [
     'Gauteng',
@@ -107,10 +213,12 @@ class _SignUpPageState extends State<SignUpPage> {
   String? selectedCommunityName;
   Map<String, dynamic>? selectedDistrictData;
   Map<String, dynamic>? currentOverseerData;
+  AdManager adManager = AdManager();
 
   @override
   void initState() {
     super.initState();
+    adManager.loadRewardedInterstitialAd();
     _getAddress();
   }
 
@@ -156,7 +264,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (placemarks.isNotEmpty) {
         Placemark p = placemarks.first;
         String fullAddress =
-            "${p.street}, ${p.subLocality}, ${p.locality}, ${p.administrativeArea}";
+            "${p.street},  ${p.locality}, ${p.administrativeArea}";
         txtAddress.text = fullAddress;
       } else {
         txtAddress.text = "Address not found";
@@ -256,7 +364,6 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
-  // Manual validation function
   bool _validateFields() {
     if (txtName.text.trim().isEmpty ||
         txtSurname.text.trim().isEmpty ||
@@ -325,7 +432,6 @@ class _SignUpPageState extends State<SignUpPage> {
       return false;
     }
 
-    // Basic email format check
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(txtEmail.text.trim())) {
       Api().showMessage(
         context,
@@ -376,6 +482,38 @@ class _SignUpPageState extends State<SignUpPage> {
     return true;
   }
 
+  String YOUR_BACKEND_BASE_URL =
+      'https://us-central1-tact-3c612.cloudfunctions.net/api';
+
+  Future<String?> createSellerSubaccount({
+    required String uid,
+    required String businessName,
+    required String email,
+    required String accountNumber,
+    required String bankCode,
+  }) async {
+    final url = Uri.parse('$YOUR_BACKEND_BASE_URL/create_seller_subaccount');
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "uid": uid,
+        "business_name": businessName,
+        "bank_code": bankCode,
+        "account_number": accountNumber,
+        "contact_email": email,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['subaccount_code'];
+    } else {
+      print('Error creating subaccount: ${response.body}');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final args =
@@ -395,17 +533,27 @@ class _SignUpPageState extends State<SignUpPage> {
     );
 
     return Scaffold(
-      backgroundColor:
-          colorScheme.scaffoldBackgroundColor, // Ensure background color
-      appBar: CupertinoNavigationBar(
-        backgroundColor: colorScheme.scaffoldBackgroundColor,
-        border: Border.all(color: Colors.transparent), // No border
-        leading: CupertinoNavigationBarBackButton(
-          color: colorScheme.primaryColor, // Use primary color for back button
-          onPressed: () => Navigator.pop(context),
-        ),
-        // No title needed if back button is the primary element
-      ),
+      backgroundColor: colorScheme.scaffoldBackgroundColor,
+      appBar: Platform.isIOS
+          ? CupertinoNavigationBar(
+              backgroundColor: colorScheme.scaffoldBackgroundColor,
+              border: Border.all(color: Colors.transparent),
+              leading: CupertinoNavigationBarBackButton(
+                color: colorScheme.primaryColor,
+                onPressed: () => Navigator.pop(context),
+              ),
+            )
+          : AppBar(
+              backgroundColor: colorScheme.scaffoldBackgroundColor,
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(
+                  Icons.arrow_back_ios,
+                  color: colorScheme.primaryColor,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -428,127 +576,110 @@ class _SignUpPageState extends State<SignUpPage> {
               const SizedBox(height: 20),
 
               // Personal Details
-              _buildCupertinoTextField(
+              _buildPlatformTextField(
+                context: context,
                 controller: txtName,
                 placeholder: 'Name',
                 prefixIcon: CupertinoIcons.person_fill,
                 keyboardType: TextInputType.name,
               ),
-              _buildCupertinoTextField(
+              _buildPlatformTextField(
+                context: context,
                 controller: txtSurname,
                 placeholder: 'Surname',
                 prefixIcon: CupertinoIcons.person_add,
                 keyboardType: TextInputType.name,
               ),
-              _buildCupertinoTextField(
+              _buildPlatformTextField(
+                context: context,
                 controller: txtAddress,
                 placeholder: 'Address',
                 prefixIcon: CupertinoIcons.location_solid,
                 keyboardType: TextInputType.streetAddress,
                 maxLines: 3,
               ),
-              _buildCupertinoTextField(
+              _buildPlatformTextField(
+                context: context,
                 controller: txtContactNumber,
                 placeholder: 'Contact Number',
                 prefixIcon: CupertinoIcons.phone_fill,
                 keyboardType: TextInputType.phone,
-                suffixIcon: null,
               ),
 
               // Role Selection
               const SizedBox(height: 10),
-              CupertinoFormSection(
-                backgroundColor:
-                    Colors.transparent, // Match scaffold background
-                header: const Text('ROLE SELECTION'),
+              _buildSection(
+                context: context,
+                title: 'ROLE SELECTION',
                 children: [
-                  CupertinoListTile(
-                    title: const Text('Select Role'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(role ?? 'Not Selected'),
-                        const Icon(CupertinoIcons.chevron_right),
-                      ],
-                    ),
+                  _buildListTile(
+                    context: context,
+                    title: 'Select Role',
+                    trailingText: role ?? 'Not Selected',
                     onTap: () {
-                      showCupertinoModalPopup(
+                      _buildActionSheet(
                         context: context,
-                        builder: (BuildContext context) => CupertinoActionSheet(
-                          title: const Text('Select Role'),
-                          actions: roles.map((userRole) {
-                            return CupertinoActionSheetAction(
-                              child: Text(userRole),
-                              onPressed: () {
-                                setState(() {
-                                  role = userRole;
-                                });
-                                Navigator.pop(context);
-                              },
-                            );
-                          }).toList(),
-                          cancelButton: CupertinoActionSheetAction(
-                            child: const Text('Cancel'),
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ),
+                        title: 'Select Role',
+                        actions: roles,
+                        onSelected: (userRole) {
+                          setState(() {
+                            role = userRole;
+                          });
+                        },
                       );
                     },
                   ),
                 ],
               ),
+              if (role == 'Seller') ...[
+                const SizedBox(height: 10),
+                _buildPlatformTextField(
+                  context: context,
+                  controller: txtAccountNumber,
+                  placeholder: 'Bank Account Number',
+                  prefixIcon: CupertinoIcons.money_dollar,
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 10),
+                _buildPlatformTextField(
+                  context: context,
+                  controller: txtBankCodeController,
+                  placeholder: 'Bank Code',
+                  prefixIcon: CupertinoIcons.building_2_fill,
+                  keyboardType: TextInputType.number,
+                ),
+              ],
 
               // Province Selection
               const SizedBox(height: 10),
-              CupertinoFormSection(
-                backgroundColor: Colors.transparent,
-                header: const Text('LOCATION DETAILS'),
+              _buildSection(
+                context: context,
+                title: 'LOCATION DETAILS',
                 children: [
-                  CupertinoListTile(
-                    title: const Text('Select Province'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(selectedProvince ?? 'Not Selected'),
-                        const Icon(CupertinoIcons.chevron_right),
-                      ],
-                    ),
+                  _buildListTile(
+                    context: context,
+                    title: 'Select Province',
+                    trailingText: selectedProvince ?? 'Not Selected',
                     onTap: () {
-                      showCupertinoModalPopup(
+                      _buildActionSheet(
                         context: context,
-                        builder: (BuildContext context) => CupertinoActionSheet(
-                          title: const Text('Select your Province'),
-                          actions: provinces.map((province) {
-                            return CupertinoActionSheetAction(
-                              child: Text(province),
-                              onPressed: () {
-                                setState(() {
-                                  selectedProvince = province;
-                                  selectedMemberUid = null;
-                                  currentOverseerData = null;
-                                  selectedDistrictElder = null;
-                                  selectedCommunityElder = null;
-                                  selectedCommunityName = null;
-                                  selectedDistrictData = null;
-                                });
-                                Navigator.pop(context);
-                              },
-                            );
-                          }).toList(),
-                          cancelButton: CupertinoActionSheetAction(
-                            child: const Text('Cancel'),
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ),
+                        title: 'Select your Province',
+                        actions: provinces,
+                        onSelected: (province) {
+                          setState(() {
+                            selectedProvince = province;
+                            selectedMemberUid = null;
+                            currentOverseerData = null;
+                            selectedDistrictElder = null;
+                            selectedCommunityElder = null;
+                            selectedCommunityName = null;
+                            selectedDistrictData = null;
+                          });
+                        },
                       );
                     },
                   ),
 
-                  // Overseer Selection (Conditionally displayed)
                   if (selectedProvince != null)
                     FutureBuilder<QuerySnapshot>(
                       future: FirebaseFirestore.instance
@@ -558,101 +689,82 @@ class _SignUpPageState extends State<SignUpPage> {
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
-                          return Text('');
+                          return Center(
+                            child: Platform.isIOS
+                                ? const CupertinoActivityIndicator()
+                                : const CircularProgressIndicator(),
+                          );
                         }
                         if (snapshot.hasError) {
-                          return CupertinoListTile(
-                            title: Text('Error: ${snapshot.error}'),
-                            trailing: const Icon(
-                              CupertinoIcons.exclamationmark_triangle_fill,
-                            ),
+                          return _buildListTile(
+                            context: context,
+                            title: 'Error: ${snapshot.error}',
+                            trailingText: '!',
+                            onTap: () {},
                           );
                         }
                         final overseers = snapshot.data?.docs ?? [];
                         if (overseers.isEmpty) {
-                          return const CupertinoListTile(
-                            title: Text('No Overseers found in this province.'),
+                          return _buildListTile(
+                            context: context,
+                            title: 'No Overseers found.',
+                            trailingText: '',
+                            onTap: () {},
                           );
                         }
 
-                        return CupertinoListTile(
-                          title: const Text('Select Overseer'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                (() {
-                                  if (selectedMemberUid == null) {
-                                    return 'Select Overseer';
-                                  }
-                                  final overseerDoc = overseers
-                                      .cast<QueryDocumentSnapshot>()
-                                      .where(
-                                        (o) => o['uid'] == selectedMemberUid,
-                                      )
-                                      .toList();
-                                  if (overseerDoc.isEmpty) {
-                                    return 'Select Overseer';
-                                  }
-                                  final overseer =
-                                      overseerDoc.first.data()
-                                          as Map<String, dynamic>;
-                                  return '${overseer['name']} ${overseer['surname']}';
-                                })(),
-                              ),
-                              const Icon(CupertinoIcons.chevron_right),
-                            ],
-                          ),
+                        return _buildListTile(
+                          context: context,
+                          title: 'Select Overseer',
+                          trailingText: (() {
+                            if (selectedMemberUid == null) {
+                              return 'Not Selected';
+                            }
+                            final overseerDoc = overseers
+                                .cast<QueryDocumentSnapshot>()
+                                .firstWhere(
+                                  (o) => o['uid'] == selectedMemberUid,
+                                  orElse: () => null as QueryDocumentSnapshot,
+                                );
+                            if (overseerDoc == null) {
+                              return 'Not Selected';
+                            }
+                            final overseer =
+                                overseerDoc.data() as Map<String, dynamic>;
+                            return '${overseer['name']} ${overseer['surname']}';
+                          })(),
                           onTap: () {
-                            showCupertinoModalPopup(
+                            _buildActionSheet(
                               context: context,
-                              builder: (BuildContext context) =>
-                                  CupertinoActionSheet(
-                                    title: const Text('Choose an Overseer'),
-                                    actions: overseers.map((overseerDoc) {
-                                      final overseer =
-                                          (overseerDoc as QueryDocumentSnapshot)
-                                                  .data()
-                                              as Map<String, dynamic>;
-                                      return CupertinoActionSheetAction(
-                                        child: Text(
-                                          '${overseer['name']} ${overseer['surname']}',
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            selectedMemberUid = overseer['uid'];
-                                            _fetchOverseerData(
-                                              selectedMemberUid!,
-                                            );
-                                          });
-                                          Navigator.pop(context);
-                                        },
-                                      );
-                                    }).toList(),
-                                    cancelButton: CupertinoActionSheetAction(
-                                      child: const Text('Cancel'),
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                      },
-                                    ),
-                                  ),
+                              title: 'Choose an Overseer',
+                              actions: overseers.map((overseerDoc) {
+                                final overseer =
+                                    (overseerDoc).data()
+                                        as Map<String, dynamic>;
+                                return '${overseer['name']} ${overseer['surname']}';
+                              }).toList(),
+                              onSelected: (selectedName) {
+                                final selectedDoc = overseers.firstWhere(
+                                  (doc) =>
+                                      '${doc['name']} ${doc['surname']}' ==
+                                      selectedName,
+                                );
+                                setState(() {
+                                  selectedMemberUid = selectedDoc['uid'];
+                                  _fetchOverseerData(selectedMemberUid!);
+                                });
+                              },
                             );
                           },
                         );
                       },
                     ),
 
-                  // District Elder Selection (Conditionally displayed)
                   if (currentOverseerData != null)
-                    CupertinoListTile(
-                      title: const Text('Select District Elder'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(selectedDistrictElder ?? 'Not Selected'),
-                          const Icon(CupertinoIcons.chevron_right),
-                        ],
-                      ),
+                    _buildListTile(
+                      context: context,
+                      title: 'Select District Elder',
+                      trailingText: selectedDistrictElder ?? 'Not Selected',
                       onTap: () {
                         if (districtElderNames.isEmpty) {
                           Api().showMessage(
@@ -663,55 +775,36 @@ class _SignUpPageState extends State<SignUpPage> {
                           );
                           return;
                         }
-                        showCupertinoModalPopup(
+                        _buildActionSheet(
                           context: context,
-                          builder: (BuildContext context) => CupertinoActionSheet(
-                            title: const Text('Choose a District Elder'),
-                            actions: districtElderNames.map((elderName) {
-                              return CupertinoActionSheetAction(
-                                child: Text(elderName),
-                                onPressed: () {
-                                  setState(() {
-                                    selectedDistrictElder = elderName;
-                                    selectedDistrictData =
-                                        (currentOverseerData?['districts']
-                                                    as List<dynamic>?)
-                                                ?.firstWhere(
-                                                  (district) =>
-                                                      district['districtElderName'] ==
-                                                      elderName,
-                                                  orElse: () => null,
-                                                )
-                                            as Map<String, dynamic>?;
-                                    selectedCommunityElder = null;
-                                    selectedCommunityName = null;
-                                  });
-                                  Navigator.pop(context);
-                                },
-                              );
-                            }).toList(),
-                            cancelButton: CupertinoActionSheetAction(
-                              child: const Text('Cancel'),
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                            ),
-                          ),
+                          title: 'Choose a District Elder',
+                          actions: districtElderNames,
+                          onSelected: (elderName) {
+                            setState(() {
+                              selectedDistrictElder = elderName;
+                              selectedDistrictData =
+                                  (currentOverseerData?['districts']
+                                              as List<dynamic>?)
+                                          ?.firstWhere(
+                                            (district) =>
+                                                district['districtElderName'] ==
+                                                elderName,
+                                            orElse: () => null,
+                                          )
+                                      as Map<String, dynamic>?;
+                              selectedCommunityElder = null;
+                              selectedCommunityName = null;
+                            });
+                          },
                         );
                       },
                     ),
 
-                  // Community Elder Selection (Conditionally displayed)
                   if (selectedDistrictElder != null)
-                    CupertinoListTile(
-                      title: const Text('Select Community Elder'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(selectedCommunityElder ?? 'Not Selected'),
-                          const Icon(CupertinoIcons.chevron_right),
-                        ],
-                      ),
+                    _buildListTile(
+                      context: context,
+                      title: 'Select Community Elder',
+                      trailingText: selectedCommunityElder ?? 'Not Selected',
                       onTap: () {
                         if (communityElderNames.isEmpty) {
                           Api().showMessage(
@@ -722,44 +815,23 @@ class _SignUpPageState extends State<SignUpPage> {
                           );
                           return;
                         }
-                        showCupertinoModalPopup(
+                        _buildActionSheet(
                           context: context,
-                          builder: (BuildContext context) =>
-                              CupertinoActionSheet(
-                                title: const Text('Choose a Community Elder'),
-                                actions: communityElderNames.map((elderName) {
-                                  return CupertinoActionSheetAction(
-                                    child: Text(elderName),
-                                    onPressed: () {
-                                      setState(() {
-                                        selectedCommunityElder = elderName;
-                                      });
-                                      Navigator.pop(context);
-                                    },
-                                  );
-                                }).toList(),
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: const Text('Cancel'),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              ),
+                          title: 'Choose a Community Elder',
+                          actions: communityElderNames,
+                          onSelected: (elderName) {
+                            setState(() {
+                              selectedCommunityElder = elderName;
+                            });
+                          },
                         );
                       },
                     ),
-
-                  // Community Name Selection (Conditionally displayed)
                   if (selectedCommunityElder != null)
-                    CupertinoListTile(
-                      title: const Text('Select Community Name'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(selectedCommunityName ?? 'Not Selected'),
-                          const Icon(CupertinoIcons.chevron_right),
-                        ],
-                      ),
+                    _buildListTile(
+                      context: context,
+                      title: 'Select Community Name',
+                      trailingText: selectedCommunityName ?? 'Not Selected',
                       onTap: () {
                         if (communityNames.isEmpty) {
                           Api().showMessage(
@@ -770,29 +842,15 @@ class _SignUpPageState extends State<SignUpPage> {
                           );
                           return;
                         }
-                        showCupertinoModalPopup(
+                        _buildActionSheet(
                           context: context,
-                          builder: (BuildContext context) =>
-                              CupertinoActionSheet(
-                                title: const Text('Choose a Community Name'),
-                                actions: communityNames.map((community) {
-                                  return CupertinoActionSheetAction(
-                                    child: Text(community),
-                                    onPressed: () {
-                                      setState(() {
-                                        selectedCommunityName = community;
-                                      });
-                                      Navigator.pop(context);
-                                    },
-                                  );
-                                }).toList(),
-                                cancelButton: CupertinoActionSheetAction(
-                                  child: const Text('Cancel'),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                              ),
+                          title: 'Choose a Community Name',
+                          actions: communityNames,
+                          onSelected: (community) {
+                            setState(() {
+                              selectedCommunityName = community;
+                            });
+                          },
                         );
                       },
                     ),
@@ -801,58 +859,89 @@ class _SignUpPageState extends State<SignUpPage> {
 
               // Email and Password Fields
               const SizedBox(height: 10),
-              CupertinoFormSection(
-                backgroundColor: Colors.transparent,
-                header: const Text('ACCOUNT CREDENTIALS'),
+              _buildSection(
+                context: context,
+                title: 'ACCOUNT CREDENTIALS',
                 children: [
                   if (emailFromArgs.isEmpty)
-                    _buildCupertinoTextField(
+                    _buildPlatformTextField(
+                      context: context,
                       controller: txtEmail,
                       placeholder: 'Email Address',
                       prefixIcon: CupertinoIcons.mail_solid,
                       keyboardType: TextInputType.emailAddress,
                     ),
                   if (emailFromArgs.isEmpty)
-                    _buildCupertinoTextField(
+                    _buildPlatformTextField(
+                      context: context,
                       controller: txtPassword,
                       placeholder: 'Password',
                       prefixIcon: CupertinoIcons.lock_fill,
                       obscureText: _obscurePassword,
-                      suffixIcon: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                        child: Icon(
-                          _obscurePassword
-                              ? CupertinoIcons.eye_slash_fill
-                              : CupertinoIcons.eye_fill,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
+                      suffixIcon: Platform.isIOS
+                          ? CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                              child: Icon(
+                                _obscurePassword
+                                    ? CupertinoIcons.eye_slash_fill
+                                    : CupertinoIcons.eye_fill,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                            )
+                          : IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
                     ),
                   if (emailFromArgs.isEmpty)
-                    _buildCupertinoTextField(
+                    _buildPlatformTextField(
+                      context: context,
                       controller: txtConfirmPassword,
                       placeholder: 'Confirm Password',
                       prefixIcon: CupertinoIcons.lock_fill,
                       obscureText: _obscureConfirmPassword,
-                      suffixIcon: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
-                        child: Icon(
-                          _obscureConfirmPassword
-                              ? CupertinoIcons.eye_slash_fill
-                              : CupertinoIcons.eye_fill,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
+                      suffixIcon: Platform.isIOS
+                          ? CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                setState(() {
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
+                                });
+                              },
+                              child: Icon(
+                                _obscureConfirmPassword
+                                    ? CupertinoIcons.eye_slash_fill
+                                    : CupertinoIcons.eye_fill,
+                                color: CupertinoColors.systemGrey,
+                              ),
+                            )
+                          : IconButton(
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
+                                });
+                              },
+                            ),
                     ),
                 ],
               ),
@@ -861,13 +950,18 @@ class _SignUpPageState extends State<SignUpPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  CupertinoCheckbox(
-                    // Cupertino checkbox
-                    value: isChecked,
-                    onChanged: (val) => setState(() => isChecked = val!),
-                    activeColor: colorScheme.primaryColor,
-                    checkColor: colorScheme.scaffoldBackgroundColor,
-                  ),
+                  Platform.isIOS
+                      ? CupertinoCheckbox(
+                          value: isChecked,
+                          onChanged: (val) => setState(() => isChecked = val!),
+                          activeColor: colorScheme.primaryColor,
+                          checkColor: colorScheme.scaffoldBackgroundColor,
+                        )
+                      : Checkbox(
+                          value: isChecked,
+                          onChanged: (val) => setState(() => isChecked = val!),
+                          activeColor: colorScheme.primaryColor,
+                        ),
                   const SizedBox(width: 8.0),
                   Expanded(
                     child: RichText(
@@ -920,16 +1014,13 @@ class _SignUpPageState extends State<SignUpPage> {
                 foregroundColor: colorScheme.scaffoldBackgroundColor,
                 text: 'SIGN UP',
                 onPressed: () async {
-                  // Perform all validations manually
                   if (!_validateFields()) {
-                    return; // Stop if any validation fails
+                    return;
                   }
 
-                  // All fields are valid, proceed with sign-up
                   try {
                     if (emailFromArgs.isEmpty) {
                       await backendService.signUp(
-                        // Use the backendService instance
                         txtName.text.trim(),
                         txtSurname.text.trim(),
                         txtEmail.text.trim(),
@@ -938,6 +1029,8 @@ class _SignUpPageState extends State<SignUpPage> {
                         txtContactNumber.text.trim(),
                         selectedMemberUid!,
                         role!,
+                        accountNumber: txtAccountNumber.text.trim(),
+                        bankCode: txtBankCodeController.text.trim(),
                         selectedProvince!,
                         selectedDistrictElder!,
                         selectedCommunityElder!,
@@ -945,14 +1038,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         context,
                       );
                     } else {
-                      // This part handles the case where email is pre-filled (e.g., from Google Sign-in)
                       await FirebaseFirestore.instance
                           .collection('users')
                           .doc(FirebaseAuth.instance.currentUser!.uid)
                           .set({
                             "name": txtName.text.trim(),
                             "surname": txtSurname.text.trim(),
-                            "email": emailFromArgs, // Use email from args
+                            "email": emailFromArgs,
                             "profileUrl": "",
                             "address": txtAddress.text.trim(),
                             "phone": txtContactNumber.text.trim(),
@@ -965,35 +1057,51 @@ class _SignUpPageState extends State<SignUpPage> {
                             "province": selectedProvince,
                             "districtElderName": selectedDistrictElder,
                             "communityElderName": selectedCommunityElder,
-                            "communityName": selectedCommunityName,
-                            "uid": FirebaseAuth
-                                .instance
-                                .currentUser!
-                                .uid, // Ensure uid is stored
+                            if (role == 'Seller') 'sellerPaystackAccount': '',
+                            "uid": FirebaseAuth.instance.currentUser!.uid,
                           });
+                      if (role == 'Seller') {
+                        String? subaccountCode = await createSellerSubaccount(
+                          uid: FirebaseAuth.instance.currentUser!.uid,
+                          businessName: txtName.text.trim(),
+                          email: txtEmail.text.trim(),
+                          accountNumber: txtAccountNumber.text.trim(),
+                          bankCode: txtBankCodeController.text.trim(),
+                        );
+
+                        if (subaccountCode != null) {
+                          print('Subaccount created: $subaccountCode');
+                        } else {
+                          print('Failed to create Paystack subaccount');
+                        }
+                      }
+
                       backendService.showMessage(
                         context,
                         'Success',
                         'Account details updated successfully!',
                         colorScheme.splashColor,
                       );
-
+                      adManager.showRewardedInterstitialAd((ad, reward) {
+                        print(
+                          'User earned reward: ${reward.amount} ${reward.type}',
+                        );
+                      });
                       Navigator.pushNamed(context, '/main-menu');
-                      // Example: go back after update
                     }
                   } catch (e) {
                     backendService.showMessage(
                       context,
                       'Sign Up/Update Failed',
                       e.toString(),
-                      colorScheme.primaryColorDark
+                      colorScheme.primaryColorDark,
                     );
                   }
                 },
               ),
               const SizedBox(height: 40),
 
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1017,6 +1125,39 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// A custom builder to handle the platform-specific form sections
+Widget _buildSection({
+  required BuildContext context,
+  required String title,
+  required List<Widget> children,
+}) {
+  if (Platform.isIOS) {
+    return CupertinoFormSection(
+      backgroundColor: Colors.transparent,
+      header: Text(title),
+      children: children,
+    );
+  } else {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Theme.of(context).primaryColor,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        ...children,
+      ],
     );
   }
 }

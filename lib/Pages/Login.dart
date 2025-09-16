@@ -1,7 +1,13 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:device_info_plus/device_info_plus.dart'; 
+import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/ForgotPassword.dart';
 import '../Components/API.dart';
@@ -24,7 +30,6 @@ class _Login_PageState extends State<Login_Page> {
   bool _obscureText = true;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
@@ -32,13 +37,32 @@ class _Login_PageState extends State<Login_Page> {
     super.initState();
   }
 
-  Future<void> signInWithGoogle(BuildContext context) async {
-    try {
+  // Huawei device detection
+  Future<bool> isHuaweiDevice() async {
+    final info = DeviceInfoPlugin();
+    final androidInfo = await info.androidInfo;
+    return androidInfo.manufacturer.toLowerCase().contains("huawei");
+  }
+ // Refactored signInWithGoogle function
+Future<void> signInWithGoogle(BuildContext context) async {
+  try {
+    if (await isHuaweiDevice()) {
+      final user = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GoogleWebViewSignIn(
+              clientId: "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+              redirectUri: "https://tact-3c612.firebaseapp.com/__/auth/handler",
+ 
+          ),
+        ),
+      );
+      if (user == null) return;
+    } else {
       await _auth.signOut();
       await _googleSignIn.signOut();
 
-      final GoogleSignInAccount? googleSignInAccount = await _googleSignIn
-          .signIn();
+      final GoogleSignInAccount? googleSignInAccount = await _googleSignIn.signIn();
       if (googleSignInAccount == null) return;
 
       final googleAuth = await googleSignInAccount.authentication;
@@ -47,46 +71,58 @@ class _Login_PageState extends State<Login_Page> {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
-
-      if (user == null) return;
-
-      final uid = user.uid;
-      final email = user.email;
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-
-      if (!context.mounted) return;
-
-      if (userDoc.exists) {
-        Navigator.pushNamed(context, "/main-menu");
-      } else {
-        Navigator.pushNamed(context, "/signup", arguments: {'email': email});
-      }
-    } catch (e, stackTrace) {
-      print("Error signing in with Google: $e");
+      await _auth.signInWithCredential(credential);
     }
-  }
+    
+    // This logic is now outside the if-else block
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
+    final uid = user.uid;
+    final email = user.email;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+
+    if (!context.mounted) return;
+
+    if (userDoc.exists) {
+      Navigator.pushNamed(context, "/main-menu");
+    } else {
+      Navigator.pushNamed(context, "/signup", arguments: {'email': email});
+    }
+
+  } catch (e) {
+    debugPrint("Error signing in with Google: $e"); 
+    if (!context.mounted) return; 
+    Api().showMessage(
+      context,
+      'An unexpected error occurred: ${e.toString()}',
+      'Error',
+      Theme.of(context).colorScheme.primary, // Use a themed color
+    );
+  }
+}
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
+      appBar: Platform.isIOS
+          ? CupertinoNavigationBar(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              border: Border.all(color: Colors.transparent),
+            )
+          : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: isMobile ? buildMobileLayout() : buildWebLayout(),
-                ),
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: isMobile ? buildMobileLayout() : buildWebLayout(),
               ),
             ),
           );
@@ -101,7 +137,7 @@ class _Login_PageState extends State<Login_Page> {
         Expanded(
           flex: 2,
           child: Image.asset(
-            "assets/tact_logo.PNG",
+            "assets/dankie_logo.PNG",
             height: 600,
             fit: BoxFit.contain,
           ),
@@ -115,17 +151,17 @@ class _Login_PageState extends State<Login_Page> {
   Widget buildMobileLayout() {
     return Column(
       children: [
-        SizedBox(height: 70),
+        const SizedBox(height: 70),
         ClipRRect(
-          borderRadius: BorderRadius.circular(50),
           child: Image.asset(
-            "assets/tact_logo.PNG",
-            height: 250,
+            "assets/dankie_logo.PNG",
+            width: double.infinity,
+            height: 150,
             fit: BoxFit.cover,
           ),
         ),
-        const SizedBox(height: 30),
-        buildFormContent(),
+        AdManager().bannerAdWidget(),
+        Padding(padding: const EdgeInsets.all(16.0), child: buildFormContent()),
       ],
     );
   }
@@ -152,35 +188,61 @@ class _Login_PageState extends State<Login_Page> {
               controller: txtEmail,
               onValidate: (value) => TextFieldValidation.email(value!),
             ),
-            TextField(
-              controller: txtPassword,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(17),
+            if (Platform.isIOS)
+              CupertinoTextField(
+                controller: txtPassword,
+                placeholder: 'Password',
+                obscureText: _obscureText,
+                decoration: BoxDecoration(
+                  border: Border.all(color: CupertinoColors.systemGrey4),
+                  borderRadius: BorderRadius.circular(17.0),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: colorScheme.hintColor),
-                  borderRadius: BorderRadius.circular(17),
-                ),
-                fillColor: colorScheme.scaffoldBackgroundColor,
-                filled: true,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureText ? Icons.visibility : Icons.visibility_off,
-                    color: colorScheme.hintColor,
-                  ),
+                padding: const EdgeInsets.all(12.0),
+                suffixMode: OverlayVisibilityMode.editing,
+                suffix: CupertinoButton(
+                  padding: EdgeInsets.zero,
                   onPressed: () => setState(() => _obscureText = !_obscureText),
+                  child: Icon(
+                    _obscureText
+                        ? CupertinoIcons.eye_slash_fill
+                        : CupertinoIcons.eye_fill,
+                    color: CupertinoColors.systemGrey,
+                  ),
                 ),
-                hintText: 'Password',
-                hintStyle: TextStyle(color: colorScheme.hintColor),
+              )
+            else
+              TextFormField(
+                controller: txtPassword,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: colorScheme.cardColor),
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  fillColor: colorScheme.scaffoldBackgroundColor,
+                  filled: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureText ? Icons.visibility : Icons.visibility_off,
+                      color: colorScheme.cardColor,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureText = !_obscureText),
+                  ),
+                  hintText: 'Password',
+                  hintStyle: TextStyle(color: colorScheme.cardColor),
+                ),
+                obscureText: _obscureText,
               ),
-              obscureText: _obscureText,
-            ),
             GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ForgotPassword()),
+                  MaterialPageRoute(
+                    builder: (context) => const ForgotPassword(),
+                  ),
                 );
               },
               child: Text(
@@ -202,62 +264,100 @@ class _Login_PageState extends State<Login_Page> {
                   backgroundColor: colorScheme.primaryColor,
                   foregroundColor: colorScheme.scaffoldBackgroundColor,
                   onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
+                    if (_formKey.currentState?.validate() ?? false) {
+                      Api().showLoading(context);
                       try {
-                        Api().showLoading(context);
-                        final user = await FirebaseAuth.instance
+                        final userCredential = await FirebaseAuth.instance
                             .signInWithEmailAndPassword(
-                              email: txtEmail.text,
-                              password: txtPassword.text,
+                              email: txtEmail.text.trim(),
+                              password: txtPassword.text.trim(),
                             );
-                        if (user.user!.uid != null) {
-                          final userDoc = await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user.user!.uid)
-                              .get();
-                          final overseer = await FirebaseFirestore.instance
-                              .collection('overseers')
-                              .where('uid', isEqualTo: user.user!.uid)
-                              .get();
 
-                          final tactsobranches = await FirebaseFirestore
-                              .instance
-                              .collection('tactso_branches')
-                              .where('uid', isEqualTo: user.user!.uid)
-                              .get();
-                          if (tactsobranches.docs.isNotEmpty) {
-                            Navigator.pushNamed(context, "/tactso-branches");
-                          }
-                          if (overseer.docs.isNotEmpty) {
-                            Navigator.pushNamed(context, "/overseer");
-                          }
+                        var uid = userCredential.user!.uid;
 
-                          if (userDoc.data()!.isNotEmpty) {
-                            final role = userDoc.data()?['role'] ?? '';
-                            if (role == 'Admin') {
-                              Navigator.pushNamed(context, "/admin");
-                            } else if (role == 'Member') {
-                              Navigator.pushNamed(context, "/main-menu");
-                            } else if (role == 'Seller') {
-                              Navigator.pushNamed(context, "/main-menu");
-                            } else {
-                              Navigator.pop(context);
-                              Api().showMessage(
-                                context,
-                                'Unknown role: $role',
-                                'Error',
-                                colorScheme.primaryColorDark,
-                              );
-                            }
-                          }
+                        final userDoc = await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .get();
+
+                        final Map<String, dynamic>? userData = userDoc.data();
+
+                        final tactsoBranchesQuery = await FirebaseFirestore
+                            .instance
+                            .collection('tactso_branches')
+                            .where('uid', isEqualTo: uid)
+                            .get();
+
+                        if (tactsoBranchesQuery.docs.isNotEmpty) {
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          Navigator.pushReplacementNamed(
+                            context,
+                            "/tactso-branches",
+                          );
+                          return;
                         }
+
+                        final overseerQuery = await FirebaseFirestore.instance
+                            .collection('overseers')
+                            .where('email', isEqualTo: txtEmail.text)
+                            .get();
+
+                        if (overseerQuery.docs.isNotEmpty) {
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          Navigator.pushReplacementNamed(context, "/overseer");
+                          return;
+                        }
+
+                        final String role = userData?['role'] ?? '';
+
+                        if (role == 'Admin') {
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          Navigator.pushReplacementNamed(context, "/admin");
+                        } else if (role == 'Member' || role == 'Seller') {
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          Navigator.pushReplacementNamed(context, "/main-menu");
+                        } else {
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          Api().showMessage(
+                            context,
+                            'Unknown role or no specific access found for this user: $role',
+                            'Error',
+                            colorScheme.primaryColorDark,
+                          );
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        String errorMessage;
+                        if (e.code == 'user-not-found') {
+                          errorMessage = 'No user found for that email.';
+                        } else if (e.code == 'wrong-password') {
+                          errorMessage =
+                              'Wrong password provided for that user.';
+                        } else if (e.code == 'invalid-email') {
+                          errorMessage = 'The email address is not valid.';
+                        } else {
+                          errorMessage =
+                              'Login failed: ${e.message ?? 'An unknown authentication error occurred.'}';
+                        }
+                        Api().showMessage(
+                          context,
+                          errorMessage,
+                          'Authentication Error',
+                          colorScheme.primaryColorDark,
+                        );
                       } catch (e) {
-                        print(e.toString());
+                        if (!context.mounted) return;
                         Navigator.pop(context);
                         Api().showMessage(
                           context,
-                          'Error loggin in: ${e.toString()}',
-                          'title',
+                          'An unexpected error occurred during login: ${e.toString()}',
+                          'Error',
                           colorScheme.primaryColorDark,
                         );
                       }
@@ -267,7 +367,7 @@ class _Login_PageState extends State<Login_Page> {
                 ),
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Center(
               child: Card(
                 elevation: 5,
@@ -294,14 +394,13 @@ class _Login_PageState extends State<Login_Page> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   "Don't have an account? ",
-                  style: TextStyle(color: colorScheme.hintColor),
+                  style: TextStyle(color: colorScheme.cardColor),
                 ),
                 GestureDetector(
                   onTap: () => Navigator.push(
@@ -318,7 +417,7 @@ class _Login_PageState extends State<Login_Page> {
                 ),
               ],
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -340,6 +439,79 @@ class _Login_PageState extends State<Login_Page> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// WebView Widget for Huawei Google Sign-In
+class GoogleWebViewSignIn extends StatefulWidget {
+  final String clientId;
+  final String redirectUri;
+
+  const GoogleWebViewSignIn({
+    super.key,
+    required this.clientId,
+    required this.redirectUri,
+  });
+
+  @override
+  State<GoogleWebViewSignIn> createState() => _GoogleWebViewSignInState();
+}
+
+class _GoogleWebViewSignInState extends State<GoogleWebViewSignIn> {
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final authUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        "?response_type=token%20id_token"
+        "&client_id=${widget.clientId}"
+        "&redirect_uri=${Uri.encodeComponent(widget.redirectUri)}"
+        "&scope=email%20profile%20openid";
+
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (url) {
+            if (url.startsWith(widget.redirectUri)) {
+              final fragment = Uri.parse(url).fragment;
+              final params = Uri.splitQueryString(fragment);
+
+              final idToken = params["id_token"];
+              final accessToken = params["access_token"];
+
+              if (idToken != null) {
+                _signInToFirebase(idToken, accessToken);
+              }
+            }
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(authUrl));
+  }
+
+  Future<void> _signInToFirebase(String idToken, String? accessToken) async {
+    try {
+      final credential = GoogleAuthProvider.credential(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (mounted) Navigator.pop(context, FirebaseAuth.instance.currentUser);
+    } catch (e) {
+      debugPrint("Firebase Sign-In error: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Google Sign-In")),
+      body: WebViewWidget(controller: _controller),
     );
   }
 }

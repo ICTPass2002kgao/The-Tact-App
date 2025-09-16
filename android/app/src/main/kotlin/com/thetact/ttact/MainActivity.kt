@@ -1,4 +1,4 @@
-package com.example.ttact
+package com.thetact.ttact
 
 import io.flutter.embedding.android.FlutterActivity
 

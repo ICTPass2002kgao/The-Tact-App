@@ -12,9 +12,15 @@ import 'package:ttact/Pages/orders.dart'; // Corrected import for the actual Ord
 import 'package:ttact/firebase_options.dart';
 import 'package:ttact/introductionPage.dart';
 
+// ✅ Added for AdMob
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await MobileAds.instance.initialize();
+
   runApp(const MyApp());
 }
 
@@ -39,11 +45,10 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // Light Theme (your existing theme)
       theme: ThemeData(
-        brightness: Brightness.light, // Explicitly set for clarity
+        brightness: Brightness.light,
         appBarTheme: AppBarTheme(
-          backgroundColor: const Color.fromARGB(255, 7, 2, 80),
+          backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
         textTheme: const TextTheme(
@@ -51,18 +56,18 @@ class _MyAppState extends State<MyApp> {
           titleMedium: TextStyle(fontSize: 18.0, fontWeight: FontWeight.w600),
           bodyMedium: TextStyle(fontSize: 16.0),
         ),
-        primaryColor: const Color.fromARGB(252, 5, 2, 80),
-        scaffoldBackgroundColor: const Color.fromRGBO(255, 255, 255, 1),
-        hintColor: const Color.fromARGB(255, 103, 103, 103),
+        primaryColor: Colors.blue,
+        scaffoldBackgroundColor: const Color.fromARGB(255, 255, 255, 255),
+        hintColor: Colors.black54,
         splashColor: const Color.fromARGB(255, 33, 98, 35),
         primaryColorDark: const Color.fromARGB(255, 194, 50, 40),
-        // Define other light theme properties
+        cardColor: Colors.black,
       ),
       // Dark Theme (NEW)
       darkTheme: ThemeData(
-        brightness: Brightness.dark, // Explicitly set for clarity
+        brightness: Brightness.dark,
         appBarTheme: AppBarTheme(
-          backgroundColor: Color.fromRGBO(255, 255, 255, 1), // Darker AppBar
+          backgroundColor: Color.fromRGBO(255, 255, 255, 1),
           foregroundColor: const Color.fromARGB(252, 5, 2, 80),
         ),
         textTheme: const TextTheme(
@@ -78,7 +83,7 @@ class _MyAppState extends State<MyApp> {
           ),
           bodyMedium: TextStyle(fontSize: 16.0, color: Colors.white70),
         ),
-        primaryColor: Color.fromRGBO(255, 255, 255, 1), // Darker primary
+        primaryColor: Color.fromRGBO(255, 255, 255, 1),
         scaffoldBackgroundColor: const Color.fromARGB(
           255,
           100,
@@ -87,21 +92,9 @@ class _MyAppState extends State<MyApp> {
         ).withOpacity(1), // Dark background
         hintColor: const Color.fromARGB(255, 170, 170, 170),
         splashColor: const Color.fromARGB(255, 60, 130, 62),
-        primaryColorDark: const Color.fromARGB(
-          255,
-          255,
-          90,
-          80,
-        ), // Accent for dark mode errors
-        // Define other dark theme properties
-        cardColor: const Color.fromARGB(255, 45, 45, 45), // Dark card color
-        dialogBackgroundColor: const Color.fromARGB(
-          255,
-          55,
-          55,
-          55,
-        ), // Dark dialog background
-        // Add more specific colors for dark mode to match your design
+        primaryColorDark: const Color.fromARGB(255, 255, 90, 80),
+        cardColor: const Color.fromARGB(255, 45, 45, 45),
+        dialogBackgroundColor: const Color.fromARGB(255, 55, 55, 55),
       ),
       themeMode: _themeMode,
       initialRoute: '/',

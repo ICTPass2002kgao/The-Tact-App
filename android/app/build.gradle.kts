@@ -1,3 +1,21 @@
+
+import java.util.Properties
+import java.io.FileInputStream
+
+fun getKeystoreProperties(key: String): String {
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    val keystoreProperties = Properties()
+
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    } else {
+        throw GradleException("keystore.properties file not found.")
+    }
+
+    return keystoreProperties.getProperty(key)
+        ?: throw GradleException("Key '$key' not found in keystore.properties.")
+}
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -9,7 +27,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ttact"
+    namespace = "com.thetact.ttact"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,34 +41,40 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ttact"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 5
+        versionName = "1.0.4"
     }
-     configurations.all {
+
+    configurations.all {
         resolutionStrategy {
-            // Force Financial Connections to a consistent, newer version
-            // Choose the HIGHER of the two versions reported (21.20.2 in your case)
             force("com.stripe:financial-connections:21.20.2")
             force("com.stripe:financial-connections-core:21.20.2")
         }
     }
 
+    // --- START: CUSTOM CODE FOR RELEASE SIGNING ---
+    signingConfigs {
+        create("release") {
+            storeFile = file(getKeystoreProperties("storeFile"))
+            storePassword = getKeystoreProperties("storePassword")
+            keyAlias = getKeystoreProperties("keyAlias")
+            keyPassword = getKeystoreProperties("keyPassword")
+        }
+    }
+    // --- END: CUSTOM CODE FOR RELEASE SIGNING ---
+
     buildTypes {
-        release {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isShrinkResources = true
             isMinifyEnabled = true
-        proguardFiles(
-            getDefaultProguardFile("proguard-android-optimize.txt"),
-            "proguard-rules.pro"
-        )
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

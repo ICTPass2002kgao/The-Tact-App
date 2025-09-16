@@ -21,6 +21,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:toastification/toastification.dart';
+import 'package:ttact/Components/AdBanner.dart';
 
 import 'package:ttact/Components/song.dart';
 
@@ -30,6 +31,36 @@ class Api {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+String YOUR_BACKEND_BASE_URL =
+    'https://us-central1-tact-3c612.cloudfunctions.net/api';
+  Future<String?> createSellerSubaccount({
+    required String uid,
+    required String businessName,
+    required String email,
+    required String accountNumber,
+    required String bankCode,
+  }) async {
+    final url = Uri.parse('$YOUR_BACKEND_BASE_URL/create_seller_subaccount');
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "uid": uid,
+        "business_name": businessName,
+        "bank_code": bankCode,
+        "account_number": accountNumber,
+        "contact_email": email,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['subaccount_code'];
+    } else {
+      print('Error creating subaccount: ${response.body}');
+      return null;
+    }
+  }
 
   Future<User?> signUp(
     String name,
@@ -43,14 +74,13 @@ class Api {
     String txtContactNumber,
 
     String selectedMemberUid,
-
-    String role,
-    String selectedProvince,
+    String role,  
+String selectedProvince,
     String selectedDistrictElder,
     String selectedCommunityElder,
     String selectedCommunityName, 
 
-    BuildContext context,
+    BuildContext context, {required String bankCode,required String accountNumber}
   ) async {
     try {
       final color = Theme.of(context);
@@ -79,17 +109,45 @@ class Api {
           'week3': 0.00,
           'week4': 0.00, 
           "role": role,
+
+                            if (role == 'Seller')
+                            'sellerPaystackAccount':'',
           "province": selectedProvince,
           "districtElderName": selectedDistrictElder,
           "communityElderName": selectedCommunityElder,
           "communityName": selectedCommunityName,
+                            "uid": FirebaseAuth
+                                .instance
+                                .currentUser!
+                                .uid, // Ensure uid is stored
         });
       }
+if (role == 'Seller') {
+                        String? subaccountCode = await createSellerSubaccount(
+                          uid: FirebaseAuth.instance.currentUser!.uid,
+                          businessName: '${name}\' s Shopping',
+                          email: email,
+                          accountNumber: accountNumber,
+                          bankCode:bankCode, // get this from user input
+                        );
 
+                        if (subaccountCode != null) {
+                          print('Subaccount created: $subaccountCode');
+                          
+                        } else {
+                          // Handle failure
+                          print('Failed to create Paystack subaccount');
+                        }
+                      }
       await user?.sendEmailVerification();
 
       Navigator.pop(context);
 
+                      AdManager().showRewardedInterstitialAd((ad, reward) {
+                        print(
+                          'User earned reward: ${reward.amount} ${reward.type}',
+                        );
+                      });
       showMessage(
         context,
 

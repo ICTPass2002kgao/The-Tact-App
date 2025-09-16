@@ -36,7 +36,7 @@ class _IntroductionpageState extends State<Introductionpage> {
                     unActivatedIndicatorColor: Colors.white,
                     activateIndicatorColor: color.primaryColor,
                     items: const [
-                      ImagesPage(imageName: 'assets/tact_logo.PNG'),
+                      ImagesPage(imageName: 'assets/dankie_logo.PNG'),
                       ImagesPage(imageName: 'assets/images4.jpeg'),
                       ImagesPage(imageName: 'assets/image3.jpeg'),
                       ImagesPage(imageName: 'assets/TActso2.jpeg'),

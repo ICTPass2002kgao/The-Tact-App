@@ -57,11 +57,7 @@ class _TactsoBranchesApplicationsState
   final List<String> _applicationStatuses = [
     'New',
     'Reviewed',
-    'Applied',
-    'Accepted',
-    'Rejected',
-    'Pending Documents',
-    'Withdrawn',
+    'Application Submitted',
   ];
 
   String? _selectedStatus;
@@ -143,7 +139,6 @@ class _TactsoBranchesApplicationsState
           transaction.update(globalAppRef, {
             'applicationDetails.status': newStatus,
             'status': newStatus,
-            
           });
         }
 
@@ -235,25 +230,8 @@ class _TactsoBranchesApplicationsState
                     _buildDetailRow('Email:', applicationDetails['email']),
                     _buildDetailRow('Phone:', applicationDetails['phone']),
                     _buildDetailRow(
-                      'ID/Passport #:',
-                      applicationDetails['idPassportNumber'],
-                    ),
-                    _buildDetailRow(
-                      'Date of Birth:',
-                      applicationDetails['dateOfBirth'],
-                    ),
-                    _buildDetailRow('Gender:', applicationDetails['gender']),
-                    _buildDetailRow(
-                      'Nationality:',
-                      applicationDetails['nationality'],
-                    ),
-                    _buildDetailRow(
                       'Physical Address:',
                       applicationDetails['physicalAddress'],
-                    ),
-                    _buildDetailRow(
-                      'Last School Attended:',
-                      applicationDetails['previousSchools'],
                     ),
                     _buildDetailRow(
                       'Graduation Year:',
@@ -274,11 +252,7 @@ class _TactsoBranchesApplicationsState
                     _buildDetailRow(
                       'Third Program:',
                       applicationDetails['thirdChoiceProgram'],
-                    ),
-                    _buildDetailRow(
-                      'Preferred Start Date:',
-                      applicationDetails['preferredStartDate'],
-                    ),
+                    ), 
                     _buildDetailRow(
                       'Applying for Residence:',
                       (applicationDetails['applyingForResidence'] ?? false)
@@ -534,7 +508,7 @@ class _TactsoBranchesApplicationsState
     return CupertinoTabScaffold(
       tabBar: CupertinoTabBar(
         backgroundColor: color.appBarTheme.backgroundColor,
-        activeColor: color.primaryColor,
+        activeColor: color.scaffoldBackgroundColor,
         inactiveColor: color.hintColor,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
@@ -872,15 +846,21 @@ class _TactsoBranchesApplicationsState
                 application['applicationDetails'] as Map<String, dynamic>?;
 
             if (applicationDetails == null) {
-              return Card(
-                color: color.scaffoldBackgroundColor,
-                margin: const EdgeInsets.symmetric(vertical: 8.0),
-                child: CupertinoListTile(
-                  title: const Text('Invalid Application Data'),
-                  subtitle: Text('Document ID: ${doc.id}'),
-                  leading: const Icon(
-                    CupertinoIcons.xmark_circle_fill,
-                    color: CupertinoColors.systemRed,
+              return Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Card(
+                  color: color.scaffoldBackgroundColor,
+                  margin: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: CupertinoListTile(
+                      title: const Text('Invalid Application Data'),
+                      subtitle: Text('Document ID: ${doc.id}'),
+                      leading: const Icon(
+                        CupertinoIcons.xmark_circle_fill,
+                        color: CupertinoColors.systemRed,
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -899,72 +879,75 @@ class _TactsoBranchesApplicationsState
                 : 'N/A';
 
             return Card(
-              color: color.scaffoldBackgroundColor,
+              color: color.scaffoldBackgroundColor.withOpacity(0.8),
               elevation: 2,
               margin: const EdgeInsets.symmetric(vertical: 8.0),
-              child: CupertinoListTile(
-                title: Text(
-                  'Applicant: $fullName',
-                  style: TextStyle(color: color.textTheme.bodyLarge?.color),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Program: $primaryProgram',
-                      style: TextStyle(color: color.hintColor),
-                    ),
-                    Text(
-                      'Current Status: $currentStatus',
-                      style: TextStyle(
-                        color: color.hintColor,
-                        fontWeight: FontWeight.bold,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: CupertinoListTile(
+                  title: Text(
+                    'Applicant: $fullName',
+                    style: TextStyle(color: color.textTheme.bodyLarge?.color),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Program: $primaryProgram',
+                        style: TextStyle(color: color.hintColor),
                       ),
-                    ),
-                    Text(
-                      'Submitted on: $submissionDate',
-                      style: TextStyle(color: color.hintColor),
-                    ),
-                  ],
-                ),
-                trailing: const Icon(
-                  CupertinoIcons.chevron_right,
-                  color: CupertinoColors.systemGrey,
-                ),
-                onTap: () async {
-                  String initialStatus = application['status'] ?? 'New';
-                  if (initialStatus == 'New') {
-                    await _updateApplicationStatus(
-                      applicationId: doc.id,
-                      newStatus: 'Reviewed',
-                      globalApplicationRequestId:
-                          application['globalApplicationRequestId'],
-                      userId: application['userId'],
-                    );
-                  }
+                      Text(
+                        'Current Status: $currentStatus',
+                        style: TextStyle(
+                          color: color.hintColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Submitted on: $submissionDate',
+                        style: TextStyle(color: color.hintColor),
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(
+                    CupertinoIcons.chevron_right,
+                    color: CupertinoColors.systemGrey,
+                  ),
+                  onTap: () async {
+                    String initialStatus = application['status'] ?? 'New';
+                    if (initialStatus == 'New') {
+                      await _updateApplicationStatus(
+                        applicationId: doc.id,
+                        newStatus: 'Reviewed',
+                        globalApplicationRequestId:
+                            application['globalApplicationRequestId'],
+                        userId: application['userId'],
+                      );
+                    }
 
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  DocumentSnapshot updatedDoc = await _firestore
-                      .collection('tactso_branches')
-                      .doc(_currentuid)
-                      .collection('application_requests')
-                      .doc(doc.id)
-                      .get();
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    DocumentSnapshot updatedDoc = await _firestore
+                        .collection('tactso_branches')
+                        .doc(_currentuid)
+                        .collection('application_requests')
+                        .doc(doc.id)
+                        .get();
 
-                  if (updatedDoc.exists) {
-                    _showApplicationDetails(
-                      updatedDoc.data() as Map<String, dynamic>,
-                      updatedDoc.id,
-                    );
-                  } else {
-                    Api().showMessage(
-                      context,
-                      'Error',
-                      'Application not found after update.',
-                      CupertinoColors.systemRed,
-                    );
-                  }
-                },
+                    if (updatedDoc.exists) {
+                      _showApplicationDetails(
+                        updatedDoc.data() as Map<String, dynamic>,
+                        updatedDoc.id,
+                      );
+                    } else {
+                      Api().showMessage(
+                        context,
+                        'Error',
+                        'Application not found after update.',
+                        CupertinoColors.systemRed,
+                      );
+                    }
+                  },
+                ),
               ),
             );
           },

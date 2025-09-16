@@ -2,7 +2,8 @@ import 'dart:math'; // For random number generation
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; // Import for date formatting
+import 'package:intl/intl.dart';
+import 'package:ttact/Components/API.dart'; // Import for date formatting
 
 class SellerProductPage extends StatefulWidget {
   @override
@@ -106,6 +107,13 @@ class _SellerProductPageState extends State<SellerProductPage>
     _generateRandomDisplayDiscount();
 
     try {
+      // Fetch seller's Paystack subaccount code from 'users' collection
+      final sellerDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .get();
+      final subaccountCode = sellerDoc.data()?['sellerPaystackAccount'] ?? '';
+
       await FirebaseFirestore.instance.collection('seller_products').add({
         'productId': productId,
         'sellerId': user!.uid,
@@ -119,13 +127,14 @@ class _SellerProductPageState extends State<SellerProductPage>
         'imageUrl': (imageUrl is List) ? imageUrl[0] : imageUrl,
         'views': 0,
         'availableColors': colors,
+        'subaccountCode': subaccountCode, // ✅ Added subaccount code
       });
 
       // Clear controllers and provide success feedback
       priceController.clear();
       locationController.clear();
-      singleColorController.clear(); // NEW: Clear single color controller
-      _tempColors.clear(); // NEW: Clear temporary colors list
+      singleColorController.clear(); // Clear single color controller
+      _tempColors.clear(); // Clear temporary colors list
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -133,6 +142,7 @@ class _SellerProductPageState extends State<SellerProductPage>
         );
         Navigator.pop(context); // Close the bottom sheet
       }
+
       setState(
         () {},
       ); // Rebuild to refresh the filtered list of available products
@@ -204,26 +214,6 @@ class _SellerProductPageState extends State<SellerProductPage>
         );
       }
       print('Error updating order status: $e');
-    }
-  }
-
-  // --- EXISTING: _getStatusColor Helper ---
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'processing':
-        return Colors.blue;
-      case 'ready_for_pickup':
-        return Colors.purple;
-      case 'dispatched':
-        return Colors.lightBlue;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
     }
   }
 
@@ -772,15 +762,42 @@ class _SellerProductPageState extends State<SellerProductPage>
                                       ),
                                       const SizedBox(height: 10),
                                       // Removed: Quantity TextField
-                                      TextField(
-                                        controller: locationController,
-                                        decoration: const InputDecoration(
-                                          labelText:
-                                              "Location (e.g., Shop A12, Market St)",
-                                          hintText:
-                                              "e.g., My Store Front, City",
-                                          border: OutlineInputBorder(),
-                                        ),
+                                      FutureBuilder(
+                                        future: FirebaseFirestore.instance
+                                            .collection('users')
+                                            .where('role', isEqualTo: 'Seller')
+                                            .where(
+                                              'email',
+                                              isEqualTo: FirebaseAuth
+                                                  .instance
+                                                  .currentUser!
+                                                  .email,
+                                            )
+                                            .get(),
+
+                                        builder: (context, asyncSnapshot) {
+                                          if (asyncSnapshot.connectionState ==
+                                              ConnectionState.waiting) {
+                                            return Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            );
+                                          }
+                                          var data =
+                                              asyncSnapshot.data!.docs.first;
+                                          locationController.text =
+                                              data['address'];
+                                          return TextField(
+                                            controller: locationController,
+                                            decoration: const InputDecoration(
+                                              labelText:
+                                                  "Location (e.g., Shop A12, Market St)",
+                                              hintText:
+                                                  "e.g., My Store Front, City",
+                                              border: OutlineInputBorder(),
+                                            ),
+                                          );
+                                        },
                                       ),
                                       const SizedBox(height: 10),
                                       // NEW: Color Input with Add Button
@@ -918,6 +935,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                                               }
 
                                               try {
+                                                Api().showLoading(context);
                                                 await addSellerProduct(
                                                   prod.id,
                                                   adminProductName,
@@ -926,7 +944,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                   adminProductImageUrl,
                                                   _tempColors, // Pass the dynamically built list of colors
                                                 );
+                                                Navigator.pop(context);
                                               } catch (e) {
+                                                Navigator.pop(context);
                                                 if (mounted) {
                                                   ScaffoldMessenger.of(
                                                     context,
@@ -964,12 +984,58 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
-  // --- Orders Tab Widget ---
-  Widget ordersTab() {
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending_payment':
+      case 'pending':
+        return Colors.orange;
+      case 'paid':
+        return Colors.blueAccent;
+      case 'processing':
+        return Colors.blue;
+      case 'ready_for_pickup':
+        return Colors.teal;
+      case 'shipped':
+        return Colors.purple;
+      case 'delivered':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending_payment':
+      case 'pending':
+        return Icons.access_time;
+      case 'paid':
+        return Icons.payment;
+      case 'processing':
+        return Icons.autorenew; 
+      case 'shipped':
+        return Icons.local_shipping;
+      case 'delivered':
+        return Icons.check_circle_outline;
+       
+      default:
+        return Icons.info_outline;
+    }
+  }
+
+  // Your updated widget
+  Widget ordersTab(
+    User? user,
+    BuildContext context,
+    Function(String, String) updateOrderStatus,
+    List<String> orderStatuses,
+  ) {
     final currentSellerId = user?.uid;
 
     if (currentSellerId == null) {
-      return const Center(child: Text("Please log in to view orders."));
+      return const Center(child: Text("Please log in to view your sales."));
     }
 
     return FutureBuilder<QuerySnapshot>(
@@ -988,253 +1054,319 @@ class _SellerProductPageState extends State<SellerProductPage>
           return const Center(child: Text("No orders found."));
         }
 
-        final allOrders = snapshot.data!.docs;
-        List<DocumentSnapshot> relevantOrders = [];
-
-        for (var orderDoc in allOrders) {
-          final orderData = orderDoc.data() as Map<String, dynamic>;
-          final List<dynamic> productsInOrder = orderData['products'] ?? [];
-
-          bool containsSellerProduct = false;
-          for (var productItem in productsInOrder) {
-            if (productItem is Map<String, dynamic> &&
-                productItem['sellerId'] == currentSellerId) {
-              containsSellerProduct = true;
-              break;
-            }
-          }
-          if (containsSellerProduct) {
-            relevantOrders.add(orderDoc);
-          }
-        }
-
-        if (relevantOrders.isEmpty) {
-          return const Center(
-            child: Text("No orders found for your products."),
-          );
-        }
+        final relevantOrders = snapshot.data!.docs;
 
         return ListView.builder(
+          padding: const EdgeInsets.all(16.0),
           itemCount: relevantOrders.length,
           itemBuilder: (context, index) {
             final orderDoc = relevantOrders[index];
             final orderData = orderDoc.data() as Map<String, dynamic>;
             final orderId = orderDoc.id;
+            final customerId = orderData['userId'] as String;
 
-            final orderProducts = orderData['products'] as List<dynamic>? ?? [];
-            final orderDate = (orderData['createdAt'] as Timestamp?)?.toDate();
-            final formattedDate = orderDate != null
-                ? DateFormat('dd MMM yyyy HH:mm').format(orderDate)
-                : 'N/A';
-            final customerName =
-                orderData['customerName'] ?? 'Unknown Customer';
-            final totalPaid =
-                (orderData['totalPaidAmount'] as num?)?.toDouble() ?? 0.0;
-            final deliveryNeeded = orderData['needsDelivery'] ?? false;
-            final deliveryAddress = orderData['address'] ?? 'Not provided';
             final orderRef =
                 orderData['orderReference'] ??
                 orderId.substring(0, 8).toUpperCase();
             final currentStatus = orderData['status'] ?? 'pending';
+            final orderDate = (orderData['createdAt'] as Timestamp?)?.toDate();
 
-            final sellerSpecificProducts = orderProducts
-                .where(
-                  (p) =>
-                      p is Map<String, dynamic> &&
-                      p['sellerId'] == currentSellerId,
-                )
-                .toList();
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(customerId)
+                  .get(),
+              builder: (context, customerSnapshot) {
+                String customerName = 'Unknown Customer';
+                if (customerSnapshot.connectionState == ConnectionState.done &&
+                    customerSnapshot.hasData) {
+                  final customerData =
+                      customerSnapshot.data!.data() as Map<String, dynamic>?;
+                  if (customerData != null &&
+                      customerData.containsKey('name')) {
+                    customerName = customerData['name'] ?? 'Unknown Customer';
+                  }
+                }
 
-            if (sellerSpecificProducts.isEmpty) {
-              return const SizedBox.shrink();
-            }
-
-            double sellerProductsTotal = 0.0;
-            for (var prod in sellerSpecificProducts) {
-              sellerProductsTotal +=
-                  (prod['itemTotalPrice'] as num?)?.toDouble() ?? 0.0;
-            }
-
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              elevation: 2,
-              child: ExpansionTile(
-                title: Text(
-                  'Order #${orderRef}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Customer: ${customerName}'),
-                    Text('Date: ${formattedDate}'),
-                    Chip(
-                      label: Text(
-                        'Status: ${currentStatus.toUpperCase().replaceAll('_', ' ')}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: _getStatusColor(currentStatus),
+                return Card(
+                  color: Colors.grey[50],
+                  elevation: 4,
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 0,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    Text(
-                      'Your Products Total: R${sellerProductsTotal.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[700],
-                      ),
+                    title: _buildOrderSummary(
+                      orderRef: orderRef,
+                      customerName: customerName,
+                      orderDate: orderDate,
+                      currentStatus: currentStatus,
+                      context: context,
                     ),
-                  ],
-                ),
+                    children: [
+                      _buildOrderDetails(
+                        context,
+                        orderData,
+                        orderId,
+                        currentSellerId,
+                        orderStatuses,
+                        updateOrderStatus,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Helper widget for the collapsed order view
+  Widget _buildOrderSummary({
+    required String orderRef,
+    required String customerName,
+    required DateTime? orderDate,
+    required String currentStatus,
+    required BuildContext context,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Order #${orderRef}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _getStatusColor(currentStatus).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Full Order ID: $orderId',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Customer Email: ${orderData['customerEmail'] ?? 'N/A'}',
-                        ),
-                        Text(
-                          'Payment Method: ${orderData['paymentMethod'] ?? 'N/A'}',
-                        ),
-                        Text(
-                          'Total Paid by Customer (Full Order): R${totalPaid.toStringAsFixed(2)}',
-                        ),
-                        if (deliveryNeeded) ...[
-                          const Text('Delivery Needed: Yes'),
-                          Text('Delivery Address: ${deliveryAddress}'),
-                          Text(
-                            'Delivery Charge: R${(orderData['deliveryCharge'] as num?)?.toDouble().toStringAsFixed(2) ?? '0.00'}',
-                          ),
-                        ] else ...[
-                          const Text('Delivery Needed: No (Collection)'),
-                        ],
-                        const SizedBox(height: 10),
-                        const Text(
-                          'Your Products in this Order:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: sellerSpecificProducts.map<Widget>((
-                            product,
-                          ) {
-                            return Padding(
-                              padding: const EdgeInsets.only(
-                                left: 8.0,
-                                top: 4.0,
-                              ),
-                              child: Text(
-                                '- ${product['productName']} (x${product['quantity']}) @ R${(product['price'] as num?)?.toDouble().toStringAsFixed(2)} each = R${(product['itemTotalPrice'] as num?)?.toDouble().toStringAsFixed(2)}',
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 10),
-                        const Divider(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    String? tempSelectedStatus = currentStatus;
-                                    return StatefulBuilder(
-                                      builder: (context, setDialogState) {
-                                        return AlertDialog(
-                                          title: const Text(
-                                            "Update Order Status",
-                                          ),
-                                          content: SingleChildScrollView(
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: orderStatuses.map((
-                                                status,
-                                              ) {
-                                                return RadioListTile<String>(
-                                                  title: Text(
-                                                    status
-                                                        .toUpperCase()
-                                                        .replaceAll('_', ' '),
-                                                  ),
-                                                  value: status,
-                                                  groupValue:
-                                                      tempSelectedStatus,
-                                                  onChanged: (value) {
-                                                    setDialogState(() {
-                                                      tempSelectedStatus =
-                                                          value;
-                                                    });
-                                                  },
-                                                );
-                                              }).toList(),
-                                            ),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.pop(context);
-                                              },
-                                              child: const Text("Cancel"),
-                                            ),
-                                            ElevatedButton.icon(
-                                              onPressed: () async {
-                                                if (tempSelectedStatus !=
-                                                        null &&
-                                                    tempSelectedStatus !=
-                                                        currentStatus) {
-                                                  await updateOrderStatus(
-                                                    orderId,
-                                                    tempSelectedStatus!,
-                                                  );
-                                                  if (mounted) {
-                                                    Navigator.pop(context);
-                                                  }
-                                                } else {
-                                                  if (mounted) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                          'No status selected or no change.',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                              icon: const Icon(Icons.update),
-                                              label: const Text(
-                                                "Confirm Update",
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                              icon: const Icon(Icons.edit),
-                              label: const Text("Update Status"),
-                            ),
-                          ],
-                        ),
-                      ],
+                  Icon(
+                    _getStatusIcon(currentStatus),
+                    color: _getStatusColor(currentStatus),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      currentStatus.toUpperCase().replaceAll('_', ' '),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _getStatusColor(currentStatus),
+                      ),
                     ),
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Customer: $customerName',
+          style: TextStyle(color: Theme.of(context).hintColor),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Date: ${orderDate != null ? DateFormat('dd MMM yyyy HH:mm').format(orderDate) : 'N/A'}',
+          style: TextStyle(color: Theme.of(context).hintColor),
+        ),
+      ],
+    );
+  }
+
+  // Helper widget for the expanded order view
+  Widget _buildOrderDetails(
+    BuildContext context,
+    Map<String, dynamic> orderData,
+    String orderId,
+    String currentSellerId,
+    List<String> orderStatuses,
+    Function(String, String) updateOrderStatus,
+  ) {
+    final orderProducts = orderData['products'] as List<dynamic>? ?? [];
+    final sellerSpecificProducts = orderProducts
+        .where(
+          (p) => p is Map<String, dynamic> && p['sellerId'] == currentSellerId,
+        )
+        .toList();
+
+    double sellerProductsTotal = 0.0;
+    for (var prod in sellerSpecificProducts) {
+      sellerProductsTotal +=
+          (prod['itemTotalPrice'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Your Products Total: R${sellerProductsTotal.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.green,
+            ),
+          ),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'Total Paid by Customer (Full Order): R${(orderData['totalPaidAmount'] as num?)?.toDouble().toStringAsFixed(2) ?? '0.00'}',
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          Text(
+            'Payment Method: ${orderData['paymentMethod'] ?? 'N/A'}',
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Delivery: ${orderData['needsDelivery'] ? 'Needed' : 'Collection'}',
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          if (orderData['needsDelivery'])
+            Text(
+              'Delivery Address: ${orderData['address'] ?? 'Not provided'}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          const SizedBox(height: 16),
+          const Text(
+            'Items in this Order:',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          ...sellerSpecificProducts.map<Widget>((product) {
+            final prodName = product['productName'] ?? 'Unknown Product';
+            final prodQty = product['quantity'] ?? 1;
+            final prodPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
+            final prodTotal =
+                (product['itemTotalPrice'] as num?)?.toDouble() ?? 0.0;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.circle, size: 8),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$prodName (x$prodQty) @ R${prodPrice.toStringAsFixed(2)} each = R${prodTotal.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  _showStatusUpdateDialog(
+                    context,
+                    orderId,
+                    orderData['status'] ?? 'pending',
+                    orderStatuses,
+                    updateOrderStatus,
+                  );
+                },
+                icon: const Icon(Icons.edit),
+                label: const Text("Update Status"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStatusUpdateDialog(
+    BuildContext context,
+    String orderId,
+    String currentStatus,
+    List<String> orderStatuses,
+    Function(String, String) updateOrderStatus,
+  ) {
+    String? tempSelectedStatus = currentStatus;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Update Order Status"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: orderStatuses.map((status) {
+                    return RadioListTile<String>(
+                      title: Text(status.toUpperCase().replaceAll('_', ' ')),
+                      value: status,
+                      groupValue: tempSelectedStatus,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          tempSelectedStatus = value;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    if (tempSelectedStatus != null &&
+                        tempSelectedStatus != currentStatus) {
+                      await updateOrderStatus(orderId, tempSelectedStatus!);
+                      if (context.mounted) Navigator.pop(context);
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No status selected or no change.'),
+                          ),
+                        );
+                        Navigator.pop(context);
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.update),
+                  label: const Text("Confirm Update"),
+                ),
+              ],
             );
           },
         );
@@ -1269,7 +1401,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                 dashboardTab(),
                 myProductsTab(),
                 addProductTab(), // This is now the updated addProductTab
-                ordersTab(),
+                ordersTab(user, context, updateOrderStatus, orderStatuses),
               ],
             ),
           ),

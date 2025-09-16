@@ -5,18 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
+import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Pages/MyProfile.dart';
 import 'package:ttact/Pages/Rate.dart';
-// These imports will need to be correctly resolved based on your project structure
 import 'package:ttact/Pages/ShoppingPage.dart';
 import 'package:ttact/Pages/Tact_Seller.dart';
-import 'package:ttact/Pages/orders.dart'; // Ensure correct import for OrdersPage
+import 'package:ttact/Pages/orders.dart';
 import 'Events.dart';
 import 'HistoryPage.dart';
-import 'HomePage.dart'; // Ensure this is imported correctly
+import 'HomePage.dart';
 
 class MotherPage extends StatefulWidget {
-  // NEW: Add onToggleTheme callback
   final Function(bool) onToggleTheme;
   const MotherPage({super.key, required this.onToggleTheme});
 
@@ -27,7 +26,6 @@ class MotherPage extends StatefulWidget {
 class _MotherPageState extends State<MotherPage>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
-  // Removed _isDarkMode state from here as it's now managed in MyApp
 
   @override
   void initState() {
@@ -49,7 +47,6 @@ class _MotherPageState extends State<MotherPage>
       setState(() {
         _userData = data;
         if (_userData['role'] == 'Seller') {
-          // If the user is a seller, set initial index to My Shop (now at index 4)
           _currentIndex = 4;
         } else {
           _currentIndex = 0;
@@ -58,7 +55,6 @@ class _MotherPageState extends State<MotherPage>
     }
   }
 
-  // Function to show the help/issue dialog
   void _showHelpDialog() {
     final TextEditingController subjectController = TextEditingController();
     final TextEditingController descriptionController = TextEditingController();
@@ -171,155 +167,173 @@ class _MotherPageState extends State<MotherPage>
       ),
       drawer: Drawer(
         backgroundColor: color.primaryColor,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              children: [
-                SizedBox(height: 30),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.asset(
-                    'assets/tact_logo.PNG',
-                    height: 150,
-                    width: 150,
-                    fit: BoxFit.cover,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                children: [
+                  SizedBox(height: 30),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(
+                      'assets/dankie_logo.PNG',
+                      width: double.infinity,
+                      height: 250,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                ),
-                Divider(color: color.scaffoldBackgroundColor),
+                  Divider(color: color.scaffoldBackgroundColor),
 
-                ListTile(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => MyProfile()),
-                    );
-                  },
-                  textColor: color.scaffoldBackgroundColor,
-                  title: Text('Profile'),
-                  leading: Icon(
-                    Ionicons.person_outline,
-                    color: color.scaffoldBackgroundColor,
+                  ListTile(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => MyProfile()),
+                      );
+                    },
+                    textColor: color.scaffoldBackgroundColor,
+                    title: Text('Profile'),
+                    leading: Icon(
+                      Ionicons.person_outline,
+                      color: color.scaffoldBackgroundColor,
+                    ),
                   ),
-                ),
-                Divider(),
-                // Dark/Light Mode Switch
-                SwitchListTile(
-                  title: Text(
-                    'Light/Dark Mode',
-                    style: TextStyle(color: color.scaffoldBackgroundColor),
+                  Divider(),
+                  // Dark/Light Mode Switch
+                  SwitchListTile(
+                    title: Text(
+                      'Light/Dark Mode',
+                      style: TextStyle(color: color.scaffoldBackgroundColor),
+                    ),
+                    secondary: Icon(
+                      Icons.brightness_2,
+                      color: color.scaffoldBackgroundColor,
+                    ),
+                    value:
+                        Theme.of(context).brightness ==
+                        Brightness.dark, // Get current theme brightness
+                    onChanged: (value) {
+                      widget.onToggleTheme(
+                        value,
+                      ); // Call the callback from MyApp
+                    },
+                    activeColor: color.colorScheme.secondary,
+                    inactiveThumbColor: color.hintColor,
+                    inactiveTrackColor: color.hintColor.withOpacity(0.5),
                   ),
-                  secondary: Icon(
-                    Icons.brightness_2,
-                    color: color.scaffoldBackgroundColor,
+                  Divider(color: color.scaffoldBackgroundColor),
+                  ListTile(
+                    onTap: () {},
+                    textColor: color.scaffoldBackgroundColor,
+                    tileColor: Colors.transparent,
+                    iconColor: color.scaffoldBackgroundColor,
+                    title: Text('About'),
+                    leading: Icon(Icons.info_outline),
                   ),
-                  value:
-                      Theme.of(context).brightness ==
-                      Brightness.dark, // Get current theme brightness
-                  onChanged: (value) {
-                    widget.onToggleTheme(value); // Call the callback from MyApp
-                  },
-                  activeColor: color.colorScheme.secondary,
-                  inactiveThumbColor: color.hintColor,
-                  inactiveTrackColor: color.hintColor.withOpacity(0.5),
-                ),
-                Divider(color: color.scaffoldBackgroundColor),
-                ListTile(
-                  onTap: () {},
-                  textColor: color.scaffoldBackgroundColor,
-                  tileColor: Colors.transparent,
-                  iconColor: color.scaffoldBackgroundColor,
-                  title: Text('About'),
-                  leading: Icon(Icons.info_outline),
-                ),
-                Divider(color: color.scaffoldBackgroundColor),
-                ListTile(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => RateUsDialog()),
-                    );
-                  },
-                  textColor: color.scaffoldBackgroundColor,
-                  tileColor: Colors.transparent,
-                  iconColor: color.scaffoldBackgroundColor,
-                  title: Text('Rate the App'),
-                  leading: Icon(Icons.star_rate_outlined),
-                ),
-                Divider(color: color.scaffoldBackgroundColor),
-                ListTile(
-                  onTap: _showHelpDialog,
-                  textColor: color.scaffoldBackgroundColor,
-                  tileColor: Colors.transparent,
-                  iconColor: color.scaffoldBackgroundColor,
-                  title: Text('Help / Report Issue'),
-                  leading: Icon(Icons.help_outline),
-                ),
-                Divider(color: color.scaffoldBackgroundColor),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18.0),
-              child: ListTile(
-                onTap: () {
-                  if (FirebaseAuth.instance.currentUser?.uid == null) {
-                    FirebaseAuth.instance.signOut();
-                    Navigator.pushNamed(context, '/login');
-                  } else {
-                    FirebaseAuth.instance.signOut();
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
-                    );
-                  }
-                },
-                textColor: color.scaffoldBackgroundColor,
-                tileColor: Colors.transparent,
-                iconColor: color.scaffoldBackgroundColor,
-                title: Text(
-                  FirebaseAuth.instance.currentUser?.uid == null
-                      ? 'Login'
-                      : 'Logout',
-                ),
-                leading: Icon(Icons.logout),
+                  Divider(color: color.scaffoldBackgroundColor),
+                  ListTile(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => RateUsDialog()),
+                      );
+                    },
+                    textColor: color.scaffoldBackgroundColor,
+                    tileColor: Colors.transparent,
+                    iconColor: color.scaffoldBackgroundColor,
+                    title: Text('Rate the App'),
+                    leading: Icon(Icons.star_rate_outlined),
+                  ),
+                  Divider(color: color.scaffoldBackgroundColor),
+                  ListTile(
+                    onTap: _showHelpDialog,
+                    textColor: color.scaffoldBackgroundColor,
+                    tileColor: Colors.transparent,
+                    iconColor: color.scaffoldBackgroundColor,
+                    title: Text('Help / Report Issue'),
+                    leading: Icon(Icons.help_outline),
+                  ),
+                  Divider(color: color.scaffoldBackgroundColor),
+                ],
               ),
-            ),
-          ],
+              SingleChildScrollView(
+                child: Column(
+                  children: [
+                    AdManager().bannerAdWidget(),
+                    Padding(
+                      padding: const EdgeInsets.all(18.0),
+                      child: ListTile(
+                        onTap: () {
+                          if (FirebaseAuth.instance.currentUser?.uid == null) {
+                            FirebaseAuth.instance.signOut();
+                            Navigator.pushNamed(context, '/login');
+                          } else {
+                            FirebaseAuth.instance.signOut();
+                            Navigator.pushNamedAndRemoveUntil(
+                              context,
+                              '/login',
+                              (route) => false,
+                            );
+                          }
+                        },
+                        textColor: color.scaffoldBackgroundColor,
+                        tileColor: Colors.transparent,
+                        iconColor: color.scaffoldBackgroundColor,
+                        title: Text(
+                          FirebaseAuth.instance.currentUser?.uid == null
+                              ? 'Login'
+                              : 'Logout',
+                        ),
+                        leading: Icon(Icons.logout),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      bottomNavigationBar: SalomonBottomBar(
-        backgroundColor: color.primaryColor,
-        selectedItemColor: color.scaffoldBackgroundColor,
-        unselectedItemColor: color.hintColor,
-        currentIndex: _currentIndex,
-        onTap: (value) {
-          setState(() {
-            _currentIndex = value;
-          });
-        },
-        items: [
-          SalomonBottomBarItem(
-            icon: Icon(Ionicons.home_outline),
-            title: Text('Home'),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AdManager().bannerAdWidget(),
+
+          SalomonBottomBar(
+            backgroundColor: color.primaryColor,
+            selectedItemColor: color.scaffoldBackgroundColor,
+            unselectedItemColor: color.hintColor,
+            currentIndex: _currentIndex,
+            onTap: (value) {
+              setState(() {
+                _currentIndex = value;
+              });
+            },
+            items: [
+              SalomonBottomBarItem(
+                icon: Icon(Ionicons.home_outline),
+                title: Text('Home'),
+              ),
+              SalomonBottomBarItem(
+                icon: Icon(Ionicons.calendar_outline),
+                title: Text('Events'),
+              ),
+              SalomonBottomBarItem(
+                icon: Icon(Icons.local_mall_outlined),
+                title: Text('Shopping'),
+              ),
+              SalomonBottomBarItem(
+                icon: Icon(Icons.history_outlined),
+                title: Text('History'),
+              ),
+              if (_userData['role'] == 'Seller')
+                SalomonBottomBarItem(
+                  icon: Icon(Ionicons.person_outline),
+                  title: Text('My Shop'),
+                ),
+            ],
           ),
-          SalomonBottomBarItem(
-            icon: Icon(Ionicons.calendar_outline),
-            title: Text('Events'),
-          ),
-          SalomonBottomBarItem(
-            icon: Icon(Icons.local_mall_outlined),
-            title: Text('Shopping'),
-          ),
-          SalomonBottomBarItem(
-            icon: Icon(Icons.history_outlined),
-            title: Text('History'),
-          ),
-          if (_userData['role'] == 'Seller')
-            SalomonBottomBarItem(
-              icon: Icon(Ionicons.person_outline),
-              title: Text('My Shop'),
-            ),
         ],
       ),
       body: pages[_currentIndex],

@@ -1,25 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ttact/Components/API.dart'; // Assuming this provides Api().showMessage and Api().login
-import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:ttact/Components/TextField.dart';
-import 'package:text_field_validation/text_field_validation.dart';
-import 'package:http/http.dart' as http; // Import for HTTP requests
-import 'dart:convert'; // Import for JSON encoding/decoding
-import 'package:url_launcher/url_launcher.dart'; // Import for url_launcher
-import 'package:geolocator/geolocator.dart'; // Import geolocator
-import 'package:geocoding/geocoding.dart'; // Import geocoding
-import 'package:shared_preferences/shared_preferences.dart'; // Import for CartHelper
+import 'package:ttact/Components/API.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- IMPORTANT: CONFIGURE YOUR BACKEND ENDPOINT ---
-// This should be your Cloud Function base URL for generating Stripe Payment Links
 const String YOUR_BACKEND_BASE_URL =
-    'https://us-central1-tact-3c612.cloudfunctions.net';
+    'https://us-central1-tact-3c612.cloudfunctions.net/api';
 
-// Import CartHelper (assuming it's in a separate file or defined earlier in main.dart)
-// Make sure CartHelper.clearCart() is accessible.
-// If CartHelper is in this file, ensure it's above this class definition.
 class CartHelper {
   static const String _cartKey = 'cart';
 
@@ -27,9 +22,6 @@ class CartHelper {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cartKey);
   }
-
-  // Add other methods from your CartHelper here if not in a separate file.
-  // For this fix, only clearCart is strictly needed within PaymentGatewayPage context.
 }
 
 class PaymentGatewayPage extends StatefulWidget {
@@ -51,56 +43,31 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
   final TextEditingController _addressController = TextEditingController();
   bool needsDelivery = false;
   double deliveryCharge = 50.0;
-  String? selectedPaymentMethod;
   bool isPlacingOrder = false;
-  bool _isLoadingAddress = false; // New state to manage address loading
-
-  // Updated payment methods, removing direct Stripe integration for Payment Link
-  final paymentMethods = [
-    'Credit/Debit Card (Stripe Payment Link)', // Renamed for clarity
-    'Mobile Wallet',
-    'PayPal',
-    'Scan to Pay (QR Code)',
-    'Ozow Instant EFT',
-  ];
-
-  final Map<String, IconData> paymentMethodIcons = {
-    'Credit/Debit Card (Stripe Payment Link)': Icons.credit_card,
-    'Mobile Wallet': Icons.account_balance_wallet,
-    'PayPal': Icons.payments,
-    'Scan to Pay (QR Code)': Icons.qr_code_scanner,
-    'Ozow Instant EFT': Icons.account_balance,
-  };
+  bool _isLoadingAddress = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  TextEditingController emailController = TextEditingController();
-  TextEditingController passwordController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _initializeAddress(); // Call the new address initialization logic
+    _initializeAddress();
   }
 
   @override
   void dispose() {
     _addressController.dispose();
-    emailController.dispose();
-    passwordController.dispose();
     super.dispose();
   }
 
-  // --- NEW: Function to initialize the address based on login status and location ---
   void _initializeAddress() async {
     setState(() {
-      _isLoadingAddress = true; // Start loading state
-      _addressController.text = 'Loading address...'; // Temporary message
+      _isLoadingAddress = true;
+      _addressController.text = 'Loading address...';
     });
 
     User? currentUser = _auth.currentUser;
-
     if (currentUser != null) {
-      // User is logged in, try to get address from Firestore
       try {
         DocumentSnapshot userDoc = await FirebaseFirestore.instance
             .collection('users')
@@ -110,13 +77,13 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         if (userDoc.exists && userDoc.data() != null) {
           Map<String, dynamic>? userData =
               userDoc.data() as Map<String, dynamic>?;
-          String? storedAddress = userData?['Address'];
+          String? storedAddress = userData?['address'];
           if (storedAddress != null && storedAddress.isNotEmpty) {
             _addressController.text = storedAddress;
             setState(() {
               _isLoadingAddress = false;
             });
-            return; // Address found and set, no need for location
+            return;
           }
         }
       } catch (e) {
@@ -124,56 +91,43 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       }
     }
 
-    // If not logged in, or no address found in Firestore, get current location
     await _getCurrentLocation();
   }
 
-  // --- NEW: Function to get the device's current location ---
   Future<void> _getCurrentLocation() async {
     setState(() {
-      _addressController.text =
-          'Fetching your current location...'; // Provide immediate feedback
+      _addressController.text = 'Fetching your current location...';
     });
 
     bool serviceEnabled;
     LocationPermission permission;
 
-    // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      _showLocationError(
-        'Location services are disabled. Please enable them in your device settings.',
-      );
+      _showLocationError('Location services are disabled.');
       return;
     }
 
-    // Check location permission
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        _showLocationError(
-          'Location permissions are denied. You will need to manually enter your address.',
-        );
+        _showLocationError('Location permissions are denied.');
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      _showLocationError(
-        'Location permissions are permanently denied. Please enable them in app settings.',
-      );
+      _showLocationError('Location permissions are permanently denied.');
       return;
     }
 
-    // Get current position
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15), // Added a timeout
+        timeLimit: const Duration(seconds: 15),
       );
 
-      // Convert coordinates to address
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
@@ -194,17 +148,15 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       );
     } finally {
       setState(() {
-        _isLoadingAddress = false; // End loading state regardless of outcome
+        _isLoadingAddress = false;
       });
     }
   }
 
-  // Helper to show SnackBar messages for location errors
   void _showLocationError(String message) {
     setState(() {
       _isLoadingAddress = false;
-      _addressController.text =
-          ''; // Clear text if error or user needs to input
+      _addressController.text = '';
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
@@ -218,9 +170,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       final productQuantity = (product['quantity'] as int?) ?? 1;
       subtotal += productPrice * productQuantity;
     }
-    if (needsDelivery) {
-      subtotal += deliveryCharge; // Add delivery charge if needed
-    }
     return subtotal;
   }
 
@@ -232,17 +181,33 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     return total;
   }
 
-  // --- Function to handle Ozow payment using url_launcher (kept as is) ---
-  Future<void> _processOzowPaymentWithUrlLauncher() async {
-    final color = Theme.of(context);
-    final user = FirebaseAuth.instance.currentUser;
+  Future<void> _payWithPaystack() async {
+    if (widget.cartProducts.isEmpty) {
+      Api().showMessage(
+        context,
+        'Cart is empty!',
+        'No items to checkout.',
+        Colors.red,
+      );
+      return;
+    }
+    if (_addressController.text.isEmpty) {
+      Api().showMessage(
+        context,
+        'Please provide a delivery address.',
+        'Address Missing',
+        Colors.red,
+      );
+      return;
+    }
 
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       Api().showMessage(
         context,
-        'Authentication Error',
-        'Please log in to proceed with payment.',
-        color.primaryColorDark,
+        'You must be logged in to pay.',
+        'Not Logged In',
+        Colors.red,
       );
       return;
     }
@@ -251,412 +216,111 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       isPlacingOrder = true;
     });
 
+    String? createdOrderReference;
+    StreamSubscription<DocumentSnapshot>? subscription;
+
     try {
-      final response = await http.post(
-        Uri.parse('$YOUR_BACKEND_BASE_URL/initiateOzowPayment'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'userId': user.uid,
-          'amount': (_calculateTotal() * 100)
-              .toInt(), // Ozow often expects cents
-          'orderReference':
-              'TTAC-${DateTime.now().millisecondsSinceEpoch}-${user.uid.substring(0, 8)}',
-          'customerName': user.displayName ?? 'Guest User',
-          'customerEmail': user.email ?? 'no_email@example.com',
-          'color': widget.selectedColor,
-          'size': widget.selectedSize,
-          'products': widget.cartProducts,
-          'address': _addressController.text,
-          'needsDelivery': needsDelivery,
-          'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
-          'paymentMethod': selectedPaymentMethod,
-        }),
-      );
+      // 1. CREATE PENDING ORDER IN FIRESTORE
+      final orderDoc = FirebaseFirestore.instance.collection('orders').doc();
+      createdOrderReference = orderDoc.id;
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        final String? paymentUrl = responseData['paymentUrl'];
+      final orderData = {
+        'orderId': createdOrderReference,
+        'userId': user.uid,
+        'products': widget.cartProducts.map((p) {
+          return {
+            'productName': p['productName'],
+            'price': p['price'],
+            'quantity': p['quantity'] ?? 1,
+            'imageUrl': p['imageUrl'],
+            'sellerId': p['sellerId'],
+            'subaccountCode': p['subaccountCode'],
+            'selectedColor': p['selectedColor'], // Use the correct key
+            'selectedSize': p['selectedSize'], // Use the correct key
+            'itemTotalPrice': (p['price'] as num) * (p['quantity'] as num),
+          };
+        }).toList(),
+        'address': _addressController.text,
+        'needsDelivery': needsDelivery,
+        'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
+        'paymentMethod': 'Paystack',
+        'status': 'pending_payment',
+        'createdAt': FieldValue.serverTimestamp(),
+        'customerEmail': user.email ?? 'no_email@example.com',
+        'totalPaidAmount': _calculateTotal(),
+      };
 
-        if (paymentUrl != null) {
-          final Uri uri = Uri.parse(paymentUrl);
+      await orderDoc.set(orderData);
 
-          if (await canLaunchUrl(uri) &&
-              await supportsLaunchMode(LaunchMode.inAppBrowserView)) {
-            await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      // 2. LISTEN FOR STATUS CHANGES ON THE ORDER DOCUMENT
+      // This is the key part for real-time updates.
+      subscription = orderDoc.snapshots().listen((DocumentSnapshot snapshot) {
+        if (snapshot.exists) {
+          final orderData = snapshot.data() as Map<String, dynamic>;
+          final newStatus = orderData['status'];
+
+          if (newStatus == 'paid') {
+            subscription?.cancel(); // Stop listening
+            Navigator.pushReplacementNamed(context, '/orders');
             Api().showMessage(
               context,
-              'Processing your Ozow payment...',
-              'We will notify you once complete.',
-              color.splashColor,
+              'Payment Successful! You can now view your order.',
+              'Payment Confirmed',
+              Colors.green,
             );
-            // Consider passing orderId to the next page for tracking
-            // Use pushReplacement or pushNamed to prevent going back to payment page
-            Navigator.pushNamed(context, '/orders');
-          } else {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-            Api().showMessage(
-              context,
-              'Opened Ozow in external browser.',
-              'Please complete payment there and return to the app.',
-              color.splashColor,
-            );
-            Navigator.pushNamed(context, '/orders');
           }
-        } else {
-          Api().showMessage(
-            context,
-            'Payment Failed',
-            'Failed to get Ozow payment URL from backend. Please try again.',
-            color.primaryColorDark,
-          );
         }
-      } else {
-        Api().showMessage(
-          context,
-          'Server Error',
-          'Could not initiate payment. Status: ${response.statusCode}',
-          color.primaryColorDark,
-        );
-        print('Backend Error Body: ${response.body}');
-      }
-    } catch (e) {
-      Api().showMessage(
-        context,
-        'Payment Error',
-        'An unexpected error occurred: ${e.toString()}',
-        color.primaryColorDark,
-      );
-      print('Error initiating Ozow payment: $e');
-    } finally {
-      setState(() {
-        isPlacingOrder = false;
       });
-    }
-  }
- 
-  Future<void> _processStripePaymentLink() async {
-    final color = Theme.of(context);
-    final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) {
-      Api().showMessage(
-        context,
-        'Authentication Error',
-        'Please log in to proceed with payment.',
-        color.primaryColorDark,
-      );
-      return;
-    }
-
-    setState(() {
-      isPlacingOrder = true;
-    });
-
-    try {
-      // Ensure products have all necessary fields for the Cloud Function (especially sellerId)
-      final List<Map<String, dynamic>>
-      formattedProducts = widget.cartProducts.map((product) {
-        // These fields MUST match what your Cloud Function expects and what you need in the order doc
+      // 3. PREPARE PAYLOAD AND CALL BACKEND
+      List<Map<String, dynamic>> productsForPaystack = widget.cartProducts.map((
+        p,
+      ) {
         return {
-          'productId': product['productId']?.toString() ?? 'unknown_id',
-          'productName':
-              product['productName']?.toString() ?? 'Unknown Product',
-          'price': (product['price'] is String)
-              ? double.tryParse(product['price']) ?? 0.0
-              : (product['price'] as num?)?.toDouble() ?? 0.0,
-          'quantity': (product['quantity'] as int?) ?? 1,
-          'imageUrl': product['imageUrl']?.toString() ?? '',
-          'sellerId':
-              product['sellerId']?.toString() ??
-              'unknown_seller', // Crucial for seller view
-          // Add other fields you store in the order's products array
-          'itemTotalPrice':
-              ((product['price'] as num?)?.toDouble() ?? 0.0) *
-              ((product['quantity'] as int?) ?? 1),
+          'name': p['productName'],
+          'price': p['price'],
+          'quantity': p['quantity'] ?? 1,
+          'subaccount': p['subaccountCode'] ?? '',
         };
       }).toList();
 
       final response = await http.post(
-        Uri.parse('$YOUR_BACKEND_BASE_URL/createStripePaymentLink'),
+        Uri.parse('$YOUR_BACKEND_BASE_URL/create-payment-link'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'amount':
-              _calculateSubtotal(), // Send subtotal to backend, it calculates totalPaidAmount
-          'currency': 'ZAR',
-          'userId': user.uid,
-          'customerEmail': user.email ?? 'no_email@example.com',
-          'customerName': user.displayName ?? 'Guest User',
-          'orderReference':
-              'TTACT-$customerName ${DateTime.now().millisecondsSinceEpoch}',
-          'products': formattedProducts, // Use the properly formatted products
-          'address': _addressController.text,
-          'color': widget.selectedColor,
-          'size': widget.selectedSize,
-          'needsDelivery': needsDelivery,
-          'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
-          'paymentMethod': selectedPaymentMethod,
+        body: jsonEncode({
+          'email': user.email ?? 'no_email@example.com',
+          'products': productsForPaystack,
+          'orderReference': createdOrderReference,
         }),
       );
 
-      print(
-        '✅ Backend Request Body: ${json.encode({'amount': _calculateSubtotal(), 'currency': 'ZAR', 'userId': user.uid, 'customerEmail': user.email ?? 'no_email@example.com', 'customerName': user.displayName ?? 'Guest User', 'orderReference': 'TTACT-${DateTime.now().millisecondsSinceEpoch}-${user.uid.substring(0, 8)}', 'products': formattedProducts, 'address': _addressController.text, 'needsDelivery': needsDelivery, 'deliveryCharge': needsDelivery ? deliveryCharge : 0.0, 'paymentMethod': selectedPaymentMethod})}',
-      );
-      print('✅ Backend Response: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        final String? paymentLinkUrl = responseData['paymentLinkUrl'];
-
-        if (paymentLinkUrl != null) {
-          final Uri uri = Uri.parse(paymentLinkUrl);
-
-          // Launch Stripe checkout
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(
-              uri,
-              mode: LaunchMode.inAppWebView,
-              webViewConfiguration: const WebViewConfiguration(
-                enableJavaScript: true,
-                enableDomStorage: true,
-              ),
-            );
-
-            Api().showMessage(
-              context,
-              'Redirected to Stripe',
-              'Complete payment and return to the app.',
-              color.splashColor,
-            );
-
-            // IMPORTANT: Do NOT clear cart here.
-            // Cart clearing will happen in the webhook Cloud Function AFTER successful payment.
-            // Navigate to orders page to allow user to see status updates.
-            Navigator.pushReplacementNamed(
-              context,
-              '/orders',
-            ); // Use pushReplacement to prevent going back
-          } else {
-            throw 'Could not launch $paymentLinkUrl';
-          }
+      final data = jsonDecode(response.body);
+      if (data['paymentLink'] != null) {
+        final url = Uri.parse(data['paymentLink']);
+        if (await canLaunchUrl(url)) {
+          // Launch the URL
+          await launchUrl(url, mode: LaunchMode.inAppBrowserView);
         } else {
-          Api().showMessage(
-            context,
-            'No payment link returned from the server.',
-            'Please try again or contact support.',
-            color.primaryColorDark,
-          );
+          throw 'Could not open payment link';
         }
       } else {
-        final errorResponse = json.decode(response.body);
-        Api().showMessage(
-          context,
-          'Payment Failed',
-          errorResponse['error'] ??
-              'Failed to create payment link (Status: ${response.statusCode})',
-          color.primaryColorDark,
-        );
+        throw data['error'] ?? 'Failed to create payment link';
       }
-    } catch (e) {
+
       Api().showMessage(
         context,
+        'Redirecting to payment...',
+        'Please complete the payment to finalize your order.',
+        Theme.of(context).primaryColor,
+      );
+    } catch (e) {
+      print('An error occurred while processing your payment: $e');
+      subscription?.cancel(); // Cancel subscription on error
+      Api().showMessage(
+        context,
+        'An error occurred while processing your payment: $e',
         'Payment Error',
-        'Failed to process payment: ${e.toString()}',
-        color.primaryColorDark,
-      );
-      print('Stripe Payment Link Error: $e');
-    } finally {
-      setState(() {
-        isPlacingOrder = false;
-      });
-    }
-  }
-
-  String customerName = 'Guest User';
-  Future<void> placeOrder() async {
-    final color = Theme.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      showModalBottomSheet(
-        backgroundColor: color.scaffoldBackgroundColor,
-        scrollControlDisabledMaxHeightRatio: 0.4,
-        context: context,
-        builder: (context) {
-          return Padding(
-            padding: const EdgeInsets.all(18.0),
-            child: Column(
-              children: [
-                AuthTextField(
-                  icon: Icons.email_outlined,
-                  controller: emailController,
-                  onValidate: TextFieldValidation.email,
-                  placeholder: 'Enter your email',
-                ),
-                AuthTextField(
-                  icon: Icons.password_sharp,
-                  controller: passwordController,
-                  onValidate: TextFieldValidation.password,
-                  placeholder: 'Password',
-                ),
-                CustomOutlinedButton(
-                  onPressed: () async {
-                    // Make onPressed async
-                    await Api().login(
-                      // Await the login call
-                      context,
-                      emailController.text,
-                      passwordController.text,
-                    );
-                    // After login attempt, re-initialize address field
-                    // to populate it if login was successful.
-                    _initializeAddress();
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(
-                        context,
-                      ); // Close the bottom sheet after login
-                    }
-                  },
-                  text: "Login",
-                  backgroundColor: color.primaryColor,
-                  foregroundColor: color.scaffoldBackgroundColor,
-                  width: double.infinity,
-                ),
-              ],
-            ),
-          );
-        },
-      );
-      return;
-    }
-
-    if (_addressController.text.isEmpty && needsDelivery) {
-      Api().showMessage(
-        context,
-        'Please provide your address!',
-        '',
-        color.primaryColorDark,
-      );
-      return;
-    }
-
-    if (selectedPaymentMethod == null) {
-      Api().showMessage(
-        context,
-        'Please select a Payment method!',
-        '',
-        color.primaryColorDark,
-      );
-      return;
-    }
-    // Default if not found
-    String customerEmail = user.email ?? 'no_email@example.com';
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (userDoc.exists) {
-      Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
-      if (userData != null && userData.containsKey('name')) {
-        setState(() {
-          customerName = userData['name'];
-        });
-      }
-      // You might also get the email from Firestore if you store it there
-      // customerEmail = userData['email'] ?? user.email ?? 'no_email@example.com';
-    }
-
-    if (selectedPaymentMethod == 'Ozow Instant EFT') {
-      await _processOzowPaymentWithUrlLauncher();
-      return;
-    } else if (selectedPaymentMethod ==
-        'Credit/Debit Card (Stripe Payment Link)') {
-      await _processStripePaymentLink(); // Call the Stripe Payment Link process
-      return; // The Stripe process handles its own loading state and navigation
-    }
-
-    // --- Original logic for other payment methods (e.g., Cash on Delivery, Mobile Wallet, PayPal, Scan to Pay) ---
-    // These methods would typically be "pending" payment and confirmed outside the app
-    // or through specific integrations if supported.
-    setState(() {
-      isPlacingOrder = true;
-    });
-
-    // For other methods (not Stripe/Ozow), the order needs to be created directly here
-    // and marked as 'pending'. The cart would only be cleared AFTER successful confirmation.
-    // However, for simplicity for these "other" methods, we'll clear the cart directly here
-    // assuming they are either cash-on-delivery or handled in a way that doesn't need
-    // a webhook for confirmation within the app.
-    // If you plan to implement specific confirmation for these, you'd adapt similarly to Stripe/Ozow.
-
-    // Group products by seller for batching
-    Map<String, List<Map<String, dynamic>>> productsBySeller = {};
-    for (var product in widget.cartProducts) {
-      String sellerId =
-          product['sellerId'] ?? 'unknown_seller'; // Ensure sellerId is present
-      if (!productsBySeller.containsKey(sellerId)) {
-        productsBySeller[sellerId] = [];
-      }
-      productsBySeller[sellerId]!.add(product);
-    }
-
-    final batch = FirebaseFirestore.instance.batch();
-
-    String? createdOrderId; // To store the first order ID for navigation
-
-    for (var entry in productsBySeller.entries) {
-      final sellerId = entry.key;
-      final productsForSeller = entry.value;
-
-      final orderDoc = FirebaseFirestore.instance
-          .collection('seller_products')
-          .doc(sellerId) // Use sellerId as the document ID for the seller
-          .collection('orders') // Add a subcollection for orders
-          .doc();
-      if (createdOrderId == null) {
-        createdOrderId = orderDoc.id; // Capture the first order ID
-      }
-
-      batch.set(orderDoc, {
-        'userId': user
-            .uid, // Changed from buyerId to userId for consistency with other parts
-        'sellerId': sellerId,
-        'products': productsForSeller,
-        'address': _addressController.text,
-        'color': widget.selectedColor,
-        'size': widget.selectedSize,
-        'needsDelivery': needsDelivery,
-        'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
-        'paymentMethod': selectedPaymentMethod,
-        'status': 'pending', // Remains pending until actual confirmation
-        'createdAt': FieldValue.serverTimestamp(),
-        'customerName': customerName,
-        'customerEmail': customerEmail,
-        'orderReference':
-            'TTACT-$customerName - ${DateTime.now().millisecondsSinceEpoch}',
-        'amount': _calculateSubtotal(), // Subtotal before delivery
-        'totalPaidAmount': _calculateTotal(), // Total including delivery
-      });
-    }
-
-    try {
-      await batch.commit();
-      // Clear cart ONLY for these non-webhook payment methods
-      await CartHelper.clearCart();
-
-      Api().showMessage(
-        context,
-        'Order Placed Successfully',
-        'Your order has been placed and is awaiting confirmation.',
-        color.splashColor,
-      );
-      Navigator.pushNamed(context, '/orders'); // Navigate to orders page
-    } catch (e) {
-      Api().showMessage(
-        context,
-        'Something went wrong!',
-        '${e.toString()}',
-        color.primaryColorDark,
+        Colors.red,
       );
     } finally {
       setState(() {
@@ -681,6 +345,9 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ... (Your existing UI widgets for address, delivery option, and order summary) ...
+
+            // --- Address Card ---
             Card(
               color: color.scaffoldBackgroundColor.withOpacity(0.7),
               elevation: 5,
@@ -708,8 +375,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                     TextField(
                       controller: _addressController,
                       maxLines: 3,
-                      readOnly:
-                          _isLoadingAddress, // Make it read-only while loading
+                      readOnly: _isLoadingAddress,
                       decoration: InputDecoration(
                         hintText: _isLoadingAddress
                             ? 'Fetching address...'
@@ -733,6 +399,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                 ),
               ),
             ),
+
+            // --- Delivery Option Card ---
             Card(
               color: color.scaffoldBackgroundColor.withOpacity(0.7),
               elevation: 5,
@@ -813,46 +481,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                 ),
               ),
             ),
-            Card(
-              color: color.scaffoldBackgroundColor.withOpacity(0.7),
-              elevation: 5,
-              margin: const EdgeInsets.only(bottom: 16.0),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.payment, color: color.primaryColor),
-                        const SizedBox(width: 8.0),
-                        const Text(
-                          'Choose Payment Method',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ...paymentMethods.map((method) {
-                      return RadioListTile<String>(
-                        title: Text(method),
-                        secondary: Icon(paymentMethodIcons[method]),
-                        value: method,
-                        groupValue: selectedPaymentMethod,
-                        onChanged: (val) {
-                          setState(() {
-                            selectedPaymentMethod = val;
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ],
-                ),
-              ),
-            ),
+
+            // --- Order Summary Card ---
             Card(
               color: color.scaffoldBackgroundColor.withOpacity(0.7),
               elevation: 5,
@@ -889,24 +519,20 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                         final productQuantity =
                             (product['quantity'] as int?) ?? 1;
                         final subtotal = productPrice * productQuantity;
-                        final imageUrl =
-                            product['imageUrl']?.toString() ??
-                            ''; // Get the image URL
+                        final imageUrl = product['imageUrl']?.toString() ?? '';
 
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8.0),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment
-                                .center, // Align items to the top
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Product Image
                               if (imageUrl.isNotEmpty)
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8.0),
                                   child: Image.network(
                                     imageUrl,
-                                    width: 40, // Fixed width for the image
-                                    height: 40, // Fixed height for the image
+                                    width: 40,
+                                    height: 40,
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stackTrace) {
                                       return Container(
@@ -924,7 +550,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                 )
                               else
                                 Container(
-                                  // Placeholder if no image URL
                                   width: 60,
                                   height: 60,
                                   color: Colors.grey[200],
@@ -935,7 +560,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                   ),
                                 ),
                               const SizedBox(width: 12),
-                              // Product Details
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1024,10 +648,12 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                 ),
               ),
             ),
+
+            // --- Proceed to Payment Button ---
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: isPlacingOrder ? null : placeOrder,
+                onPressed: isPlacingOrder ? null : _payWithPaystack,
                 icon: isPlacingOrder
                     ? const SizedBox(
                         width: 20,
