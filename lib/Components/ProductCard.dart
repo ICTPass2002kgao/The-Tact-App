@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 
 class Product_Card extends StatefulWidget {
   final String? imageUrl;
@@ -11,6 +11,8 @@ class Product_Card extends StatefulWidget {
   final double? discountPercentage;
   final List<dynamic>?
   availableColors; // Now contains color names like "blue", "red"
+  final bool
+  isSellerProduct; // NEW: Flag to indicate if product belongs to seller
 
   const Product_Card({
     super.key,
@@ -23,6 +25,7 @@ class Product_Card extends StatefulWidget {
     required this.onCartPressed,
     this.discountPercentage,
     required this.availableColors,
+    required this.isSellerProduct, // NEW
   });
 
   @override
@@ -33,24 +36,25 @@ class _Product_CardState extends State<Product_Card> {
   bool _isFavorite = false;
   late double _calculatedOriginalPrice;
 
-  // --- NEW: Map for converting color names to Flutter Colors ---
+  // Map to convert color names to Flutter Color objects
   static final Map<String, Color> _colorNameMap = {
-    'Red': Colors.red,
-    'Blue': Colors.blue,
-    'Green': Colors.green,
-    'Yellow': Colors.yellow,
-    'Orange': Colors.orange,
-    'Purple': Colors.purple,
-    'Pink': Colors.pink,
-    'Brown': Colors.brown,
-    'Black': Colors.black,
-    'White': Colors.white,
-    'Grey': Colors.grey, // Using standard grey for simplicity
-    'Teal': Colors.teal,
+    'red': Colors.red,
+    'blue': Colors.blue,
+    'green': Colors.green,
+    'yellow': Colors.yellow,
+    'orange': Colors.orange,
+    'purple': Colors.purple,
+    'pink': Colors.pink,
+    'brown': Colors.brown,
+    'black': Colors.black,
+    'white': Colors.white,
+    'grey': Colors.grey,
+    'teal': Colors.teal,
     'light blue': Colors.lightBlue,
     'light green': Colors.lightGreen,
-    // Add more color mappings as needed based on your database values
-    // For white color swatch, you might want to add a visible border
+    'cyan': Colors.cyan,
+    'magenta': const Color.fromARGB(255, 255, 0, 255),
+    'indigo': Colors.indigo,
   };
 
   @override
@@ -80,10 +84,9 @@ class _Product_CardState extends State<Product_Card> {
     }
   }
 
-  // --- NEW: Helper function to get Color from name ---
+  // Helper function to get Color from name with case-insensitivity
   Color _getColorFromName(String colorName) {
-    return _colorNameMap[colorName.toLowerCase()] ??
-        Colors.transparent; // Fallback to transparent for unrecognized names
+    return _colorNameMap[colorName.toLowerCase()] ?? Colors.transparent;
   }
 
   @override
@@ -168,28 +171,10 @@ class _Product_CardState extends State<Product_Card> {
                         ),
                       ),
                     ),
-                    SizedBox(width: 8),
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      margin: EdgeInsets.zero,
-                      child: InkWell(
-                        onTap: widget.onCartPressed,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Icon(
-                            Icons.shopping_cart_outlined,
-                            color: theme.primaryColor,
-                          ),
-                        ),
-                      ),
-                    ),
+                    const SizedBox(width: 8),
                   ],
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'From:${widget.location}',
                   maxLines: 2,
@@ -201,65 +186,67 @@ class _Product_CardState extends State<Product_Card> {
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Row(
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.isAvailable ? 'Available' : 'Unavailable',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontStyle: FontStyle.italic,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: widget.isAvailable
-                                ? const Color.fromARGB(255, 41, 143, 45)
-                                : Colors.red,
-                          ),
-                        ),
-                        // --- REPLACED WITH COLOR SWATCHES FROM NAMES ---
-                        if (widget.availableColors != null &&
-                            widget.availableColors!.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Row(
-                              children: widget.availableColors!
-                                  .map(
-                                    (colorName) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: 4.0,
-                                      ),
-                                      child: Container(
-                                        width: 16,
-                                        height: 16,
-                                        decoration: BoxDecoration(
-                                          color: _getColorFromName(colorName),
-                                          shape: BoxShape.circle,
-                                          // Add a border for white colors to make them visible
-                                          border: Border.all(
-                                            color:
-                                                colorName.toLowerCase() ==
-                                                    'White'
-                                                ? Colors
-                                                      .grey // Visible border for white
-                                                : Colors.grey.shade300,
-                                            width: 1,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isAvailable ? 'Available' : 'Unavailable',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: widget.isAvailable
+                                  ? const Color.fromARGB(255, 41, 143, 45)
+                                  : Colors.red,
                             ),
                           ),
-                        // --- END REPLACEMENT ---
-                      ],
+                          if (widget.availableColors != null &&
+                              widget.availableColors!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              // Changed from Wrap back to Row, and wrapped it in a SingleChildScrollView
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: widget.availableColors!
+                                      .map(
+                                        (colorName) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 4.0,
+                                          ),
+                                          child: Container(
+                                            width: 16,
+                                            height: 16,
+                                            decoration: BoxDecoration(
+                                              color: _getColorFromName(
+                                                colorName,
+                                              ),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color:
+                                                    colorName.toLowerCase() ==
+                                                        'white'
+                                                    ? Colors.grey.shade400
+                                                    : Colors.transparent,
+                                                width: 1,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    const Spacer(),
-
                     Padding(
                       padding: const EdgeInsets.all(4.0),
                       child: Column(
@@ -290,7 +277,7 @@ class _Product_CardState extends State<Product_Card> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          Row(children: [SizedBox(width: 4)]),
+                          const Row(children: [SizedBox(width: 4)]),
                           Text(
                             widget.price != null
                                 ? 'R${widget.price!.toStringAsFixed(2)}'

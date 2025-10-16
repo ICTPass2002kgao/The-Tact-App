@@ -1,4 +1,3 @@
-
 import java.util.Properties
 import java.io.FileInputStream
 
@@ -18,11 +17,8 @@ fun getKeystoreProperties(key: String): String {
 
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -43,9 +39,12 @@ android {
     defaultConfig {
         applicationId = "com.thetact.ttact"
         minSdk = 27
-        targetSdk = flutter.targetSdkVersion
-        versionCode = 5
-        versionName = "1.0.4"
+        targetSdk = 35
+        versionCode = 14
+        versionName = "1.0.13"
+        
+        // FIXED: Kotlin DSL syntax for manifestPlaceholders
+        manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
     }
 
     configurations.all {
@@ -82,9 +81,11 @@ android {
 flutter {
     source = "../.."
 }
+
 dependencies {
-    
-    implementation("com.stripe:stripe-android:21.20.2") { // Use the latest desired version
+    implementation("com.stripe:stripe-android:21.20.2") {
         exclude(group = "com.stripe", module = "financial-connections")
     }
+    // FIXED: Kotlin DSL syntax for dependencies
+    implementation("com.google.android.gms:play-services-ads:22.6.0")
 }

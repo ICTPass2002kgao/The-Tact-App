@@ -75,7 +75,10 @@
 		<string>_dartobservatory._tcp</string>
         <string>_dartVmService._tcp</string> 
 	</array> 
-  
+  <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
 <key>GADApplicationIdentifier</key>
 <string>ca-app-pub-6759693957212853~5704923982</string>
 </dict>

@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
-import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Pages/Add_Tactso_Branch.dart';
 import 'package:ttact/Pages/AddMusic.dart';
@@ -32,61 +31,39 @@ class _AdminPortalState extends State<AdminPortal> {
     return Scaffold(
       appBar: AppBar(title: Text("Admin Portal"), elevation: 0),
       backgroundColor: color.scaffoldBackgroundColor,
-      bottomNavigationBar: SalomonBottomBar(
-        curve: Curves.slowMiddle,
-        backgroundColor: color.primaryColor,
-        selectedItemColor: color.scaffoldBackgroundColor,
-        unselectedItemColor: color.hintColor,
+      bottomNavigationBar: BottomNavigationBar(
+        // <-- Switched to BottomNavigationBar
         currentIndex: _currentIndex,
         onTap: (value) {
           setState(() {
             _currentIndex = value;
           });
         },
+        type: BottomNavigationBarType.fixed, // Ensures all items are visible
+        selectedItemColor: color.scaffoldBackgroundColor,
+        unselectedItemColor: color.hintColor,
+        backgroundColor: color.primaryColor,
         items: [
-          SalomonBottomBarItem(
-            icon: Icon(Ionicons.home),
-            title: Text('Home', maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          SalomonBottomBarItem(
+          BottomNavigationBarItem(icon: Icon(Ionicons.home), label: 'Home'),
+          BottomNavigationBarItem(
             icon: Icon(Icons.add_shopping_cart_outlined),
-            title: Text(
-              'Products', // Changed from 'Add Products'
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: 'Products',
           ),
-          SalomonBottomBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Ionicons.musical_notes_outline),
-            title: Text(
-              'Songs', // Changed from 'Add Tact Songs'
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: 'Songs',
           ),
-          SalomonBottomBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.location_city_outlined),
-            title: Text(
-              'Branches', // Changed from 'Add Tactso Branch'
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: 'Branches',
           ),
-          SalomonBottomBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.person_add_alt_1_outlined),
-            title: Text(
-              'Overseers', // Changed from 'Add Oveerseer'
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: 'Overseers',
           ),
-          SalomonBottomBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.add_card_outlined),
-            title: Text(
-              'Feeds', // Changed from 'Add feeds'
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: 'Feeds',
           ),
         ],
       ),

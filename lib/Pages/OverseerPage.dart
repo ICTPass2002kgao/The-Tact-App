@@ -3,13 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:pdf/pdf.dart'; // Import for PDF generation
 import 'package:pdf/widgets.dart' as pw; // Import for PDF widgets
 import 'package:printing/printing.dart'; // Import for printing/sharing
 import 'package:path_provider/path_provider.dart'; // Import for path provider
-import 'dart:io'; // For File operations
+import 'package:ttact/Components/Play_Song.dart';
+import 'dart:io';
+
+import 'package:ttact/Pages/Downloaded_Songs.dart';
+import 'package:ttact/Pages/HomePage.dart'; // For File operations
 
 class OverseerPage extends StatefulWidget {
   const OverseerPage({super.key});
@@ -24,10 +30,16 @@ class _OverseerPageState extends State<OverseerPage>
 
   Uint8List? _logoBytes;
 
+  String _selectedCategory =
+      'All';  
+  String _searchQuery = '';
+  int _songPlayCount = 0;  
+  final AdManager adManager = AdManager();  
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadLogoBytes();
   }
 
@@ -128,6 +140,7 @@ class _OverseerPageState extends State<OverseerPage>
             controller: _tabController,
             tabs: [
               Tab(text: 'Dashboard'),
+              Tab(text: 'Music'),
               Tab(text: 'Add Member'),
               Tab(text: 'All Members'),
               Tab(text: 'Reports'),
@@ -335,6 +348,284 @@ class _OverseerPageState extends State<OverseerPage>
                               ],
                             );
                           },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Mussic Tab
+                DefaultTabController(
+                  length:
+                      5, // Number of tabs: All, Choreography, Apostle Choir, Slow Jam
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: TextField(
+                            onChanged: (value) {
+                              setState(() {
+                                _searchQuery = value;
+                              });
+                            },
+                            decoration: InputDecoration(
+                              contentPadding: EdgeInsets.all(15),
+                              hintText: 'Search song by name... 🎶',
+                              fillColor: color.hintColor,
+                              focusColor: color.primaryColor,
+                              hoverColor: color.primaryColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        TabBar(
+                          isScrollable: true,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          labelColor: color.scaffoldBackgroundColor,
+                          dividerColor: Colors.transparent,
+                          indicatorColor: color.primaryColor,
+                          unselectedLabelColor: color.hintColor,
+                          overlayColor: WidgetStatePropertyAll(
+                            color.primaryColor,
+                          ),
+                          indicator: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color: color.primaryColor,
+                          ),
+                          onTap: (index) {
+                            setState(() {
+                              switch (index) {
+                                case 0:
+                                  _selectedCategory = 'All';
+                                  break;
+                                case 1:
+                                  _selectedCategory = 'choreography';
+                                  break;
+                                case 2:
+                                  _selectedCategory = 'Apostle choir';
+                                  break;
+                                case 3:
+                                  _selectedCategory = 'Slow Jam';
+                                  break;
+                                case 4:
+                                  _selectedCategory = 'Instrumental songs';
+                                  break;
+                              }
+                            });
+                          },
+                          tabs: const [
+                            Tab(text: 'All'),
+                            Tab(text: 'Choreography'),
+                            Tab(text: 'Apostle choir'),
+                            Tab(text: 'Slow Jam'),
+                            Tab(text: 'Instrumental Songs'),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Expanded(
+                          child: FutureBuilder<QuerySnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('tact_music')
+                                .where(
+                                  'songName',
+                                  isGreaterThanOrEqualTo: _searchQuery,
+                                )
+                                .where(
+                                  'songName',
+                                  isLessThanOrEqualTo: _searchQuery + '\uf8ff',
+                                )
+                                .get(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return Shimmer.fromColors(
+                                  baseColor: color.hintColor.withOpacity(0.3),
+                                  highlightColor: color.hintColor.withOpacity(
+                                    0.1,
+                                  ),
+                                  child: ListView.builder(
+                                    itemCount: 10, // Show 5 shimmer items
+                                    itemBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Container(
+                                          height:
+                                              70, // Approximate height of ListTile
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              }
+
+                              if (!snapshot.hasData ||
+                                  snapshot.data!.docs.isEmpty) {
+                                return Center(
+                                  child: Text('No songs available'),
+                                );
+                              }
+
+                              final allSongs = snapshot.data!.docs;
+
+                              final filteredSongs = _selectedCategory == 'All'
+                                  ? allSongs
+                                  : allSongs.where((doc) {
+                                      final songData =
+                                          doc.data() as Map<String, dynamic>;
+                                      return songData['category'] ==
+                                          _selectedCategory;
+                                    }).toList();
+
+                              if (filteredSongs.isEmpty) {
+                                return Center(
+                                  child: Text(
+                                    'No songs found in this category.',
+                                  ),
+                                );
+                              }
+
+                              return Stack(
+                                children: [
+                                  ListView.builder(
+                                    itemCount: filteredSongs.length,
+                                    itemBuilder: (context, index) {
+                                      final song =
+                                          filteredSongs[index].data()
+                                              as Map<String, dynamic>;
+
+                                      return Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                            border: Border.all(width: 1.5),
+                                          ),
+                                          child: ListTile( 
+                                            onTap: () {
+                                              _songPlayCount++;
+                                              print(
+                                                'Song play count: $_songPlayCount',
+                                              );
+                                  void playSong() {
+                                                showCupertinoSheet(
+                                                  enableDrag: true,
+                                                  context: context,
+                                                  pageBuilder: (context) {
+                                                    return PlaySong(
+                                                      songs: filteredSongs
+                                                          .map(
+                                                            (doc) =>
+                                                                doc.data()
+                                                                    as Map<
+                                                                      String,
+                                                                      dynamic
+                                                                    >,
+                                                          )
+                                                          .toList(),
+                                                      initialIndex: index,
+                                                    );
+                                                  },
+                                                );
+                                              }
+
+                                              if (_songPlayCount >= 4) { 
+                                                     adManager.showRewardedInterstitialAd((
+                                                  ad,
+                                                  reward,
+                                                ) { 
+                                                  print(
+                                                    'User earned reward: ${reward.amount} ${reward.type}',
+                                                  );
+                                                  playSong();
+                                                  _songPlayCount = 0;
+                                                });
+                                                AdManager().loadRewardedInterstitialAd(
+                                                  onAdFailed: () { 
+                                                    playSong();
+                                                    _songPlayCount =
+                                                        0;   },
+                                                );
+                                              } else { 
+                                                playSong();
+                                                
+                                              }
+                                            },
+                                            minVerticalPadding: 1,
+                                            trailing: Icon(
+                                              Icons.more_vert_outlined,
+                                            ),
+                                            subtitle: Text(
+                                              'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w200,
+                                                fontStyle: FontStyle.italic,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            title: Text(
+                                              song['songName']?.toString() ??
+                                                  'Untitled song',
+                                            ),
+                                            leading: Container(
+                                              height: 50,
+                                              width: 50,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                border: Border.all(width: 1.5),
+                                              ),
+                                              child: Icon(
+                                                Icons.music_note_outlined,
+                                                color: Theme.of(
+                                                  context,
+                                                ).primaryColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  Positioned(
+                                    bottom: 10,
+                                    right: 20,
+                                    child: IconButton.filled(
+                                      onPressed: () {
+                                        showCupertinoSheet(
+                                          enableDrag: true,
+                                          context: context,
+                                          pageBuilder: (context) {
+                                            return DownloadedSongs();
+                                          },
+                                        );
+                                      },
+                                      style: ButtonStyle(
+                                        backgroundColor: WidgetStatePropertyAll(
+                                          color.splashColor,
+                                        ),
+                                      ),
+                                      icon: Icon(Icons.download_done, size: 40),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -1177,6 +1468,7 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   // --- PDF Generation Logic ---
+  // --- PDF Generation Logic ---
   Future<void> _generatePdfAndDownload(
     String selectedDistrictElder,
     String selectedCommunityElder,
@@ -1186,198 +1478,328 @@ class _OverseerPageState extends State<OverseerPage>
     String overseerSurname,
     Map<String, dynamic> overseerData,
   ) async {
-    // Await the balance sheet table widget before building the PDF
-    final balanceSheetTable = await _buildPdfBalanceSheetTable(
-      context,
-      selectedDistrictElder,
-      selectedCommunityName,
-      selectedCommunityElder,
-    );
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+    Api().showLoading(context); // Show loading indicator
+    try {
+      final balanceSheetTable = await _buildPdfBalanceSheetTable(
+        context,
+        selectedDistrictElder,
+        selectedCommunityName,
+        selectedCommunityElder,
+      );
 
-        build: (pw.Context context) {
-          return [
-            if (_logoBytes != null)
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.center,
-                children: [
-                  pw.Image(
-                    pw.MemoryImage(_logoBytes!),
-                    width: 100,
-                    height: 100,
-                  ),
-                  pw.Column(
-                    children: [
-                      pw.Center(
-                        child: pw.Text(
-                          'The Twelve Apostles Church in Trinity',
-                          style: pw.TextStyle(
-                            fontSize: 20,
-                            fontWeight: pw.FontWeight.bold,
+      // Check if the balanceSheetTable is null (meaning no members were found)
+      if (balanceSheetTable == null) {
+        Navigator.pop(context); // Dismiss loading dialog
+        return; // Exit the function to prevent further execution
+      }
+
+      final pdf = pw.Document();
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return [
+              if (_logoBytes != null)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Image(
+                      pw.MemoryImage(_logoBytes!),
+                      width: 100,
+                      height: 100,
+                    ),
+                    pw.Column(
+                      children: [
+                        pw.Center(
+                          child: pw.Text(
+                            'The Twelve Apostles Church in Trinity',
+                            style: pw.TextStyle(
+                              fontSize: 20,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
                           ),
                         ),
-                      ),
-                      pw.SizedBox(height: 10),
-                      pw.Center(
-                        child: pw.Text('P. O. Box 40376, Red Hill, 4071'),
-                      ),
-                      pw.Center(
-                        child: pw.Text('Tel./Fax No\'s: (031) 569 6164'),
-                      ),
-                      pw.Center(child: pw.Text('Email: thetacc@telkomsa.net')),
-                    ],
-                  ),
-                ],
+                        pw.SizedBox(height: 10),
+                        pw.Center(
+                          child: pw.Text('P. O. Box 40376, Red Hill, 4071'),
+                        ),
+                        pw.Center(
+                          child: pw.Text('Tel./Fax No\'s: (031) 569 6164'),
+                        ),
+                        pw.Center(
+                          child: pw.Text('Email: thetacc@telkomsa.net'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              pw.SizedBox(height: 30),
+              pw.Text(
+                'Income and Expenditure Statement',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
-            pw.SizedBox(height: 30),
-            pw.Text(
-              'Income and Expenditure Statement',
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            _buildPdfTextRow(
-              'For the Month:',
-              '${DateTime.now().month}',
-              'Year:',
-              '${DateTime.now().year}',
-            ),
-            _buildPdfTextRow(
-              'Overseer:',
-              '$overseerName $overseerSurname',
-              'Code No:',
-              '________',
-            ),
-            _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
-            _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
-            _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
-            _buildPdfTextRow(
-              'Province: ${overseerData['province']}',
-              '',
-              'Region:',
-              '__________',
-            ),
-            pw.SizedBox(height: 20),
-            pw.Divider(),
-            pw.Text(
-              'Income / Receipts',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            _buildPdfReportRow('Tithe Offerings - Week 1', 'R', 'c'),
-            _buildPdfReportRow('Tithe Offerings - Week 2', 'R', 'c'),
-            _buildPdfReportRow('Tithe Offerings - Week 3', 'R', 'c'),
-            _buildPdfReportRow('Tithe Offerings - Week 4', 'R', 'c'),
-            _buildPdfReportRow('Others', 'R', 'c'),
-            _buildPdfReportRow('Month End', 'R', 'c'),
-            pw.SizedBox(height: 10),
-            _buildPdfReportRow('Total Income', 'R', 'c', isTotal: true),
-            pw.SizedBox(height: 20),
-            pw.Divider(),
-            pw.Text(
-              'Expenditure',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            _buildPdfReportRow('Rent Period', 'R', 'c'),
-            _buildPdfReportRow('Wine and Priest Wafers', 'R', 'c'),
-            _buildPdfReportRow('Power and Lights', 'R', 'c'),
-            _buildPdfReportRow('Sundries/Repairs', 'R', 'c'),
-            _buildPdfReportRow('Central Council', 'R', 'c'),
-            _buildPdfReportRow('Equipment / General', 'R', 'c'),
-            pw.SizedBox(height: 10),
-            _buildPdfReportRow('Total Expenditure', 'R', 'c', isTotal: true),
-            pw.SizedBox(height: 20),
-            pw.Divider(),
-            _buildPdfReportRow(
-              'Credit Balance (Amount Banked)',
-              'R',
-              'c',
-              isTotal: true,
-              isCreditBalance: true,
-            ),
-            pw.SizedBox(height: 20),
-            pw.Text('Bank Name: Standard Bank'),
-            pw.Text('Account Name: The TACT'),
-            pw.Text('Account No: 051074958'),
-            pw.Text('Branch Name: Kingsmead'),
-            pw.Text('Branch Code: 040026'),
-            pw.SizedBox(height: 20),
-            pw.Text(
-              'Please write your name and the name of your Community in the Deposit Slip Senders Details Column.',
-            ),
-            pw.SizedBox(height: 30),
-            pw.Text(
-              'Balance Sheet',
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            _buildPdfTextRow(
-              'For the Month of:',
-              '${DateTime.now().month}',
-              'Year:',
-              '${DateTime.now().year}',
-            ),
-            _buildPdfTextRow('Overseer:', '$overseerName $overseerSurname'),
-            _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
-            _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
-            _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
-            pw.SizedBox(height: 20),
-            pw.Text(
-              'Members Tithe Offerings',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            // Insert the awaited balance sheet table here
-            balanceSheetTable,
-            pw.SizedBox(height: 10),
+              pw.SizedBox(height: 10),
+              _buildPdfTextRow(
+                'For the Month:',
+                '${DateTime.now().month}',
+                'Year:',
+                '${DateTime.now().year}',
+              ),
+              _buildPdfTextRow(
+                'Overseer:',
+                '$overseerName $overseerSurname',
+                'Code No:',
+                '________',
+              ),
+              _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
+              _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+              _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
+              _buildPdfTextRow(
+                'Province: ${overseerData['province']}',
+                '',
+                'Region:',
+                '__________',
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.Text(
+                'Income / Receipts',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              _buildPdfReportRow('Tithe Offerings - Week 1', 'R', 'c'),
+              _buildPdfReportRow('Tithe Offerings - Week 2', 'R', 'c'),
+              _buildPdfReportRow('Tithe Offerings - Week 3', 'R', 'c'),
+              _buildPdfReportRow('Tithe Offerings - Week 4', 'R', 'c'),
+              _buildPdfReportRow('Others', 'R', 'c'),
+              _buildPdfReportRow('Month End', 'R', 'c'),
+              pw.SizedBox(height: 10),
+              _buildPdfReportRow('Total Income', 'R', 'c', isTotal: true),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.Text(
+                'Expenditure',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              _buildPdfReportRow('Rent Period', 'R', 'c'),
+              _buildPdfReportRow('Wine and Priest Wafers', 'R', 'c'),
+              _buildPdfReportRow('Power and Lights', 'R', 'c'),
+              _buildPdfReportRow('Sundries/Repairs', 'R', 'c'),
+              _buildPdfReportRow('Central Council', 'R', 'c'),
+              _buildPdfReportRow('Equipment / General', 'R', 'c'),
+              pw.SizedBox(height: 10),
+              _buildPdfReportRow('Total Expenditure', 'R', 'c', isTotal: true),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              _buildPdfReportRow(
+                'Credit Balance (Amount Banked)',
+                'R',
+                'c',
+                isTotal: true,
+                isCreditBalance: true,
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text('Bank Name: Standard Bank'),
+              pw.Text('Account Name: The TACT'),
+              pw.Text('Account No: 051074958'),
+              pw.Text('Branch Name: Kingsmead'),
+              pw.Text('Branch Code: 040026'),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Please write your name and the name of your Community in the Deposit Slip Senders Details Column.',
+              ),
+              pw.SizedBox(height: 30),
+              pw.Text(
+                'Balance Sheet',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              _buildPdfTextRow(
+                'For the Month of:',
+                '${DateTime.now().month}',
+                'Year:',
+                '${DateTime.now().year}',
+              ),
+              _buildPdfTextRow('Overseer:', '$overseerName $overseerSurname'),
+              _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
+              _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+              _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Members Tithe Offerings',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              balanceSheetTable,
+              pw.SizedBox(height: 10),
 
-            pw.SizedBox(height: 30),
-            pw.Text(
-              'NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details',
-              style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
-            ),
-            pw.SizedBox(height: 20),
-            pw.Text(
-              'Signatures:',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 10),
-            _buildPdfSignatureRow(
-              'Overseer',
-              overseerName + ' ' + overseerSurname,
-            ),
-            _buildPdfSignatureRow('Community Elder', selectedCommunityElder),
-            _buildPdfSignatureRow('Secretary', '_____________'),
-            _buildPdfSignatureRow('District Elder', selectedDistrictElder),
-            _buildPdfSignatureRow('Treasurer', '_____________'),
-            _buildPdfSignatureRow('Contact Person', '_____________'),
-            pw.SizedBox(height: 20),
-            pw.Text('Telephone No: __________'),
-            pw.Text('Email Address: __________'),
-          ];
-        },
-      ),
-    );
+              pw.SizedBox(height: 30),
+              pw.Text(
+                'NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details',
+                style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Signatures:',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              _buildPdfSignatureRow(
+                'Overseer',
+                overseerName + ' ' + overseerSurname,
+              ),
+              _buildPdfSignatureRow('Community Elder', selectedCommunityElder),
+              _buildPdfSignatureRow('Secretary', '_____________'),
+              _buildPdfSignatureRow('District Elder', selectedDistrictElder),
+              _buildPdfSignatureRow('Treasurer', '_____________'),
+              _buildPdfSignatureRow('Contact Person', '_____________'),
+              pw.SizedBox(height: 20),
+              pw.Text('Telephone No: __________'),
+              pw.Text('Email Address: __________'),
+            ];
+          },
+        ),
+      );
 
-    // Get the application's temporary directory
-    final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/church_report.pdf');
-    await file.writeAsBytes(await pdf.save());
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/church_report.pdf');
+      await file.writeAsBytes(await pdf.save());
 
-    // Use the printing package to share or open the PDF
-    await Printing.sharePdf(
-      bytes: await file.readAsBytes(),
-      filename: 'church_report(${DateTime.now().toIso8601String()}).pdf',
-    );
+      await Printing.sharePdf(
+        bytes: await file.readAsBytes(),
+        filename: 'church_report(${DateTime.now().toIso8601String()}).pdf',
+      );
 
-    Api().showMessage(
-      context,
-      'Report generated and ready to share!',
-      'Success',
-      Theme.of(context).splashColor,
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Report generated and ready to share!',
+        'Success',
+        Theme.of(context).splashColor,
+      );
+    } catch (e) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Failed to generate PDF: $e',
+        'Error',
+        Theme.of(context).primaryColorDark,
+      );
+    }
+  }
+
+  // Helper for PDF Balance Sheet Table
+  Future<pw.Widget?> _buildPdfBalanceSheetTable(
+    BuildContext context,
+    String selectedDistrictElder,
+    String selectedCommunityName,
+    String selectedCommunityElder,
+  ) async {
+    FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+    var memberLatestData = await firestore
+        .collection('users')
+        .where('districtElderName', isEqualTo: selectedDistrictElder)
+        .where('communityName', isEqualTo: selectedCommunityName)
+        .where('communityElderName', isEqualTo: selectedCommunityElder)
+        .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+        .get();
+
+    if (memberLatestData.docs.isEmpty) {
+      Api().showMessage(
+        context,
+        'No members found for the selected community. Please ensure your data is accurate.',
+        'Error',
+        Theme.of(context).primaryColorDark,
+      );
+      return null; // Return null to indicate no data was found
+    }
+
+    List<Map<String, dynamic>> allMembersData = [];
+    for (var d in memberLatestData.docs) {
+      allMembersData.add(d.data());
+    }
+
+    List<List<String>> tableData = [
+      <String>[
+        'Members Name and Surname',
+        'WEEK 1',
+        'WEEK 2',
+        'WEEK 3',
+        'WEEK 4',
+        'MONTHLY',
+      ],
+    ];
+
+    double grandTotal = 0.00;
+
+    for (var memberData in allMembersData) {
+      String memberName = memberData['name'] ?? 'N/A';
+      String memberSurname = memberData['surname'] ?? 'N/A';
+      String memberWeek1 = memberData['week1']?.toString() ?? '0.00';
+      String memberWeek2 = memberData['week2']?.toString() ?? '0.00';
+      String memberWeek3 = memberData['week3']?.toString() ?? '0.00';
+      String memberWeek4 = memberData['week4']?.toString() ?? '0.00';
+
+      var total =
+          (double.parse(memberWeek1) +
+                  double.parse(memberWeek2) +
+                  double.parse(memberWeek3) +
+                  double.parse(memberWeek4))
+              .toStringAsFixed(2);
+
+      tableData.add(<String>[
+        '${memberName} ${memberSurname}',
+        'R${double.parse(memberWeek1).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek2).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek3).toStringAsFixed(2)}',
+        'R${double.parse(memberWeek4).toStringAsFixed(2)}',
+        'R${total}',
+      ]);
+
+      grandTotal += double.parse(total);
+    }
+
+    return pw.Column(
+      children: [
+        pw.TableHelper.fromTextArray(
+          cellAlignment: pw.Alignment.centerLeft,
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          headerStyle: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 14,
+          ),
+          cellPadding: const pw.EdgeInsets.all(2),
+          data: tableData,
+        ),
+        pw.SizedBox(height: 10),
+        pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'GRAND TOTAL: R ${grandTotal.toStringAsFixed(2)}',
+            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1454,106 +1876,7 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-  // Helper for PDF Balance Sheet Table
-  Future<pw.Widget> _buildPdfBalanceSheetTable(
-    BuildContext context, // Pass context to the function
-    String selectedDistrictElder,
-    String selectedCommunityName,
-    String selectedCommunityElder,
-  ) async {
-    FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-    var memberLatestData = await firestore
-        .collection('users')
-        .where('districtElderName', isEqualTo: selectedDistrictElder)
-        .where('communityName', isEqualTo: selectedCommunityName)
-        .where('communityElderName', isEqualTo: selectedCommunityElder)
-        .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-        .get();
-
-    if (memberLatestData.docs.isEmpty) {
-      Api().showMessage(
-        context,
-        'No overseer data found for the current user, district, community, and community elder.',
-        'Error',
-        Theme.of(context).primaryColorDark,
-      );
-      return pw.Text('No data available');
-    }
-
-    // Create a list to hold all member data
-    List<Map<String, dynamic>> allMembersData = [];
-
-    for (var d in memberLatestData.docs) {
-      allMembersData.add(d.data());
-    }
-
-    // Prepare data for the PDF table
-    List<List<String>> tableData = [
-      <String>[
-        'Members Name and Surname',
-        'WEEK 1',
-        'WEEK 2',
-        'WEEK 3',
-        'WEEK 4',
-        'MONTHLY',
-      ],
-    ];
-
-    double grandTotal = 0.00;
-
-    for (var memberData in allMembersData) {
-      String memberName = memberData['name'] ?? 'N/A';
-      String memberSurname = memberData['surname'] ?? 'N/A';
-      String memberWeek1 = memberData['week1']?.toString() ?? '0.00';
-      String memberWeek2 = memberData['week2']?.toString() ?? '0.00';
-      String memberWeek3 = memberData['week3']?.toString() ?? '0.00';
-      String memberWeek4 = memberData['week4']?.toString() ?? '0.00';
-
-      var total =
-          (double.parse(memberWeek1) +
-                  double.parse(memberWeek2) +
-                  double.parse(memberWeek3) +
-                  double.parse(memberWeek4))
-              .toStringAsFixed(2);
-
-      tableData.add(<String>[
-        '${memberName} ${memberSurname}',
-        'R${double.parse(memberWeek1).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek2).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek3).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek4).toStringAsFixed(2)}',
-        'R${total}',
-      ]);
-
-      grandTotal += double.parse(total);
-    }
-
-    return pw.Column(
-      children: [
-        pw.TableHelper.fromTextArray(
-          cellAlignment: pw.Alignment.centerLeft,
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-          headerStyle: pw.TextStyle(
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 14,
-          ),
-          cellPadding: const pw.EdgeInsets.all(2),
-          data: tableData, // Use the dynamically built tableData
-        ),
-        pw.SizedBox(height: 10),
-        pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'GRAND TOTAL: R ${grandTotal.toStringAsFixed(2)}',
-            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Helper for PDF signature rows
+   // Helper for PDF signature rows
   pw.Widget _buildPdfSignatureRow(String role, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 4.0),

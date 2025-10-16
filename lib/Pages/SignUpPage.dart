@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:http/http.dart' as http;
 import 'package:ttact/Components/AdBanner.dart';
+import 'package:ttact/Pages/HomePage.dart';
 
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
@@ -142,26 +143,28 @@ void _buildActionSheet({
       context: context,
       builder: (BuildContext context) => Container(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const Divider(),
-            ...actions.map((item) {
-              return ListTile(
-                title: Text(item),
-                onTap: () {
-                  onSelected(item);
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const Divider(),
+              ...actions.map((item) {
+                return ListTile(
+                  title: Text(item),
+                  onTap: () {
+                    onSelected(item);
+                    Navigator.pop(context);
+                  },
+                );
+              }).toList(),
+            ],
+          ),
         ),
       ),
     );

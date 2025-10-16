@@ -1,31 +1,49 @@
+// lib/main.dart
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:ttact/Components/AdBanner.dart'; 
+// DELETE: The import for your custom handler class:
+// import 'package:ttact/Components/Audio_Handler.dart';
+// DELETE: The import for your custom service manager class:
+// import 'package:ttact/Components/audio_service_manager.dart'; 
 import 'package:ttact/Pages/Admin_Portal.dart';
 import 'package:ttact/Pages/CartPage.dart';
+import 'package:ttact/Pages/HomePage.dart';
 import 'package:ttact/Pages/Login.dart';
 import 'package:ttact/Pages/MotherPage.dart';
 import 'package:ttact/Pages/OverseerPage.dart';
-import 'package:ttact/Pages/SignUpPage.dart'; // Corrected import from Tact_Seller
+import 'package:ttact/Pages/SignUpPage.dart';
 import 'package:ttact/Pages/Tact_Seller.dart';
 import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
-import 'package:ttact/Pages/orders.dart'; // Corrected import for the actual OrdersPage
+import 'package:ttact/Pages/orders.dart';
 import 'package:ttact/firebase_options.dart';
 import 'package:ttact/introductionPage.dart';
-
-// ✅ Added for AdMob
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:just_audio_background/just_audio_background.dart'; // <<< KEEP THIS IMPORT
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   await MobileAds.instance.initialize();
+  await AdManager.initialize();
+  
+  // 🐛 FIX: Use JustAudioBackground.init() for single initialization
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.thetact.ttact.channel.audio',
+      androidNotificationChannelName: 'TACT Music Playback',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+    );
+  } catch (e) {
+    print('Failed to initialize audio service: $e');
+  }
 
   runApp(const MyApp());
 }
 
-// Make MyApp Stateful to manage theme mode
 class MyApp extends StatefulWidget {
+// ... rest of MyApp class is unchanged ...
   const MyApp({super.key});
 
   @override
@@ -33,7 +51,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  ThemeMode _themeMode = ThemeMode.light; // Default theme mode
+  ThemeMode _themeMode = ThemeMode.light;
 
   void toggleTheme(bool isDarkMode) {
     setState(() {
@@ -47,7 +65,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
@@ -63,12 +81,11 @@ class _MyAppState extends State<MyApp> {
         primaryColorDark: const Color.fromARGB(255, 194, 50, 40),
         cardColor: Colors.black,
       ),
-      // Dark Theme (NEW)
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: Color.fromRGBO(255, 255, 255, 1),
-          foregroundColor: const Color.fromARGB(252, 5, 2, 80),
+          foregroundColor: Color.fromARGB(252, 5, 2, 80),
         ),
         textTheme: const TextTheme(
           headlineSmall: TextStyle(
@@ -83,13 +100,13 @@ class _MyAppState extends State<MyApp> {
           ),
           bodyMedium: TextStyle(fontSize: 16.0, color: Colors.white70),
         ),
-        primaryColor: Color.fromRGBO(255, 255, 255, 1),
+        primaryColor: const Color.fromRGBO(255, 255, 255, 1),
         scaffoldBackgroundColor: const Color.fromARGB(
           255,
           100,
           111,
           129,
-        ).withOpacity(1), // Dark background
+        ).withOpacity(1),
         hintColor: const Color.fromARGB(255, 170, 170, 170),
         splashColor: const Color.fromARGB(255, 60, 130, 62),
         primaryColorDark: const Color.fromARGB(255, 255, 90, 80),
@@ -97,7 +114,7 @@ class _MyAppState extends State<MyApp> {
         dialogBackgroundColor: const Color.fromARGB(255, 55, 55, 55),
       ),
       themeMode: _themeMode,
-      initialRoute: '/',
+      home: Introductionpage(),
       routes: {
         '/tact_seller': (context) => SellerProductPage(),
         '/main-menu': (context) => MotherPage(onToggleTheme: toggleTheme),
@@ -108,7 +125,6 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => Login_Page(),
         '/overseer': (context) => OverseerPage(),
         '/tactso-branches': (context) => TactsoBranchesApplications(),
-        '/': (context) => Introductionpage(),
       },
     );
   }

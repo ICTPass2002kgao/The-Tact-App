@@ -5,8 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:ttact/Pages/HomePage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:device_info_plus/device_info_plus.dart'; 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/ForgotPassword.dart';
@@ -43,68 +44,71 @@ class _Login_PageState extends State<Login_Page> {
     final androidInfo = await info.androidInfo;
     return androidInfo.manufacturer.toLowerCase().contains("huawei");
   }
- // Refactored signInWithGoogle function
-Future<void> signInWithGoogle(BuildContext context) async {
-  try {
-    if (await isHuaweiDevice()) {
-      final user = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => GoogleWebViewSignIn(
-              clientId: "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+
+  // Refactored signInWithGoogle function
+  Future<void> signInWithGoogle(BuildContext context) async {
+    try {
+      if (await isHuaweiDevice()) {
+        final user = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GoogleWebViewSignIn(
+              clientId:
+                  "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
               redirectUri: "https://tact-3c612.firebaseapp.com/__/auth/handler",
- 
+            ),
           ),
-        ),
-      );
+        );
+        if (user == null) return;
+      } else {
+        await _auth.signOut();
+        await _googleSignIn.signOut();
+
+        final GoogleSignInAccount? googleSignInAccount = await _googleSignIn
+            .signIn();
+        if (googleSignInAccount == null) return;
+
+        final googleAuth = await googleSignInAccount.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        await _auth.signInWithCredential(credential);
+      }
+
+      // This logic is now outside the if-else block
+      final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
-    } else {
-      await _auth.signOut();
-      await _googleSignIn.signOut();
 
-      final GoogleSignInAccount? googleSignInAccount = await _googleSignIn.signIn();
-      if (googleSignInAccount == null) return;
+      final uid = user.uid;
+      final email = user.email;
 
-      final googleAuth = await googleSignInAccount.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (!context.mounted) return;
+
+      if (userDoc.exists) {
+        Navigator.pushNamed(context, "/main-menu");
+      } else {
+        Navigator.pushNamed(context, "/signup", arguments: {'email': email});
+      }
+    } catch (e) {
+      debugPrint("Error signing in with Google: $e");
+      print(e);
+      if (!context.mounted) return;
+      Api().showMessage(
+        context,
+        'An unexpected error occurred: ${e.toString()}',
+        'Error',
+        Theme.of(context).colorScheme.primary, // Use a themed color
       );
-
-      await _auth.signInWithCredential(credential);
     }
-    
-    // This logic is now outside the if-else block
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final uid = user.uid;
-    final email = user.email;
-
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-
-    if (!context.mounted) return;
-
-    if (userDoc.exists) {
-      Navigator.pushNamed(context, "/main-menu");
-    } else {
-      Navigator.pushNamed(context, "/signup", arguments: {'email': email});
-    }
-
-  } catch (e) {
-    debugPrint("Error signing in with Google: $e"); 
-    if (!context.mounted) return; 
-    Api().showMessage(
-      context,
-      'An unexpected error occurred: ${e.toString()}',
-      'Error',
-      Theme.of(context).colorScheme.primary, // Use a themed color
-    );
   }
-}
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;

@@ -518,6 +518,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                             (product['price'] as num?)?.toDouble() ?? 0.0;
                         final productQuantity =
                             (product['quantity'] as int?) ?? 1;
+                        final selectedColor = product['selectedColor'] ?? 'N/A';
+                        final selectedSize = product['selectedSize'] ?? 'N/A';
                         final subtotal = productPrice * productQuantity;
                         final imageUrl = product['imageUrl']?.toString() ?? '';
 
@@ -578,6 +580,14 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                       style: TextStyle(
                                         fontSize: 13,
                                         color: Colors.grey[700],
+                                      ),
+                                    ),
+                                    Text(
+                                      'Color: $selectedColor, Size: $selectedSize',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey[500],
                                       ),
                                     ),
                                   ],

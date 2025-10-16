@@ -1,3 +1,4 @@
+// // AdBanner.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -5,34 +6,11 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 typedef OnAdFailedCallback = void Function();
 
 class AdManager {
-  // ... (existing code)
-
-  void loadRewardedInterstitialAd({OnAdFailedCallback? onAdFailed}) {
-    RewardedInterstitialAd.load(
-      adUnitId: _rewardedInterstitialAdUnitId,
-      request: const AdRequest(),
-      rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
-        onAdLoaded: (RewardedInterstitialAd ad) {
-          _rewardedInterstitialAd = ad;
-          _isRewardedInterstitialAdLoaded = true;
-          _setRewardedInterstitialFullScreenContentCallback();
-        },
-        onAdFailedToLoad: (LoadAdError error) {
-          _isRewardedInterstitialAdLoaded = false;
-          // **NEW:** Call the failure callback if provided
-          if (onAdFailed != null) {
-            onAdFailed();
-          }
-        },
-      ),
-    );
-  }
-
   static final AdManager _instance = AdManager._internal();
   factory AdManager() => _instance;
   AdManager._internal();
 
-  // Your actual ad unit IDs (replace with your own)
+  /// Ad Unit IDs (replace with your real ones when live)
   final String _bannerAdUnitId = Platform.isAndroid
       ? 'ca-app-pub-3940256099942544/6300978111'
       : 'ca-app-pub-3940256099942544/6300978111';
@@ -43,14 +21,22 @@ class AdManager {
 
   final String _rewardedInterstitialAdUnitId = Platform.isAndroid
       ? 'ca-app-pub-3940256099942544/5354046340'
-      : 'ca-app-pub-3940256099942544/5354046340'; // Your rewarded interstitial ID
+      : 'ca-app-pub-3940256099942544/5354046340';
 
   InterstitialAd? _interstitialAd;
   RewardedInterstitialAd? _rewardedInterstitialAd;
   bool _isInterstitialAdLoaded = false;
   bool _isRewardedInterstitialAdLoaded = false;
 
-  /// Loads an interstitial ad.
+  /// Call this early (e.g., in main.dart)
+  static Future<void> initialize() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await MobileAds.instance.initialize();
+    AdManager().loadInterstitialAd();
+    AdManager().loadRewardedInterstitialAd();
+  }
+
+  /// ============== INTERSTITIAL ==============
   void loadInterstitialAd() {
     InterstitialAd.load(
       adUnitId: _interstitialAdUnitId,
@@ -68,7 +54,6 @@ class AdManager {
     );
   }
 
-  /// Sets the fullscreen content callback for the interstitial ad.
   void _setInterstitialFullScreenContentCallback() {
     _interstitialAd?.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
@@ -84,53 +69,76 @@ class AdManager {
     );
   }
 
-  /// Shows the loaded interstitial ad.
   void showInterstitialAd() {
     if (_isInterstitialAdLoaded && _interstitialAd != null) {
       _interstitialAd!.show();
     } else {
-      loadInterstitialAd(); // Try to load it if not ready
+      loadInterstitialAd();
     }
   }
 
-  /// Sets the fullscreen content callback for the rewarded interstitial ad.
+  /// ============== REWARDED INTERSTITIAL ==============
+  void loadRewardedInterstitialAd({OnAdFailedCallback? onAdFailed}) {
+    RewardedInterstitialAd.load(
+      adUnitId: _rewardedInterstitialAdUnitId,
+      request: const AdRequest(),
+      rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
+        onAdLoaded: (RewardedInterstitialAd ad) {
+          _rewardedInterstitialAd = ad;
+          _isRewardedInterstitialAdLoaded = true;
+          _setRewardedInterstitialFullScreenContentCallback();
+        },
+        onAdFailedToLoad: (LoadAdError error) {
+          _isRewardedInterstitialAdLoaded = false;
+          if (onAdFailed != null) onAdFailed();
+        },
+      ),
+    );
+  }
+
   void _setRewardedInterstitialFullScreenContentCallback() {
     _rewardedInterstitialAd?.fullScreenContentCallback =
         FullScreenContentCallback(
-          onAdDismissedFullScreenContent: (ad) {
-            ad.dispose();
-            _isRewardedInterstitialAdLoaded = false;
-            loadRewardedInterstitialAd();
-          },
-          onAdFailedToShowFullScreenContent: (ad, error) {
-            ad.dispose();
-            _isRewardedInterstitialAdLoaded = false;
-          },
-        );
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _isRewardedInterstitialAdLoaded = false;
+        loadRewardedInterstitialAd();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _isRewardedInterstitialAdLoaded = false;
+        loadRewardedInterstitialAd();
+      },
+    );
   }
 
-  /// Shows the loaded rewarded interstitial ad and gives a reward.
-  void showRewardedInterstitialAd(OnUserEarnedRewardCallback onReward) {
+  void showRewardedInterstitialAd(
+    OnUserEarnedRewardCallback onReward, {
+    OnAdFailedCallback? onAdFailed,
+  }) {
     if (_isRewardedInterstitialAdLoaded && _rewardedInterstitialAd != null) {
       _rewardedInterstitialAd!.show(onUserEarnedReward: onReward);
     } else {
+      // The ad is not loaded, but we still trigger the onAdFailed callback
+      // to handle the user experience gracefully.
+      if (onAdFailed != null) onAdFailed();
+      // Start loading a new ad for the next time.
       loadRewardedInterstitialAd();
     }
   }
 
-  // A helper function to create a banner ad widget for a specific page.
+  /// Banner helper
   Widget bannerAdWidget() {
     return _BannerAdWidget(adUnitId: _bannerAdUnitId);
   }
 
-  /// Disposes all loaded ads to prevent memory leaks.
   void dispose() {
     _interstitialAd?.dispose();
     _rewardedInterstitialAd?.dispose();
   }
 }
 
-// A private widget for displaying banner ads.
+/// ============== BANNER WIDGET ==============
 class _BannerAdWidget extends StatefulWidget {
   final String adUnitId;
   const _BannerAdWidget({required this.adUnitId});
@@ -155,9 +163,7 @@ class __BannerAdWidgetState extends State<_BannerAdWidget> {
       adUnitId: widget.adUnitId,
       listener: BannerAdListener(
         onAdLoaded: (ad) {
-          setState(() {
-            _isLoaded = true;
-          });
+          setState(() => _isLoaded = true);
         },
         onAdFailedToLoad: (ad, error) {
           ad.dispose();

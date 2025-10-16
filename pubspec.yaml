@@ -76,6 +76,10 @@ dependencies:
   pay_with_paystack: ^1.0.14
   paystack_flutter_sdk: ^0.0.1-alpha.2
   device_info_plus: ^12.1.0
+  just_audio: ^0.10.5
+  audio_service: ^0.18.18
+  rxdart: ^0.28.0
+  just_audio_background: ^0.0.1-beta.17
   
 dev_dependencies:
   flutter_test:
