@@ -12,6 +12,7 @@ analyzer:
     unused_catch_stack: ignore
     unnecessary_null_comparison: ignore
     body_might_complete_normally_nullable: ignore
+    cast_from_null_always_fails: ignore
 include: package:flutter_lints/flutter.yaml
 
 linter:

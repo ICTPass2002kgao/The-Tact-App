@@ -15,8 +15,7 @@ import 'package:ttact/Components/Play_Song.dart';
 import 'dart:io';
 
 import 'package:ttact/Pages/Downloaded_Songs.dart';
-import 'package:ttact/Pages/HomePage.dart'; // For File operations
-
+ 
 class OverseerPage extends StatefulWidget {
   const OverseerPage({super.key});
 
@@ -189,8 +188,7 @@ class _OverseerPageState extends State<OverseerPage>
                               return Center(child: Text('No members found.'));
                             }
                             var totalMembers = asyncSnapshot.data!.docs.length;
-                            var data = asyncSnapshot.data!.docs;
-                            return Column(
+                             return Column(
                               children: [
                                 Container(
                                   width: double.infinity,
@@ -320,7 +318,7 @@ class _OverseerPageState extends State<OverseerPage>
                                                 children: [
                                                   for (var info in oveerData)
                                                     Text(
-                                                      '${info?['districts'].length ?? 0}',
+                                                      '${info['districts'].length ?? 0}',
                                                       style: TextStyle(
                                                         fontSize: 50,
                                                         fontWeight:

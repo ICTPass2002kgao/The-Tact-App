@@ -80,6 +80,8 @@ dependencies:
   audio_service: ^0.18.18
   rxdart: ^0.28.0
   just_audio_background: ^0.0.1-beta.17
+  webview_flutter_wkwebview: ^3.23.1
+  webview_flutter: ^4.13.0
   
 dev_dependencies:
   flutter_test:

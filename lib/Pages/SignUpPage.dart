@@ -7,11 +7,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:http/http.dart' as http;
+ import 'package:http/http.dart' as http;
 import 'package:ttact/Components/AdBanner.dart';
-import 'package:ttact/Pages/HomePage.dart';
-
+ 
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
 
@@ -189,8 +187,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   TextEditingController txtPassword = TextEditingController();
   TextEditingController txtConfirmPassword = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  bool _obscurePassword = true;
+   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool isChecked = false;
   Api backendService = Api();
