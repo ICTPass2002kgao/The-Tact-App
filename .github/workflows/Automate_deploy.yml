@@ -6,46 +6,48 @@ on:
   push:
     branches: [ "main" ] # Runs on every push to the main branch
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    
+    # ----------------------------------------------------------------------
+    # FIX #2: Renaming the secret environment variable to FIREBASE_TOKEN
+    # This is the standard variable that the Firebase CLI automatically looks for.
+    # ----------------------------------------------------------------------
     env:
-      FIREBASE_SERVICE_ACCOUNT_DANKIE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}
 
     steps:
-      # Checks out your repository under $GITHUB_WORKSPACE
       - uses: actions/checkout@v4
 
-      # Setup Flutter environment
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      # Install Dependencies
       - name: Install dependencies
         run: flutter pub get
 
-      # Run Checks (Optional but recommended for CI)
-      # - name: Run analyzer
-      #   run: flutter analyze
+      # NOTE: Skipping flutter analyze is okay for now to get the deploy working.
 
       # ----------------------------------------------------------------------
       # BUILD FLUTTER WEB APP
       # ----------------------------------------------------------------------
       - name: Build Flutter Web App
-        # Removed '--web-renderer html' which caused the exit code 64 error.
-        # The crucial '--base-href /web/' remains for correct routing.
         run: flutter build web --base-href /web/
 
       # ----------------------------------------------------------------------
-      # COPY ARTIFACTS INTO FIREBASE HOSTING DIRECTORY (This remains essential)
+      # COPY ARTIFACTS INTO FIREBASE HOSTING DIRECTORY
       # ----------------------------------------------------------------------
       - name: Copy Flutter Web Build to Hosting Directory
         run: |
           mkdir -p public/web/
           cp -r build/web/* public/web/
+          
+      # ----------------------------------------------------------------------
+      # FIX #1: Correcting the deployment target and using FIREBASE_TOKEN
       # ----------------------------------------------------------------------
       - name: Deploy to Firebase Hosting
-        run: npx firebase-tools@latest deploy --only hosting:TACT --project tact-3c612 --token "$FIREBASE_SERVICE_ACCOUNT_DANKIE"
+        # The CLI automatically uses $FIREBASE_TOKEN for auth
+        # We target the specific project, which hosts the default site.
+        run: npx firebase-tools@latest deploy --project tact-3c612
