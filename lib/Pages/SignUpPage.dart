@@ -1,5 +1,11 @@
+// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, use_build_context_synchronously, avoid_print
+
+// --- PLATFORM IMPORTS FIX ---
+// Import dart:io conditionally to enable cross-platform build
+import 'dart:io' if (dart.library.html) 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb and defaultTargetPlatform
+
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +18,13 @@ import 'package:ttact/Components/AdBanner.dart';
 
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
+
+// --- PLATFORM UTILITIES ---
+bool get isIOSPlatform =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+bool get isAndroidPlatform =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+// --------------------------
 
 // Custom platform-aware TextField Builder
 Widget _buildPlatformTextField({
@@ -28,7 +41,8 @@ Widget _buildPlatformTextField({
 }) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 8.0),
-    child: Platform.isIOS
+    // FIX: Use isIOSPlatform getter
+    child: isIOSPlatform
         ? CupertinoTextField(
             controller: controller,
             placeholder: placeholder,
@@ -80,7 +94,8 @@ Widget _buildListTile({
   required VoidCallback onTap,
   required BuildContext context,
 }) {
-  if (Platform.isIOS) {
+  // FIX: Use isIOSPlatform getter
+  if (isIOSPlatform) {
     return CupertinoListTile(
       title: Text(title),
       trailing: Row(
@@ -114,7 +129,8 @@ void _buildActionSheet({
   required List<String> actions,
   required ValueChanged<String> onSelected,
 }) {
-  if (Platform.isIOS) {
+  // FIX: Use isIOSPlatform getter
+  if (isIOSPlatform) {
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) => CupertinoActionSheet(
@@ -235,6 +251,13 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _getAddress() async {
+    // Skip Geolocation on Web as it requires permissions that crash the app in some environments,
+    // and is generally handled differently.
+    if (kIsWeb) {
+      txtAddress.text = "Enter Address Manually (Web)";
+      return;
+    }
+
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
@@ -521,6 +544,8 @@ class _SignUpPageState extends State<SignUpPage> {
         {};
     String emailFromArgs = args['email'] ?? '';
     final colorScheme = Theme.of(context);
+    final isDesktop =
+        MediaQuery.of(context).size.width > 800; // Define desktop breakpoint
 
     final List<String> districtElderNames = getDistrictElderNames(
       currentOverseerData,
@@ -534,7 +559,8 @@ class _SignUpPageState extends State<SignUpPage> {
 
     return Scaffold(
       backgroundColor: colorScheme.scaffoldBackgroundColor,
-      appBar: Platform.isIOS
+      // FIX: Use isIOSPlatform getter
+      appBar: isIOSPlatform
           ? CupertinoNavigationBar(
               backgroundColor: colorScheme.scaffoldBackgroundColor,
               border: Border.all(color: Colors.transparent),
@@ -555,578 +581,625 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
             ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Sign up",
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primaryColor,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                "Create an account to get started",
-                style: TextStyle(color: colorScheme.hintColor, fontSize: 16),
-              ),
-              const SizedBox(height: 20),
-
-              // Personal Details
-              _buildPlatformTextField(
-                context: context,
-                controller: txtName,
-                placeholder: 'Name',
-                prefixIcon: CupertinoIcons.person_fill,
-                keyboardType: TextInputType.name,
-              ),
-              _buildPlatformTextField(
-                context: context,
-                controller: txtSurname,
-                placeholder: 'Surname',
-                prefixIcon: CupertinoIcons.person_add,
-                keyboardType: TextInputType.name,
-              ),
-              _buildPlatformTextField(
-                context: context,
-                controller: txtAddress,
-                placeholder: 'Address',
-                prefixIcon: CupertinoIcons.location_solid,
-                keyboardType: TextInputType.streetAddress,
-                maxLines: 3,
-              ),
-              _buildPlatformTextField(
-                context: context,
-                controller: txtContactNumber,
-                placeholder: 'Contact Number',
-                prefixIcon: CupertinoIcons.phone_fill,
-                keyboardType: TextInputType.phone,
-              ),
-
-              // Role Selection
-              const SizedBox(height: 10),
-              _buildSection(
-                context: context,
-                title: 'ROLE SELECTION',
+        child: Center(
+          child: Container(
+            // Constrain content width for desktop/web
+            constraints: BoxConstraints(
+              maxWidth: isDesktop ? 600 : double.infinity,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildListTile(
+                  Text(
+                    "Sign up",
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "Create an account to get started",
+                    style: TextStyle(
+                      color: colorScheme.hintColor,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Personal Details
+                  _buildPlatformTextField(
                     context: context,
-                    title: 'Select Role',
-                    trailingText: role ?? 'Not Selected',
-                    onTap: () {
-                      _buildActionSheet(
+                    controller: txtName,
+                    placeholder: 'Name',
+                    prefixIcon: CupertinoIcons.person_fill,
+                    keyboardType: TextInputType.name,
+                  ),
+                  _buildPlatformTextField(
+                    context: context,
+                    controller: txtSurname,
+                    placeholder: 'Surname',
+                    prefixIcon: CupertinoIcons.person_add,
+                    keyboardType: TextInputType.name,
+                  ),
+                  _buildPlatformTextField(
+                    context: context,
+                    controller: txtAddress,
+                    placeholder: 'Address',
+                    prefixIcon: CupertinoIcons.location_solid,
+                    keyboardType: TextInputType.streetAddress,
+                    maxLines: 3,
+                  ),
+                  _buildPlatformTextField(
+                    context: context,
+                    controller: txtContactNumber,
+                    placeholder: 'Contact Number',
+                    prefixIcon: CupertinoIcons.phone_fill,
+                    keyboardType: TextInputType.phone,
+                  ),
+
+                  // Role Selection
+                  const SizedBox(height: 10),
+                  _buildSection(
+                    context: context,
+                    title: 'ROLE SELECTION',
+                    children: [
+                      _buildListTile(
                         context: context,
                         title: 'Select Role',
-                        actions: roles,
-                        onSelected: (userRole) {
-                          setState(() {
-                            role = userRole;
-                          });
+                        trailingText: role ?? 'Not Selected',
+                        onTap: () {
+                          _buildActionSheet(
+                            context: context,
+                            title: 'Select Role',
+                            actions: roles,
+                            onSelected: (userRole) {
+                              setState(() {
+                                role = userRole;
+                              });
+                            },
+                          );
                         },
-                      );
-                    },
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              if (role == 'Seller') ...[
-                const SizedBox(height: 10),
-                _buildPlatformTextField(
-                  context: context,
-                  controller: txtAccountNumber,
-                  placeholder: 'Bank Account Number',
-                  prefixIcon: CupertinoIcons.money_dollar,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 10),
-                _buildPlatformTextField(
-                  context: context,
-                  controller: txtBankCodeController,
-                  placeholder: 'Bank Code',
-                  prefixIcon: CupertinoIcons.building_2_fill,
-                  keyboardType: TextInputType.number,
-                ),
-              ],
+                  if (role == 'Seller') ...[
+                    const SizedBox(height: 10),
+                    _buildPlatformTextField(
+                      context: context,
+                      controller: txtAccountNumber,
+                      placeholder: 'Bank Account Number',
+                      prefixIcon: CupertinoIcons.money_dollar,
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildPlatformTextField(
+                      context: context,
+                      controller: txtBankCodeController,
+                      placeholder: 'Bank Code',
+                      prefixIcon: CupertinoIcons.building_2_fill,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ],
 
-              // Province Selection
-              const SizedBox(height: 10),
-              _buildSection(
-                context: context,
-                title: 'LOCATION DETAILS',
-                children: [
-                  _buildListTile(
+                  // Province Selection
+                  const SizedBox(height: 10),
+                  _buildSection(
                     context: context,
-                    title: 'Select Province',
-                    trailingText: selectedProvince ?? 'Not Selected',
-                    onTap: () {
-                      _buildActionSheet(
+                    title: 'LOCATION DETAILS',
+                    children: [
+                      _buildListTile(
                         context: context,
-                        title: 'Select your Province',
-                        actions: provinces,
-                        onSelected: (province) {
-                          setState(() {
-                            selectedProvince = province;
-                            selectedMemberUid = null;
-                            currentOverseerData = null;
-                            selectedDistrictElder = null;
-                            selectedCommunityElder = null;
-                            selectedCommunityName = null;
-                            selectedDistrictData = null;
-                          });
+                        title: 'Select Province',
+                        trailingText: selectedProvince ?? 'Not Selected',
+                        onTap: () {
+                          _buildActionSheet(
+                            context: context,
+                            title: 'Select your Province',
+                            actions: provinces,
+                            onSelected: (province) {
+                              setState(() {
+                                selectedProvince = province;
+                                selectedMemberUid = null;
+                                currentOverseerData = null;
+                                selectedDistrictElder = null;
+                                selectedCommunityElder = null;
+                                selectedCommunityName = null;
+                                selectedDistrictData = null;
+                              });
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
+                      ),
 
-                  if (selectedProvince != null)
-                    FutureBuilder<QuerySnapshot>(
-                      future: FirebaseFirestore.instance
-                          .collection('overseers')
-                          .where('province', isEqualTo: selectedProvince)
-                          .get(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Center(
-                            child: Platform.isIOS
-                                ? const CupertinoActivityIndicator()
-                                : const CircularProgressIndicator(),
-                          );
-                        }
-                        if (snapshot.hasError) {
-                          return _buildListTile(
-                            context: context,
-                            title: 'Error: ${snapshot.error}',
-                            trailingText: '!',
-                            onTap: () {},
-                          );
-                        }
-                        final overseers = snapshot.data?.docs ?? [];
-                        if (overseers.isEmpty) {
-                          return _buildListTile(
-                            context: context,
-                            title: 'No Overseers found.',
-                            trailingText: '',
-                            onTap: () {},
-                          );
-                        }
-
-                        return _buildListTile(
-                          context: context,
-                          title: 'Select Overseer',
-                          trailingText: (() {
-                            if (selectedMemberUid == null) {
-                              return 'Not Selected';
+                      if (selectedProvince != null)
+                        FutureBuilder<QuerySnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('overseers')
+                              .where('province', isEqualTo: selectedProvince)
+                              .get(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              // FIX: Use platform-aware loading indicator
+                              return Center(
+                                child: isIOSPlatform
+                                    ? const CupertinoActivityIndicator()
+                                    : const CircularProgressIndicator(),
+                              );
                             }
-                            final overseerDoc = overseers
-                                .cast<QueryDocumentSnapshot>()
-                                .firstWhere(
-                                  (o) => o['uid'] == selectedMemberUid,
-                                  orElse: () => null as QueryDocumentSnapshot,
+                            if (snapshot.hasError) {
+                              return _buildListTile(
+                                context: context,
+                                title: 'Error: ${snapshot.error}',
+                                trailingText: '!',
+                                onTap: () {},
+                              );
+                            }
+                            final overseers = snapshot.data?.docs ?? [];
+                            if (overseers.isEmpty) {
+                              return _buildListTile(
+                                context: context,
+                                title: 'No Overseers found.',
+                                trailingText: '',
+                                onTap: () {},
+                              );
+                            }
+
+                            return _buildListTile(
+                              context: context,
+                              title: 'Select Overseer',
+                              trailingText: (() {
+                                if (selectedMemberUid == null) {
+                                  return 'Not Selected';
+                                }
+                                final overseerDoc = overseers
+                                    .cast<QueryDocumentSnapshot>()
+                                    .firstWhere(
+                                      (o) => o['uid'] == selectedMemberUid,
+                                      orElse: () =>
+                                          null as QueryDocumentSnapshot,
+                                    );
+                                if (overseerDoc == null) {
+                                  return 'Not Selected';
+                                }
+                                final overseer =
+                                    overseerDoc.data() as Map<String, dynamic>;
+                                return '${overseer['name']} ${overseer['surname']}';
+                              })(),
+                              onTap: () {
+                                _buildActionSheet(
+                                  context: context,
+                                  title: 'Choose an Overseer',
+                                  actions: overseers.map((overseerDoc) {
+                                    final overseer =
+                                        (overseerDoc).data()
+                                            as Map<String, dynamic>;
+                                    return '${overseer['name']} ${overseer['surname']}';
+                                  }).toList(),
+                                  onSelected: (selectedName) {
+                                    final selectedDoc = overseers.firstWhere(
+                                      (doc) =>
+                                          '${doc['name']} ${doc['surname']}' ==
+                                          selectedName,
+                                    );
+                                    setState(() {
+                                      selectedMemberUid = selectedDoc['uid'];
+                                      _fetchOverseerData(selectedMemberUid!);
+                                    });
+                                  },
                                 );
-                            if (overseerDoc == null) {
-                              return 'Not Selected';
-                            }
-                            final overseer =
-                                overseerDoc.data() as Map<String, dynamic>;
-                            return '${overseer['name']} ${overseer['surname']}';
-                          })(),
+                              },
+                            );
+                          },
+                        ),
+
+                      if (currentOverseerData != null)
+                        _buildListTile(
+                          context: context,
+                          title: 'Select District Elder',
+                          trailingText: selectedDistrictElder ?? 'Not Selected',
                           onTap: () {
+                            if (districtElderNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Districts',
+                                'No district elders found for the selected overseer.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
                             _buildActionSheet(
                               context: context,
-                              title: 'Choose an Overseer',
-                              actions: overseers.map((overseerDoc) {
-                                final overseer =
-                                    (overseerDoc).data()
-                                        as Map<String, dynamic>;
-                                return '${overseer['name']} ${overseer['surname']}';
-                              }).toList(),
-                              onSelected: (selectedName) {
-                                final selectedDoc = overseers.firstWhere(
-                                  (doc) =>
-                                      '${doc['name']} ${doc['surname']}' ==
-                                      selectedName,
-                                );
+                              title: 'Choose a District Elder',
+                              actions: districtElderNames,
+                              onSelected: (elderName) {
                                 setState(() {
-                                  selectedMemberUid = selectedDoc['uid'];
-                                  _fetchOverseerData(selectedMemberUid!);
+                                  selectedDistrictElder = elderName;
+                                  selectedDistrictData =
+                                      (currentOverseerData?['districts']
+                                                  as List<dynamic>?)
+                                              ?.firstWhere(
+                                                (district) =>
+                                                    district['districtElderName'] ==
+                                                    elderName,
+                                                orElse: () => null,
+                                              )
+                                          as Map<String, dynamic>?;
+                                  selectedCommunityElder = null;
+                                  selectedCommunityName = null;
                                 });
                               },
                             );
                           },
-                        );
-                      },
-                    ),
-
-                  if (currentOverseerData != null)
-                    _buildListTile(
-                      context: context,
-                      title: 'Select District Elder',
-                      trailingText: selectedDistrictElder ?? 'Not Selected',
-                      onTap: () {
-                        if (districtElderNames.isEmpty) {
-                          Api().showMessage(
-                            context,
-                            'No Districts',
-                            'No district elders found for the selected overseer.',
-                            Colors.orange,
-                          );
-                          return;
-                        }
-                        _buildActionSheet(
-                          context: context,
-                          title: 'Choose a District Elder',
-                          actions: districtElderNames,
-                          onSelected: (elderName) {
-                            setState(() {
-                              selectedDistrictElder = elderName;
-                              selectedDistrictData =
-                                  (currentOverseerData?['districts']
-                                              as List<dynamic>?)
-                                          ?.firstWhere(
-                                            (district) =>
-                                                district['districtElderName'] ==
-                                                elderName,
-                                            orElse: () => null,
-                                          )
-                                      as Map<String, dynamic>?;
-                              selectedCommunityElder = null;
-                              selectedCommunityName = null;
-                            });
-                          },
-                        );
-                      },
-                    ),
-
-                  if (selectedDistrictElder != null)
-                    _buildListTile(
-                      context: context,
-                      title: 'Select Community Elder',
-                      trailingText: selectedCommunityElder ?? 'Not Selected',
-                      onTap: () {
-                        if (communityElderNames.isEmpty) {
-                          Api().showMessage(
-                            context,
-                            'No Communities',
-                            'No community elders found for this district.',
-                            Colors.orange,
-                          );
-                          return;
-                        }
-                        _buildActionSheet(
-                          context: context,
-                          title: 'Choose a Community Elder',
-                          actions: communityElderNames,
-                          onSelected: (elderName) {
-                            setState(() {
-                              selectedCommunityElder = elderName;
-                            });
-                          },
-                        );
-                      },
-                    ),
-                  if (selectedCommunityElder != null)
-                    _buildListTile(
-                      context: context,
-                      title: 'Select Community Name',
-                      trailingText: selectedCommunityName ?? 'Not Selected',
-                      onTap: () {
-                        if (communityNames.isEmpty) {
-                          Api().showMessage(
-                            context,
-                            'No Communities',
-                            'No community names found for this district.',
-                            Colors.orange,
-                          );
-                          return;
-                        }
-                        _buildActionSheet(
-                          context: context,
-                          title: 'Choose a Community Name',
-                          actions: communityNames,
-                          onSelected: (community) {
-                            setState(() {
-                              selectedCommunityName = community;
-                            });
-                          },
-                        );
-                      },
-                    ),
-                ],
-              ),
-
-              // Email and Password Fields
-              const SizedBox(height: 10),
-              _buildSection(
-                context: context,
-                title: 'ACCOUNT CREDENTIALS',
-                children: [
-                  if (emailFromArgs.isEmpty)
-                    _buildPlatformTextField(
-                      context: context,
-                      controller: txtEmail,
-                      placeholder: 'Email Address',
-                      prefixIcon: CupertinoIcons.mail_solid,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                  if (emailFromArgs.isEmpty)
-                    _buildPlatformTextField(
-                      context: context,
-                      controller: txtPassword,
-                      placeholder: 'Password',
-                      prefixIcon: CupertinoIcons.lock_fill,
-                      obscureText: _obscurePassword,
-                      suffixIcon: Platform.isIOS
-                          ? CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                              child: Icon(
-                                _obscurePassword
-                                    ? CupertinoIcons.eye_slash_fill
-                                    : CupertinoIcons.eye_fill,
-                                color: CupertinoColors.systemGrey,
-                              ),
-                            )
-                          : IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                    ),
-                  if (emailFromArgs.isEmpty)
-                    _buildPlatformTextField(
-                      context: context,
-                      controller: txtConfirmPassword,
-                      placeholder: 'Confirm Password',
-                      prefixIcon: CupertinoIcons.lock_fill,
-                      obscureText: _obscureConfirmPassword,
-                      suffixIcon: Platform.isIOS
-                          ? CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                setState(() {
-                                  _obscureConfirmPassword =
-                                      !_obscureConfirmPassword;
-                                });
-                              },
-                              child: Icon(
-                                _obscureConfirmPassword
-                                    ? CupertinoIcons.eye_slash_fill
-                                    : CupertinoIcons.eye_fill,
-                                color: CupertinoColors.systemGrey,
-                              ),
-                            )
-                          : IconButton(
-                              icon: Icon(
-                                _obscureConfirmPassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscureConfirmPassword =
-                                      !_obscureConfirmPassword;
-                                });
-                              },
-                            ),
-                    ),
-                ],
-              ),
-
-              const SizedBox(height: 15),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Platform.isIOS
-                      ? CupertinoCheckbox(
-                          value: isChecked,
-                          onChanged: (val) => setState(() => isChecked = val!),
-                          activeColor: colorScheme.primaryColor,
-                          checkColor: colorScheme.scaffoldBackgroundColor,
-                        )
-                      : Checkbox(
-                          value: isChecked,
-                          onChanged: (val) => setState(() => isChecked = val!),
-                          activeColor: colorScheme.primaryColor,
                         ),
-                  const SizedBox(width: 8.0),
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          color: colorScheme.hintColor,
-                          fontSize: 14,
+
+                      if (selectedDistrictElder != null)
+                        _buildListTile(
+                          context: context,
+                          title: 'Select Community Elder',
+                          trailingText:
+                              selectedCommunityElder ?? 'Not Selected',
+                          onTap: () {
+                            if (communityElderNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Communities',
+                                'No community elders found for this district.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+                            _buildActionSheet(
+                              context: context,
+                              title: 'Choose a Community Elder',
+                              actions: communityElderNames,
+                              onSelected: (elderName) {
+                                setState(() {
+                                  selectedCommunityElder = elderName;
+                                });
+                              },
+                            );
+                          },
                         ),
-                        children: [
-                          const TextSpan(text: "I've read and agree with the "),
-                          WidgetSpan(
-                            child: GestureDetector(
-                              onTap: () {
-                                // Navigate to Terms and Conditions
+                      if (selectedCommunityElder != null)
+                        _buildListTile(
+                          context: context,
+                          title: 'Select Community Name',
+                          trailingText: selectedCommunityName ?? 'Not Selected',
+                          onTap: () {
+                            if (communityNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Communities',
+                                'No community names found for this district.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+                            _buildActionSheet(
+                              context: context,
+                              title: 'Choose a Community Name',
+                              actions: communityNames,
+                              onSelected: (community) {
+                                setState(() {
+                                  selectedCommunityName = community;
+                                });
                               },
-                              child: Text(
-                                "Terms and Conditions",
-                                style: TextStyle(
-                                  color: colorScheme.primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const TextSpan(text: " and the "),
-                          WidgetSpan(
-                            child: GestureDetector(
-                              onTap: () {
-                                // Navigate to Privacy Policy
-                              },
-                              child: Text(
-                                "Privacy Policy.",
-                                style: TextStyle(
-                                  color: colorScheme.primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                            );
+                          },
+                        ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              CustomOutlinedButton(
-                width: double.infinity,
-                backgroundColor: colorScheme.primaryColor,
-                foregroundColor: colorScheme.scaffoldBackgroundColor,
-                text: 'SIGN UP',
-                onPressed: () async {
 
-      Api().showLoading(context);
-                  await _getAddress();
-                  if (!_validateFields()) {
-                    return;
-                  }
+                  // Email and Password Fields
+                  const SizedBox(height: 10),
+                  _buildSection(
+                    context: context,
+                    title: 'ACCOUNT CREDENTIALS',
+                    children: [
+                      if (emailFromArgs.isEmpty)
+                        _buildPlatformTextField(
+                          context: context,
+                          controller: txtEmail,
+                          placeholder: 'Email Address',
+                          prefixIcon: CupertinoIcons.mail_solid,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                      if (emailFromArgs.isEmpty)
+                        _buildPlatformTextField(
+                          context: context,
+                          controller: txtPassword,
+                          placeholder: 'Password',
+                          prefixIcon: CupertinoIcons.lock_fill,
+                          obscureText: _obscurePassword,
+                          // FIX: Use isIOSPlatform getter
+                          suffixIcon: isIOSPlatform
+                              ? CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                  child: Icon(
+                                    _obscurePassword
+                                        ? CupertinoIcons.eye_slash_fill
+                                        : CupertinoIcons.eye_fill,
+                                    color: CupertinoColors.systemGrey,
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                ),
+                        ),
+                      if (emailFromArgs.isEmpty)
+                        _buildPlatformTextField(
+                          context: context,
+                          controller: txtConfirmPassword,
+                          placeholder: 'Confirm Password',
+                          prefixIcon: CupertinoIcons.lock_fill,
+                          obscureText: _obscureConfirmPassword,
+                          // FIX: Use isIOSPlatform getter
+                          suffixIcon: isIOSPlatform
+                              ? CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureConfirmPassword =
+                                          !_obscureConfirmPassword;
+                                    });
+                                  },
+                                  child: Icon(
+                                    _obscureConfirmPassword
+                                        ? CupertinoIcons.eye_slash_fill
+                                        : CupertinoIcons.eye_fill,
+                                    color: CupertinoColors.systemGrey,
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: Icon(
+                                    _obscureConfirmPassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureConfirmPassword =
+                                          !_obscureConfirmPassword;
+                                    });
+                                  },
+                                ),
+                        ),
+                    ],
+                  ),
 
-                  try {
-                    if (emailFromArgs.isEmpty) {
-                      await backendService.signUp(
-                        txtName.text.trim(),
-                        txtSurname.text.trim(),
-                        txtEmail.text.trim(),
-                        txtPassword.text,
-                        txtAddress.text.trim(),
-                        txtContactNumber.text.trim(),
-                        selectedMemberUid!,
-                        role!,
-                        accountNumber: txtAccountNumber.text.trim(),
-                        bankCode: txtBankCodeController.text.trim(),
-                        selectedProvince!,
-                        selectedDistrictElder!,
-                        selectedCommunityElder!,
-                        selectedCommunityName!,
-                        context,
-                      );
-                    } else {
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(FirebaseAuth.instance.currentUser!.uid)
-                          .set({
-                            "name": txtName.text.trim(),
-                            "surname": txtSurname.text.trim(),
-                            "email": emailFromArgs,
-                            "profileUrl": "",
-                            "address": txtAddress.text.trim(),
-                            "phone": txtContactNumber.text.trim(),
-                            "overseerUid": selectedMemberUid,
-                            'week1': 0.00,
-                            'week2': 0.00,
-                            'week3': 0.00,
-                            'week4': 0.00,
-                            "role": role,
-                            "province": selectedProvince,
-                            "districtElderName": selectedDistrictElder,
-                            "communityElderName": selectedCommunityElder,
-                            if (role == 'Seller') 'sellerPaystackAccount': '',
-                            "uid": FirebaseAuth.instance.currentUser!.uid,
-                          });
-                      if (role == 'Seller') {
-                        String? subaccountCode = await createSellerSubaccount(
-                          uid: FirebaseAuth.instance.currentUser!.uid,
-                          businessName: txtName.text.trim(),
-                          email: txtEmail.text.trim(),
-                          accountNumber: txtAccountNumber.text.trim(),
-                          bankCode: txtBankCodeController.text.trim(),
-                        );
+                  const SizedBox(height: 15),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // FIX: Use isIOSPlatform getter
+                      isIOSPlatform
+                          ? CupertinoCheckbox(
+                              value: isChecked,
+                              onChanged: (val) =>
+                                  setState(() => isChecked = val!),
+                              activeColor: colorScheme.primaryColor,
+                              checkColor: colorScheme.scaffoldBackgroundColor,
+                            )
+                          : Checkbox(
+                              value: isChecked,
+                              onChanged: (val) =>
+                                  setState(() => isChecked = val!),
+                              activeColor: colorScheme.primaryColor,
+                            ),
+                      const SizedBox(width: 8.0),
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              color: colorScheme.hintColor,
+                              fontSize: 14,
+                            ),
+                            children: [
+                              const TextSpan(
+                                text: "I've read and agree with the ",
+                              ),
+                              WidgetSpan(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // Navigate to Terms and Conditions
+                                  },
+                                  child: Text(
+                                    "Terms and Conditions",
+                                    style: TextStyle(
+                                      color: colorScheme.primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const TextSpan(text: " and the "),
+                              WidgetSpan(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // Navigate to Privacy Policy
+                                  },
+                                  child: Text(
+                                    "Privacy Policy.",
+                                    style: TextStyle(
+                                      color: colorScheme.primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  CustomOutlinedButton(
+                    width: double.infinity,
+                    backgroundColor: colorScheme.primaryColor,
+                    foregroundColor: colorScheme.scaffoldBackgroundColor,
+                    text: 'SIGN UP',
+                    onPressed: () async {
+                      Api().showLoading(context);
+                      await _getAddress();
+                      if (!_validateFields()) {
+                        if (context.mounted)
+                          Navigator.pop(context); // Dismiss loading
+                        return;
+                      }
 
-                        if (subaccountCode != null) {
-                          print('Subaccount created: $subaccountCode');
+                      try {
+                        if (emailFromArgs.isEmpty) {
+                          await backendService.signUp(
+                            txtName.text.trim(),
+                            txtSurname.text.trim(),
+                            txtEmail.text.trim(),
+                            txtPassword.text,
+                            txtAddress.text.trim(),
+                            txtContactNumber.text.trim(),
+                            selectedMemberUid!,
+                            role!,
+                            accountNumber: txtAccountNumber.text.trim(),
+                            bankCode: txtBankCodeController.text.trim(),
+                            selectedProvince!,
+                            selectedDistrictElder!,
+                            selectedCommunityElder!,
+                            selectedCommunityName!,
+                            context,
+                          );
                         } else {
-                          print('Failed to create Paystack subaccount');
+                          // This branch is for users signing in via social auth (already signed up with Firebase)
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(FirebaseAuth.instance.currentUser!.uid)
+                              .set(
+                                {
+                                  "name": txtName.text.trim(),
+                                  "surname": txtSurname.text.trim(),
+                                  "email": emailFromArgs,
+                                  "profileUrl": "",
+                                  "address": txtAddress.text.trim(),
+                                  "phone": txtContactNumber.text.trim(),
+                                  "overseerUid": selectedMemberUid,
+                                  'week1': 0.00,
+                                  'week2': 0.00,
+                                  'week3': 0.00,
+                                  'week4': 0.00,
+                                  "role": role,
+                                  "province": selectedProvince,
+                                  "districtElderName": selectedDistrictElder,
+                                  "communityElderName": selectedCommunityElder,
+                                  if (role == 'Seller')
+                                    'sellerPaystackAccount': '',
+                                  "uid": FirebaseAuth.instance.currentUser!.uid,
+                                  "communityName":
+                                      selectedCommunityName, // Added missing communityName
+                                },
+                                SetOptions(merge: true),
+                              ); // Use merge true for social users
+
+                          if (role == 'Seller') {
+                            String?
+                            subaccountCode = await createSellerSubaccount(
+                              uid: FirebaseAuth.instance.currentUser!.uid,
+                              businessName:
+                                  "${txtName.text.trim()} ${txtSurname.text.trim()}",
+                              email: emailFromArgs,
+                              accountNumber: txtAccountNumber.text.trim(),
+                              bankCode: txtBankCodeController.text.trim(),
+                            );
+
+                            if (subaccountCode != null && context.mounted) {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(FirebaseAuth.instance.currentUser!.uid)
+                                  .update({
+                                    'sellerPaystackAccount': subaccountCode,
+                                  });
+                            } else if (context.mounted) {
+                              print('Failed to create Paystack subaccount');
+                            }
+                          }
+
+                          if (context.mounted) {
+                            Navigator.pop(context); // Dismiss loading
+                            backendService.showMessage(
+                              context,
+                              'Success',
+                              'Account details updated successfully!',
+                              colorScheme.splashColor,
+                            );
+                            // Only show ad on Android, handled safely in AdBanner.dart
+                            if (isAndroidPlatform) {
+                              adManager.showRewardedInterstitialAd((
+                                ad,
+                                reward,
+                              ) {
+                                print(
+                                  'User earned reward: ${reward.amount} ${reward.type}',
+                                );
+                              });
+                            }
+                            Navigator.pushNamed(context, '/main-menu');
+                          }
                         }
+                      } catch (e) {
+                        if (context.mounted)
+                          Navigator.pop(context); // Dismiss loading
+                        backendService.showMessage(
+                          context,
+                          'Sign Up/Update Failed',
+                          e.toString(),
+                          colorScheme.primaryColorDark,
+                        );
                       }
-
-                      backendService.showMessage(
-                        context,
-                        'Success',
-                        'Account details updated successfully!',
-                        colorScheme.splashColor,
-                      );
-                      if (Platform.isAndroid) {
-                        adManager.showRewardedInterstitialAd((ad, reward) {
-                          print(
-                            'User earned reward: ${reward.amount} ${reward.type}',
-                          );
-                        });
-                      }
-                      Navigator.pushNamed(context, '/main-menu');
-                    }
-                  } catch (e) {
-                    backendService.showMessage(
-                      context,
-                      'Sign Up/Update Failed',
-                      e.toString(),
-                      colorScheme.primaryColorDark,
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 40),
-
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Have an account?'),
-                  SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
                     },
-                    child: Text(
-                      'Login here',
-                      style: TextStyle(
-                        color: colorScheme.primaryColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
                   ),
+                  const SizedBox(height: 40),
+
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Have an account?'),
+                      SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                        child: Text(
+                          'Login here',
+                          style: TextStyle(
+                            color: colorScheme.primaryColor,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1140,7 +1213,8 @@ Widget _buildSection({
   required String title,
   required List<Widget> children,
 }) {
-  if (Platform.isIOS) {
+  // FIX: Use isIOSPlatform getter
+  if (isIOSPlatform) {
     return CupertinoFormSection(
       backgroundColor: Colors.transparent,
       header: Text(title),

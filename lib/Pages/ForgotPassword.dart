@@ -1,11 +1,11 @@
-// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace
+// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, use_build_context_synchronously
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:text_field_validation/text_field_validation.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:ttact/Components/TextFields.dart'; // Note: Assuming this is correct, but typically named 'TextField.dart'
+import 'package:ttact/Components/TextFields.dart';
 
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});
@@ -46,8 +46,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           color.splashColor,
         );
 
-        // Optionally, pop the ForgotPassword screen after success
-        // Navigator.pop(context);
+        // Navigator.pop(context); // Optional: pop the ForgotPassword screen after success
       } on FirebaseAuthException catch (e) {
         if (!context.mounted) return;
         Navigator.pop(context); // Close loading dialog
@@ -90,23 +89,22 @@ class _ForgotPasswordState extends State<ForgotPassword> {
       appBar: AppBar(
         title: Text('Forgot Password'),
         centerTitle: true, 
-        backgroundColor: color.scaffoldBackgroundColor.withOpacity(0.8),
-        elevation: 0, // Remove shadow
+        // FIX: Match AppBar background to the top of the body gradient
+        backgroundColor: color.scaffoldBackgroundColor, 
+        elevation: 0, 
         foregroundColor: color.primaryColor,
       ),
 
-      // Apply the Gradient to the entire body container
+      // Apply the Gradient to the entire body container 
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            tileMode: TileMode.mirror,
-            transform: GradientRotation(6.28 / 2),
+            // FIX: Simplified Gradient for clean vertical fade
             colors: [
               color.scaffoldBackgroundColor,
-              color.primaryColor.withOpacity(0.6),
-              color.hintColor,
+              color.primaryColor.withOpacity(0.4), // Reduced opacity for softer fade
             ],
           ),
         ),
@@ -115,11 +113,12 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Container(
-              constraints: BoxConstraints(maxWidth: 450),
+              constraints: BoxConstraints(maxWidth: 450), // Constrain width on desktop
               // Wrap content in a Card for the clean, contained look
               child: Card(
                 elevation: 10,
-                color: color.primaryColor.withOpacity(0.3),
+                // Make card slightly transparent using primary color for visual style
+                color: color.primaryColor.withOpacity(0.15), 
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -137,7 +136,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: color.scaffoldBackgroundColor,
+                            color: color.primaryColor, // Use primary color for main title
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -158,9 +157,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
                               TextFieldValidation.email(value!),
                           placeholder: 'Email Address',
                           controller: emailController,
-                          // Ensure text field background is white for contrast against the card
-                          // Note: If AuthTextField doesn't expose a style property, it might not look right.
-                          // Assuming your custom component handles internal styling well.
+                          // Assuming AuthTextField is the same custom component used elsewhere
                         ),
                         SizedBox(height: 30),
 
@@ -174,12 +171,12 @@ class _ForgotPasswordState extends State<ForgotPassword> {
                         ),
                         SizedBox(height: 10),
 
-                        // Back to Login Button (Optional but useful)
+                        // Back to Login Button
                         TextButton(
                           onPressed: () => Navigator.pop(context),
                           child: Text(
                             'Back to Login',
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: color.primaryColor.withOpacity(0.7), fontWeight: FontWeight.w500),
                           ),
                         ),
                       ],

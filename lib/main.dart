@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -23,8 +24,18 @@ Future<void> main() async {
 
   // ✅ Initialize Firebase and Ads first
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await MobileAds.instance.initialize();
+  if (!kIsWeb) {
+    // Check if we are NOT on the web platform
+    try {
+      // NOTE: Google Mobile Ads is generally only for mobile platforms (iOS/Android).
+      // We explicitly skip initialization on Web/Desktop to avoid MissingPluginException.
+      await MobileAds.instance.initialize(); 
   await AdManager.initialize();
+    } catch (e) {
+      // Handle or ignore if initialization fails on unsupported platforms like Desktop/Linux
+      print('MobileAds initialization skipped or failed on this platform: $e');
+    }
+  }
   
   
   // ✅ Initialize Audio Handler with better error handling

@@ -67,6 +67,12 @@ class _IntroductionpageState extends State<Introductionpage> with TickerProvider
   Widget build(BuildContext context) {
     final color = Theme.of(context);
     final size = MediaQuery.of(context).size;
+    
+    // Determine the max width for central content on web/desktop
+    const double contentMaxWidth = 650;
+    
+    // Responsive carousel height: fixed max height on desktop, percentage on mobile
+    final double carouselHeight = size.height * 0.5 > 450 ? 450 : size.height * 0.5;
 
     return Scaffold(
       // Replacing solid color with a gradient for a modern background
@@ -79,84 +85,88 @@ class _IntroductionpageState extends State<Introductionpage> with TickerProvider
             colors: [color.scaffoldBackgroundColor, color.primaryColor.withOpacity(0.1)],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 40.0),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 1. Animated Carousel (takes up more space)
-                FadeTransition(
-                  opacity: _carouselOpacityAnimation,
-                  child: Container(
-                    height: size.height * 0.5, // Use 50% of screen height
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20), // More rounded corners
-                      child: Carousel(
-                        animationPageCurve: Curves.easeInOut,
-                        autoScroll: true,
-                        autoScrollDuration: Duration(seconds: 4), // Slightly faster
-                        indicatorBarColor: Colors.transparent,
-                        unActivatedIndicatorColor: const Color.fromARGB(255, 185, 182, 182),
-                        activateIndicatorColor: color.primaryColor,
-                        items: const [
-                          ImagesPage(imageName: 'assets/dankie_logo.PNG'),
-                          ImagesPage(imageName: 'assets/images4.jpeg'),
-                          ImagesPage(imageName: 'assets/image3.jpeg'),
-                          ImagesPage(imageName: 'assets/TActso2.jpeg'),
-                        ],
+        child: Center(
+          // Constrain content width for better readability on large screens
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: contentMaxWidth),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 40.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 1. Animated Carousel 
+                  FadeTransition(
+                    opacity: _carouselOpacityAnimation,
+                    child: Container(
+                      height: carouselHeight, // Use responsive height
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20), // More rounded corners
+                        child: Carousel(
+                          animationPageCurve: Curves.easeInOut,
+                          autoScroll: true,
+                          autoScrollDuration: Duration(seconds: 4), // Slightly faster
+                          indicatorBarColor: Colors.transparent,
+                          unActivatedIndicatorColor: const Color.fromARGB(255, 185, 182, 182),
+                          activateIndicatorColor: color.primaryColor,
+                          items: const [
+                            ImagesPage(imageName: 'assets/dankie_logo.PNG'),
+                            ImagesPage(imageName: 'assets/images4.jpeg'),
+                            ImagesPage(imageName: 'assets/image3.jpeg'),
+                            ImagesPage(imageName: 'assets/TActso2.jpeg'),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                
-                SizedBox(height: 30),
+                  
+                  SizedBox(height: 40), // Increased spacing for desktop
 
-                // 2. Animated Title and Slogan
-                FadeTransition(
-                  opacity: _titleOpacityAnimation,
-                  child: Column(
-                    children: [
-                      Text(
-                        'Welcome to DANKIE Ministry',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: color.primaryColor,
+                  // 2. Animated Title and Slogan
+                  FadeTransition(
+                    opacity: _titleOpacityAnimation,
+                    child: Column(
+                      children: [
+                        Text(
+                          'Welcome to DANKIE Ministry',
+                          style: TextStyle(
+                            fontSize: size.width > 600 ? 36 : 28, // Larger title on desktop
+                            fontWeight: FontWeight.w800,
+                            color: color.primaryColor,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Connecting community, faith, and progress through technology.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
+                        SizedBox(height: 10),
+                        Text(
+                          'Connecting community, faith, and progress through technology.',
+                          style: TextStyle(
+                            fontSize: size.width > 600 ? 18 : 16, // Slightly larger text
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                
-                Spacer(), // Push content towards edges
+                  
+                  Spacer(flex: 3), // Push content towards edges
 
-                // 3. Animated "Get Started" Button
-                ScaleTransition(
-                  scale: _buttonScaleAnimation,
-                  child: CustomOutlinedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/login');
-                    },
-                    text: 'Get Started',
-                    backgroundColor: color.primaryColor,
-                    foregroundColor: color.scaffoldBackgroundColor,
-                    width: double.infinity,
+                  // 3. Animated "Get Started" Button
+                  ScaleTransition(
+                    scale: _buttonScaleAnimation,
+                    child: CustomOutlinedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      text: 'Get Started',
+                      backgroundColor: color.primaryColor,
+                      foregroundColor: color.scaffoldBackgroundColor,
+                      width: double.infinity,
+                    ),
                   ),
-                ),
-                Spacer(flex: 2),
-              ],
+                  Spacer(flex: 1), 
+                ],
+              ),
             ),
           ),
         ),

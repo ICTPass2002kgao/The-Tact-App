@@ -1290,7 +1290,9 @@ class _OverseerPageState extends State<OverseerPage>
                       }
                       if (overseerData.isEmpty) {
                         return Center(child: Text('No overseers found.'));
-                      } 
+                      }
+                      var overseer =
+                          overseerData.first.data() as Map<String, dynamic>?; 
                       return Center(
                         child: GestureDetector(
                           onTap: () async {

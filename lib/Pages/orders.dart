@@ -3,6 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
+// --- PLATFORM UTILITIES ---
+const double _desktopContentMaxWidth = 800.0;
+// --------------------------
+
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
 
@@ -95,66 +99,67 @@ class _OrdersPageState extends State<OrdersPage> {
           foregroundColor: colorScheme.scaffoldBackgroundColor,
         ),
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.person_off_outlined,
-                  size: 100,
-                  color: colorScheme.primaryColor.withOpacity(0.6),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Please log in to view your orders.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.hintColor,
+          // Constrain the 'Log In' prompt on desktop
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 450),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.person_off_outlined,
+                    size: 100,
+                    color: colorScheme.primaryColor.withOpacity(0.6),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'You need to be logged in to see your order history.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: colorScheme.hintColor.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/login');
-                  },
-                  icon: const Icon(Icons.login),
-                  label: const Text('Log In'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primaryColor,
-                    foregroundColor: colorScheme.scaffoldBackgroundColor,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 15,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Please log in to view your orders.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.hintColor,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  Text(
+                    'You need to be logged in to see your order history.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: colorScheme.hintColor.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/login');
+                    },
+                    icon: const Icon(Icons.login),
+                    label: const Text('Log In'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primaryColor,
+                      foregroundColor: colorScheme.scaffoldBackgroundColor,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       );
     }
 
-    if (_userRole == 'Seller') {
-      return _buildSellerOrdersList();
-    } else {
-      return _buildCustomerOrdersList();
-    }
+    // Determine which list view to build based on user role
+    return _userRole == 'Seller' ? _buildSellerOrdersList() : _buildCustomerOrdersList();
   }
 
   Widget _buildCustomerOrdersList() {
@@ -166,45 +171,52 @@ class _OrdersPageState extends State<OrdersPage> {
         foregroundColor: colorScheme.scaffoldBackgroundColor,
         centerTitle: true,
       ),
-      body: FutureBuilder<QuerySnapshot>(
-        future: _firestore
-            .collection('orders')
-            .where('userId', isEqualTo: _currentUser!.uid)
-            .orderBy('createdAt', descending: true)
-            .get(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading orders: ${snapshot.error}',
-                style: TextStyle(color: colorScheme.primaryColorDark),
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState(
-              'No orders yet!',
-              'Looks like you haven\'t placed any orders. Start shopping now!',
-              Icons.shopping_bag_outlined,
-              'Explore Products',
-              () => Navigator.pop(context),
-            );
-          }
+      body: Center(
+        // FIX: Constrain the list view for desktop
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+          child: FutureBuilder<QuerySnapshot>(
+            future: _firestore
+                .collection('orders')
+                .where('userId', isEqualTo: _currentUser!.uid)
+                .orderBy('createdAt', descending: true)
+                .get(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading orders: ${snapshot.error}',
+                    style: TextStyle(color: colorScheme.primaryColorDark),
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return _buildEmptyState(
+                  'No orders yet!',
+                  'Looks like you haven\'t placed any orders. Start shopping now!',
+                  Icons.shopping_bag_outlined,
+                  'Explore Products',
+                  // Assuming '/main-menu' is the route to MotherPage which contains ShoppingPage
+                  () => Navigator.pushNamed(context, '/main-menu'), 
+                );
+              }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              final order =
-                  snapshot.data!.docs[index].data() as Map<String, dynamic>;
-              return _buildOrderExpansionTile(context, order);
+              return ListView.builder(
+                padding: const EdgeInsets.all(16.0),
+                itemCount: snapshot.data!.docs.length,
+                itemBuilder: (context, index) {
+                  final order =
+                      snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                  return _buildOrderExpansionTile(context, order);
+                },
+              );
             },
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -218,58 +230,69 @@ class _OrdersPageState extends State<OrdersPage> {
         foregroundColor: colorScheme.scaffoldBackgroundColor,
         centerTitle: true,
       ),
-      body: FutureBuilder<QuerySnapshot>(
-        future: _firestore
-            .collection('orders')
-            .where('products.sellerId', arrayContains: _currentUser!.uid)
-            .orderBy('createdAt', descending: true)
-            .get(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading sales: ${snapshot.error}',
-                style: TextStyle(color: colorScheme.primaryColorDark),
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState(
-              'No sales yet!',
-              'Your products will appear here once a customer places an order.',
-              Icons.storefront,
-              'Manage Products',
-              () {
-                Navigator.pop(context);
-              },
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              final order =
-                  snapshot.data!.docs[index].data() as Map<String, dynamic>;
-              final sellerProducts = (order['products'] as List<dynamic>?)
-                  ?.where((p) => p['sellerId'] == _currentUser!.uid)
-                  .toList();
-
-              if (sellerProducts == null || sellerProducts.isEmpty) {
-                return const SizedBox.shrink();
+      body: Center(
+        // FIX: Constrain the list view for desktop
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+          child: FutureBuilder<QuerySnapshot>(
+            // NOTE: This query pattern can be very slow and expensive in Firestore
+            // A better query would be to use a collection group query on 'seller_orders'
+            // or a more specific array-contains query if possible.
+            future: _firestore
+                .collection('orders')
+                // This query requires a Firestore index: products.sellerId arrayContains
+                .where('products.sellerId', arrayContains: _currentUser!.uid) 
+                .orderBy('createdAt', descending: true)
+                .get(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading sales: ${snapshot.error}',
+                    style: TextStyle(color: colorScheme.primaryColorDark),
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return _buildEmptyState(
+                  'No sales yet!',
+                  'Your products will appear here once a customer places an order.',
+                  Icons.storefront,
+                  'Manage Products',
+                  () {
+                    // Navigate to the Seller Product Page (My Shop tab in MotherPage)
+                    Navigator.pushNamed(context, '/main-menu', arguments: {'initialTab': 'seller'}); 
+                  },
+                );
               }
 
-              final sellerOrder = Map<String, dynamic>.from(order);
-              sellerOrder['products'] = sellerProducts;
+              return ListView.builder(
+                padding: const EdgeInsets.all(16.0),
+                itemCount: snapshot.data!.docs.length,
+                itemBuilder: (context, index) {
+                  final order =
+                      snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                  final sellerProducts = (order['products'] as List<dynamic>?)
+                      ?.where((p) => p['sellerId'] == _currentUser!.uid)
+                      .toList();
 
-              return _buildOrderExpansionTile(context, sellerOrder);
+                  if (sellerProducts == null || sellerProducts.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  final sellerOrder = Map<String, dynamic>.from(order);
+                  sellerOrder['products'] = sellerProducts;
+
+                  return _buildOrderExpansionTile(context, sellerOrder);
+                },
+              );
             },
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -287,7 +310,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final Timestamp? createdAt = order['createdAt'] as Timestamp?;
 
     return Card(
-      color: colorScheme.scaffoldBackgroundColor.withOpacity(0.7),
+      color: colorScheme.scaffoldBackgroundColor.withOpacity(0.9), // Slightly opaque card
       elevation: 4,
       margin: const EdgeInsets.only(bottom: 16.0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -417,12 +440,16 @@ class _OrdersPageState extends State<OrdersPage> {
                   (product['price'] as num?)?.toDouble() ?? 0.0;
               final int prodQuantity = (product['quantity'] as int?) ?? 1;
               final String prodImageUrl = product['imageUrl']?.toString() ?? '';
+              final String selectedColor = product['selectedColor'] ?? 'N/A';
+              final String selectedSize = product['selectedSize'] ?? 'N/A';
+
 
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Product Image (40x40)
                     if (prodImageUrl.isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(4.0),
@@ -469,6 +496,14 @@ class _OrdersPageState extends State<OrdersPage> {
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Variant: ${selectedColor} / ${selectedSize}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                           Text(
                             'R${prodPrice.toStringAsFixed(2)} x ${prodQuantity}',
@@ -562,53 +597,56 @@ class _OrdersPageState extends State<OrdersPage> {
   ) {
     final colorScheme = Theme.of(context);
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 100,
-              color: colorScheme.primaryColor.withOpacity(0.6),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.primaryColorDark,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 400),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 100,
+                color: colorScheme.primaryColor.withOpacity(0.6),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: colorScheme.primaryColorDark.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(buttonText),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primaryColor,
-                foregroundColor: colorScheme.scaffoldBackgroundColor,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primaryColorDark,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: colorScheme.primaryColorDark.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton.icon(
+                onPressed: onPressed,
+                icon: Icon(icon),
+                label: Text(buttonText),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primaryColor,
+                  foregroundColor: colorScheme.scaffoldBackgroundColor,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

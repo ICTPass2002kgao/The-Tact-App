@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, use_build_context_synchronously
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,7 +7,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:ttact/Components/API.dart';
 
+// Import foundation for kIsWeb check (safe practice)
+import 'package:flutter/foundation.dart';
+
+// --- PLATFORM UTILITIES ---
+const double _desktopBreakpoint = 900.0;
+bool isLargeScreen(BuildContext context) =>
+    MediaQuery.of(context).size.width >= _desktopBreakpoint;
+// ------------------------
+
 class SellerProductPage extends StatefulWidget {
+  const SellerProductPage({super.key});
+
   @override
   _SellerProductPageState createState() => _SellerProductPageState();
 }
@@ -15,91 +28,53 @@ class _SellerProductPageState extends State<SellerProductPage>
   late TabController _tabController;
   final priceController = TextEditingController();
   final locationController = TextEditingController();
-  final suitSizeController =
-      TextEditingController(); // Controller for suit size input
+  final suitSizeController = TextEditingController();
   final user = FirebaseAuth.instance.currentUser;
 
-  // New state variables to store the seller's address
   String? _sellerAddress;
 
-  // Lists to hold selected colors and sizes
   List<String> _selectedColors = [];
   List<String> _selectedStandardSizes = [];
-  List<String> _selectedNumericSizes = []; // For selected numeric sizes
-  List<String> _selectedSuitSizes = []; // For added suit sizes
-  String? _selectedSizeType; // To store the selected size type
+  List<String> _selectedNumericSizes = [];
+  List<String> _selectedSuitSizes = [];
+  String? _selectedSizeType;
 
   // Predefined lists of colors and sizes to choose from
   final List<String> _availableColors = [
-    'Black',
-    'White',
-    'Grey',
-    'Red',
-    'Blue',
-    'Green',
-    'Yellow',
-    'Pink',
-    'Purple',
-    'Orange',
-    'Brown',
+    'Black', 'White', 'Grey', 'Red', 'Blue', 'Green', 'Yellow', 'Pink',
+    'Purple', 'Orange', 'Brown',
   ];
 
   final List<String> _availableSizeTypes = [
-    'Standard/Missy Sizes',
-    'Numeric Sizes (US/UK)',
-    'Suit Sizes',
+    'Standard/Missy Sizes', 'Numeric Sizes (US/UK)', 'Suit Sizes',
   ];
 
   final List<String> _availableStandardSizes = [
-    'S',
-    'M',
-    'X',
-    'XX',
-    'SS',
-    'SSS',
-    'XL',
+    'S', 'M', 'X', 'XX', 'SS', 'SSS', 'XL',
   ];
 
-  // Combined list for numeric sizes with labels
   final List<Map<String, String>> _availableNumericSizes = [
-    {'size': '1', 'type': 'Kids'},
-    {'size': '2', 'type': 'Kids'},
-    {'size': '3', 'type': 'Kids'},
-    {'size': '4', 'type': 'Kids'},
-    {'size': '5', 'type': 'Kids'},
-    {'size': '6', 'type': 'Kids'},
-    {'size': '7', 'type': 'Kids'},
-    {'size': '8', 'type': 'Kids'},
-    {'size': '9', 'type': 'Kids'},
-    {'size': '10', 'type': 'Kids'},
-    {'size': '1', 'type': 'Adults'},
-    {'size': '2', 'type': 'Adults'},
-    {'size': '3', 'type': 'Adults'},
-    {'size': '4', 'type': 'Adults'},
-    {'size': '5', 'type': 'Adults'},
-    {'size': '6', 'type': 'Adults'},
-    {'size': '7', 'type': 'Adults'},
-    {'size': '8', 'type': 'Adults'},
-    {'size': '9', 'type': 'Adults'},
-    {'size': '10', 'type': 'Adults'},
-    {'size': '11', 'type': 'Adults'},
-    {'size': '12', 'type': 'Adults'},
+    {'size': '1', 'type': 'Kids'}, {'size': '2', 'type': 'Kids'},
+    {'size': '3', 'type': 'Kids'}, {'size': '4', 'type': 'Kids'},
+    {'size': '5', 'type': 'Kids'}, {'size': '6', 'type': 'Kids'},
+    {'size': '7', 'type': 'Kids'}, {'size': '8', 'type': 'Kids'},
+    {'size': '9', 'type': 'Kids'}, {'size': '10', 'type': 'Kids'},
+    {'size': '1', 'type': 'Adults'}, {'size': '2', 'type': 'Adults'},
+    {'size': '3', 'type': 'Adults'}, {'size': '4', 'type': 'Adults'},
+    {'size': '5', 'type': 'Adults'}, {'size': '6', 'type': 'Adults'},
+    {'size': '7', 'type': 'Adults'}, {'size': '8', 'type': 'Adults'},
+    {'size': '9', 'type': 'Adults'}, {'size': '10', 'type': 'Adults'},
+    {'size': '11', 'type': 'Adults'}, {'size': '12', 'type': 'Adults'},
     {'size': '13', 'type': 'Adults'},
   ];
 
-  // New list for predefined suit sizes (20-58, incrementing by 2)
   final List<String> _availableSuitSizes = List.generate(
     (58 - 20) ~/ 2 + 1,
     (index) => (20 + index * 2).toString(),
   );
 
   final List<String> orderStatuses = [
-    'pending',
-    'processing',
-    'ready_for_pickup',
-    'dispatched',
-    'completed',
-    'cancelled',
+    'pending', 'processing', 'ready_for_pickup', 'dispatched', 'completed', 'cancelled',
   ];
 
   late int _randomDisplayPercentage;
@@ -108,7 +83,7 @@ class _SellerProductPageState extends State<SellerProductPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4, // 4 tabs: Dashboard, My Products, Add Product, Orders
+      length: 4, 
       vsync: this,
     );
     _generateRandomDisplayDiscount();
@@ -136,6 +111,7 @@ class _SellerProductPageState extends State<SellerProductPage>
     List<String> colors,
     List<String> sizes,
   ) async {
+    // ... (Add Product Logic - No changes needed to business logic)
     if (user == null ||
         priceController.text.isEmpty ||
         locationController.text.isEmpty ||
@@ -211,7 +187,7 @@ class _SellerProductPageState extends State<SellerProductPage>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Product added successfully!')),
         );
-        Navigator.pop(context);
+        // The modal is popped in the calling function, so we only need to rebuild state.
       }
 
       setState(() {});
@@ -284,218 +260,193 @@ class _SellerProductPageState extends State<SellerProductPage>
     }
   }
 
+  // --- DASHBOARD TAB (Enhanced for Desktop) ---
   Widget dashboardTab() {
     final currentSellerId = user?.uid;
     if (currentSellerId == null) {
       return const Center(child: Text("Please log in to view your dashboard."));
     }
+    final isDesktop = isLargeScreen(context);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Your Shop Performance Overview",
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).primaryColor,
-            ),
+      child: Center(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 1200),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Your Shop Performance Overview",
+                style: TextStyle(
+                  fontSize: isDesktop ? 32 : 24,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Dashboard Cards Grid/Wrap
+              _buildDashboardMetrics(currentSellerId, isDesktop),
+              
+              const SizedBox(height: 20),
+              Text(
+                "Note: Product views are incremented when customers interact with your products on the shopping page.",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          FutureBuilder<QuerySnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('seller_products')
-                .where('sellerId', isEqualTo: currentSellerId)
-                .get(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return _buildDashboardCard(
-                  "Total Products Listed",
-                  "Loading...",
-                  Icons.storage,
-                );
-              }
-              final totalProducts = snapshot.data?.docs.length ?? 0;
-              return _buildDashboardCard(
-                "Total Products Listed",
-                totalProducts.toString(),
-                Icons.storage,
-              );
-            },
-          ),
-          const SizedBox(height: 15),
-          FutureBuilder<QuerySnapshot>(
-            future: FirebaseFirestore.instance.collection('orders').get(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Column(
-                  children: [
-                    _buildDashboardCard(
-                      "Total Orders Received",
-                      "Loading...",
-                      Icons.shopping_bag,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildDashboardCard(
-                      "Total Revenue (Your Products)",
-                      "Loading...",
-                      Icons.attach_money,
-                    ),
-                  ],
-                );
-              }
-              if (snapshot.hasError) {
-                return Column(
-                  children: [
-                    _buildDashboardCard(
-                      "Total Orders Received",
-                      "Error",
-                      Icons.error,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildDashboardCard(
-                      "Total Revenue (Your Products)",
-                      "Error",
-                      Icons.error,
-                    ),
-                  ],
-                );
-              }
-
-              int totalOrdersForSeller = 0;
-              double totalRevenueForSeller = 0.0;
-              final allOrders = snapshot.data?.docs ?? [];
-
-              for (var orderDoc in allOrders) {
-                final orderData = orderDoc.data() as Map<String, dynamic>;
-                final List<dynamic> productsInOrder =
-                    orderData['products'] ?? [];
-
-                bool containsSellerProduct = false;
-                double orderRevenueFromSeller = 0.0;
-
-                for (var productItem in productsInOrder) {
-                  if (productItem is Map<String, dynamic> &&
-                      productItem['sellerId'] == currentSellerId) {
-                    containsSellerProduct = true;
-                    orderRevenueFromSeller +=
-                        (productItem['itemTotalPrice'] as num?)?.toDouble() ??
-                        0.0;
-                  }
-                }
-
-                if (containsSellerProduct) {
-                  totalOrdersForSeller++;
-                  totalRevenueForSeller += orderRevenueFromSeller;
-                }
-              }
-
-              return Column(
-                children: [
-                  _buildDashboardCard(
-                    "Total Orders Received",
-                    totalOrdersForSeller.toString(),
-                    Icons.shopping_bag,
-                  ),
-                  const SizedBox(height: 15),
-                  _buildDashboardCard(
-                    "Total Revenue (Your Products)",
-                    "R${totalRevenueForSeller.toStringAsFixed(2)}",
-                    Icons.attach_money,
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 15),
-          FutureBuilder<QuerySnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('seller_products')
-                .where('sellerId', isEqualTo: currentSellerId)
-                .get(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return _buildDashboardCard(
-                  "Total Product Views",
-                  "Loading...",
-                  Icons.visibility,
-                );
-              }
-              if (snapshot.hasError) {
-                return _buildDashboardCard(
-                  "Total Product Views",
-                  "Error",
-                  Icons.error,
-                );
-              }
-
-              int totalViews = 0;
-              final sellerProducts = snapshot.data?.docs ?? [];
-              for (var doc in sellerProducts) {
-                final data = doc.data() as Map<String, dynamic>;
-                totalViews += (data['views'] as int?) ?? 0;
-              }
-              return _buildDashboardCard(
-                "Total Product Views",
-                totalViews.toString(),
-                Icons.visibility,
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-          Text(
-            "Note: Product views are incremented when customers interact with your products on the shopping page.",
-            style: TextStyle(
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildDashboardCard(String title, String value, IconData icon) {
+  Widget _buildDashboardMetrics(String currentSellerId, bool isDesktop) {
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance.collection('orders').get(),
+      builder: (context, ordersSnapshot) {
+        return FutureBuilder<QuerySnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('seller_products')
+              .where('sellerId', isEqualTo: currentSellerId)
+              .get(),
+          builder: (context, productsSnapshot) {
+            // Loading State
+            if (ordersSnapshot.connectionState == ConnectionState.waiting || 
+                productsSnapshot.connectionState == ConnectionState.waiting) {
+              return Wrap(
+                spacing: 15, runSpacing: 15,
+                children: List.generate(4, (i) => _buildDashboardCard("Loading...", "...", Icons.hourglass_empty, isDesktop)),
+              );
+            }
+            
+            // Error State
+            if (ordersSnapshot.hasError || productsSnapshot.hasError) {
+              return Text("Error loading data.", style: TextStyle(color: Colors.red));
+            }
+
+            // Processing Data
+            int totalProducts = productsSnapshot.data?.docs.length ?? 0;
+            int totalViews = 0;
+            final sellerProducts = productsSnapshot.data?.docs ?? [];
+            for (var doc in sellerProducts) {
+              final data = doc.data() as Map<String, dynamic>;
+              totalViews += (data['views'] as int?) ?? 0;
+            }
+
+            int totalOrdersForSeller = 0;
+            double totalRevenueForSeller = 0.0;
+            final allOrders = ordersSnapshot.data?.docs ?? [];
+
+            for (var orderDoc in allOrders) {
+              final orderData = orderDoc.data() as Map<String, dynamic>;
+              final List<dynamic> productsInOrder = orderData['products'] ?? [];
+
+              bool containsSellerProduct = false;
+              double orderRevenueFromSeller = 0.0;
+
+              for (var productItem in productsInOrder) {
+                if (productItem is Map<String, dynamic> &&
+                    productItem['sellerId'] == currentSellerId) {
+                  containsSellerProduct = true;
+                  orderRevenueFromSeller +=
+                      (productItem['itemTotalPrice'] as num?)?.toDouble() ?? 0.0;
+                }
+              }
+
+              if (containsSellerProduct) {
+                totalOrdersForSeller++;
+                totalRevenueForSeller += orderRevenueFromSeller;
+              }
+            }
+            
+            // Build the final set of cards
+            return Wrap(
+              spacing: 15,
+              runSpacing: 15,
+              children: [
+                _buildDashboardCard(
+                  "Total Products Listed",
+                  totalProducts.toString(),
+                  Icons.storage,
+                  isDesktop,
+                ),
+                _buildDashboardCard(
+                  "Total Orders Received",
+                  totalOrdersForSeller.toString(),
+                  Icons.shopping_bag,
+                  isDesktop,
+                ),
+                _buildDashboardCard(
+                  "Total Revenue (Your Products)",
+                  "R${totalRevenueForSeller.toStringAsFixed(2)}",
+                  Icons.attach_money,
+                  isDesktop,
+                ),
+                _buildDashboardCard(
+                  "Total Product Views",
+                  totalViews.toString(),
+                  Icons.visibility,
+                  isDesktop,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDashboardCard(String title, String value, IconData icon, bool isDesktop) {
+    // Calculate card width based on desktop status
+    final cardWidth = isDesktop ? (MediaQuery.of(context).size.width * 0.8 / 2) - 30 : double.infinity;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
+      child: Container(
+        width: cardWidth,
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
             Icon(icon, size: 40, color: Theme.of(context).primaryColor),
             const SizedBox(width: 15),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.secondary,
+                  const SizedBox(height: 5),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
+  // --- END DASHBOARD TAB ---
 
+  // --- MY PRODUCTS TAB (Maintains List layout) ---
   Widget myProductsTab() {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance
@@ -515,139 +466,135 @@ class _SellerProductPageState extends State<SellerProductPage>
 
         final sellerProds = snapshot.data!.docs;
 
-        return ListView.builder(
-          itemCount: sellerProds.length,
-          itemBuilder: (context, index) {
-            final doc = sellerProds[index];
-            final data = doc.data() as Map<String, dynamic>;
-            final String docId = doc.id;
+        return Center(
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 900),
+            child: ListView.builder(
+              itemCount: sellerProds.length,
+              itemBuilder: (context, index) {
+                final doc = sellerProds[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final String docId = doc.id;
 
-            final productName = data['productName'] ?? 'Unnamed Product';
-            final imageUrl = data['imageUrl'];
-            final currentPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
-            final productViews = (data['views'] as int?) ?? 0;
-            final List<dynamic> availableColorsDynamic =
-                data['availableColors'] ?? [];
-            final List<String> availableColors = availableColorsDynamic
-                .map((c) => c.toString())
-                .toList();
-            final List<dynamic> availableSizesDynamic =
-                data['availableSizes'] ?? [];
-            final List<String> availableSizes = availableSizesDynamic
-                .map((s) => s.toString())
-                .toList();
+                final productName = data['productName'] ?? 'Unnamed Product';
+                final imageUrl = data['imageUrl'];
+                final currentPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
+                final productViews = (data['views'] as int?) ?? 0;
+                final List<String> availableColors = (data['availableColors'] as List<dynamic>? ?? []).map((c) => c.toString()).toList();
+                final List<String> availableSizes = (data['availableSizes'] as List<dynamic>? ?? []).map((s) => s.toString()).toList();
 
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: ListTile(
-                leading:
-                    imageUrl != null &&
-                        (imageUrl is String && imageUrl.isNotEmpty)
-                    ? Image.network(
-                        imageUrl,
-                        height: 50,
-                        width: 50,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.broken_image),
-                      )
-                    : const Icon(Icons.image_not_supported),
-                title: Text(productName),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Price: R${currentPrice.toStringAsFixed(2)}"),
-                    Text(
-                      "Location: ${data['location'] ?? 'N/A'}",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  elevation: 2,
+                  child: ListTile(
+                    leading:
+                        imageUrl != null &&
+                            (imageUrl is String && imageUrl.isNotEmpty)
+                        ? Image.network(
+                            imageUrl,
+                            height: 60,
+                            width: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.broken_image),
+                          )
+                        : Icon(Icons.inventory, size: 40, color: Colors.grey),
+                    title: Text(
+                      productName,
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    Text(
-                      "Views: $productViews",
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Price: R${currentPrice.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text(
+                          "Location: ${data['location'] ?? 'N/A'}",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        Text(
+                          "Views: $productViews | Colors: ${availableColors.join(', ')} | Sizes: ${availableSizes.join(', ')}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    if (availableColors.isNotEmpty)
-                      Text(
-                        "Colors: ${availableColors.join(', ')}",
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    if (availableSizes.isNotEmpty)
-                      Text(
-                        "Sizes: ${availableSizes.join(', ')}",
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                  ],
-                ),
-                trailing: IconButton(
-                  icon: Icon(Icons.edit, color: Theme.of(context).primaryColor),
-                  onPressed: () {
-                    final TextEditingController newPriceController =
-                        TextEditingController(
-                          text: currentPrice.toStringAsFixed(2),
-                        );
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text("Update Price for $productName"),
-                          content: TextField(
-                            controller: newPriceController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: "New Price (R)",
-                              hintText: "e.g., 175.50",
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                              child: const Text("Cancel"),
-                            ),
-                            ElevatedButton(
-                              onPressed: () async {
-                                final double? updatedPrice = double.tryParse(
-                                  newPriceController.text,
-                                );
-                                if (updatedPrice != null && updatedPrice >= 0) {
-                                  await updateSellerProductPrice(
-                                    docId,
-                                    updatedPrice,
-                                  );
-                                  if (mounted) {
+                    trailing: IconButton(
+                      icon: Icon(Icons.edit, color: Theme.of(context).primaryColor),
+                      onPressed: () {
+                        final TextEditingController newPriceController =
+                            TextEditingController(
+                              text: currentPrice.toStringAsFixed(2),
+                            );
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            return AlertDialog(
+                              title: Text("Update Price for $productName"),
+                              content: TextField(
+                                controller: newPriceController,
+                                keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: "New Price (R)",
+                                  hintText: "e.g., 175.50",
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
                                     Navigator.pop(context);
-                                  }
-                                } else {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Please enter a valid positive number for price.',
-                                        ),
-                                      ),
+                                  },
+                                  child: const Text("Cancel"),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    final double? updatedPrice = double.tryParse(
+                                      newPriceController.text,
                                     );
-                                  }
-                                }
-                              },
-                              child: const Text("Update"),
-                            ),
-                          ],
+                                    if (updatedPrice != null && updatedPrice >= 0) {
+                                      await updateSellerProductPrice(
+                                        docId,
+                                        updatedPrice,
+                                      );
+                                      if (mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    } else {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please enter a valid positive number for price.',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: const Text("Update"),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                ),
-              ),
-            );
-          },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         );
       },
     );
   }
+  // --- END MY PRODUCTS TAB ---
 
+  // --- ADD PRODUCT TAB (Modal Constrained) ---
   Widget addProductTab() {
     if (user == null) {
       return const Center(child: Text("Please log in to add products."));
@@ -661,427 +608,485 @@ class _SellerProductPageState extends State<SellerProductPage>
           .where('sellerId', isEqualTo: sellerId)
           .get()
           .then(
-            (snapshot) =>
-                snapshot.docs.map((doc) => doc['productId'] as String).toList(),
+            (snapshot) => snapshot.docs.map((doc) => doc['productId'] as String).toList(),
           ),
       builder: (context, existingProductIdsSnapshot) {
-        if (existingProductIdsSnapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (existingProductIdsSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (existingProductIdsSnapshot.hasError) {
           return Center(
-            child: Text(
-              "Error fetching existing products: ${existingProductIdsSnapshot.error}",
-            ),
+            child: Text("Error fetching existing products: ${existingProductIdsSnapshot.error}"),
           );
         }
 
-        final List<String> existingProductIds =
-            existingProductIdsSnapshot.data ?? [];
+        final List<String> existingProductIds = existingProductIdsSnapshot.data ?? [];
 
         return FutureBuilder<QuerySnapshot>(
           future: FirebaseFirestore.instance.collection('products').get(),
           builder: (context, allProductsSnapshot) {
-            if (allProductsSnapshot.connectionState ==
-                ConnectionState.waiting) {
+            if (allProductsSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (allProductsSnapshot.hasError) {
               return Center(child: Text("Error: ${allProductsSnapshot.error}"));
             }
-            if (!allProductsSnapshot.hasData ||
-                allProductsSnapshot.data!.docs.isEmpty) {
-              return const Center(
-                child: Text("No base products available to add."),
-              );
+            if (!allProductsSnapshot.hasData || allProductsSnapshot.data!.docs.isEmpty) {
+              return const Center(child: Text("No base products available to add."));
             }
 
-            final availableProducts = allProductsSnapshot.data!.docs.where((
-              prod,
-            ) {
+            final availableProducts = allProductsSnapshot.data!.docs.where((prod) {
               return !existingProductIds.contains(prod.id);
             }).toList();
 
             if (availableProducts.isEmpty) {
-              return const Center(
-                child: Text("You have added all available products."),
-              );
+              return const Center(child: Text("You have added all available products."));
             }
+            
+            // Wrap the ListView in a constrained container for web aesthetic
+            return Center(
+              child: Container(
+                constraints: BoxConstraints(maxWidth: 800),
+                child: ListView.builder(
+                  itemCount: availableProducts.length,
+                  itemBuilder: (context, index) {
+                    final prod = availableProducts[index];
+                    final String adminProductName = prod['name'] ?? 'Unnamed Product (Admin)';
+                    final String adminProductDescription = prod['description'] ?? 'No description (Admin)';
+                    final dynamic adminProductImageUrl = prod['imageUrl'];
 
-            return ListView.builder(
-              itemCount: availableProducts.length,
-              itemBuilder: (context, index) {
-                final prod = availableProducts[index];
-                final String adminProductName =
-                    prod['name'] ?? 'Unnamed Product (Admin)';
-                final String adminProductDescription =
-                    prod['description'] ?? 'No description (Admin)';
-                final dynamic adminProductImageUrl = prod['imageUrl'];
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: ListTile(
-                    leading:
-                        adminProductImageUrl != null &&
-                            (adminProductImageUrl is String ||
-                                (adminProductImageUrl is List &&
-                                    adminProductImageUrl.isNotEmpty))
-                        ? Image.network(
-                            (adminProductImageUrl is List)
-                                ? adminProductImageUrl[0]
-                                : adminProductImageUrl,
-                            height: 50,
-                            width: 50,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image),
-                          )
-                        : const Icon(Icons.image_not_supported),
-                    title: Text(
-                      adminProductName,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      adminProductDescription,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () async {
-                      // Check if location has been loaded before
-                      if (_sellerAddress == null) {
-                        Api().showLoading(context);
-                        try {
-                          final sellerSnapshot = await FirebaseFirestore
-                              .instance
-                              .collection('users')
-                              .where('role', isEqualTo: 'Seller')
-                              .where(
-                                'email',
-                                isEqualTo:
-                                    FirebaseAuth.instance.currentUser!.email,
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      elevation: 2,
+                      child: ListTile(
+                        leading:
+                            adminProductImageUrl != null &&
+                                (adminProductImageUrl is String ||
+                                    (adminProductImageUrl is List &&
+                                        adminProductImageUrl.isNotEmpty))
+                            ? Image.network(
+                                (adminProductImageUrl is List)
+                                    ? adminProductImageUrl[0]
+                                    : adminProductImageUrl,
+                                height: 60,
+                                width: 60,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(Icons.broken_image),
                               )
-                              .get();
-                          if (sellerSnapshot.docs.isNotEmpty) {
-                            setState(() {
-                              _sellerAddress = sellerSnapshot.docs.first
-                                  .data()['address'];
-                            });
-                          }
-                        } catch (e) {
-                          print("Error fetching seller location: $e");
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Error fetching location.'),
-                              ),
-                            );
-                          }
-                        } finally {
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                          }
-                        }
-                      }
-
-                      if (context.mounted) {
-                        priceController.clear();
-                        locationController.text = _sellerAddress ?? '';
-                        suitSizeController.clear();
-                        setState(() {
-                          _selectedColors.clear();
-                          _selectedStandardSizes.clear();
-                          _selectedNumericSizes.clear();
-                          _selectedSuitSizes.clear();
-                          _selectedSizeType = null;
-                        });
-
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (context) {
-                            return StatefulBuilder(
-                              builder: (BuildContext context, StateSetter setModalState) {
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom: MediaQuery.of(
-                                      context,
-                                    ).viewInsets.bottom,
-                                    top: 20,
-                                    left: 20,
-                                    right: 20,
+                            : Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey),
+                        title: Text(
+                          adminProductName,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          adminProductDescription,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () async {
+                          // ... (Location fetching logic - Kept As Is)
+                           if (_sellerAddress == null) {
+                            Api().showLoading(context);
+                            try {
+                              final sellerSnapshot = await FirebaseFirestore
+                                  .instance
+                                  .collection('users')
+                                  .where('role', isEqualTo: 'Seller')
+                                  .where(
+                                    'email',
+                                    isEqualTo:
+                                        FirebaseAuth.instance.currentUser!.email,
+                                  )
+                                  .get();
+                              if (sellerSnapshot.docs.isNotEmpty) {
+                                setState(() {
+                                  _sellerAddress = sellerSnapshot.docs.first
+                                      .data()['address'];
+                                });
+                              }
+                            } catch (e) {
+                              print("Error fetching seller location: $e");
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Error fetching location.'),
                                   ),
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Center(
-                                          child: Text(
-                                            "Add Your Price, Location, Colors & Sizes for:",
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Theme.of(
-                                                context,
-                                              ).primaryColor,
-                                            ),
-                                            textAlign: TextAlign.center,
+                                );
+                              }
+                            } finally {
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                              }
+                            }
+                          }
+                          // ... (End Location fetching logic)
+
+                          if (context.mounted) {
+                            priceController.clear();
+                            locationController.text = _sellerAddress ?? '';
+                            suitSizeController.clear();
+                            setState(() {
+                              _selectedColors.clear();
+                              _selectedStandardSizes.clear();
+                              _selectedNumericSizes.clear();
+                              _selectedSuitSizes.clear();
+                              _selectedSizeType = null;
+                            });
+
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (context) {
+                                return Center(
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: 600), // Constraint for web/desktop modal
+                                    child: StatefulBuilder(
+                                      builder: (BuildContext context, StateSetter setModalState) {
+                                        return Padding(
+                                          padding: EdgeInsets.only(
+                                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                                            top: 20,
+                                            left: 20,
+                                            right: 20,
                                           ),
-                                        ),
-                                        Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 16.0,
-                                            ),
-                                            child: Text(
-                                              adminProductName,
-                                              style: TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: Theme.of(
-                                                  context,
-                                                ).primaryColor,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                        ),
-                                        TextField(
-                                          controller: priceController,
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: "Price (R)",
-                                            hintText: "e.g., 150.00",
-                                            border: OutlineInputBorder(),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        TextField(
-                                          controller: locationController,
-                                          decoration: const InputDecoration(
-                                            labelText:
-                                                "Location (e.g., Shop A12, Market St)",
-                                            hintText:
-                                                "e.g., My Store Front, City",
-                                            border: OutlineInputBorder(),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        const Divider(),
-                                        Text(
-                                          "Select Colors:",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                            color: Colors.grey[700],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          spacing: 8.0,
-                                          children: _availableColors.map((
-                                            color,
-                                          ) {
-                                            final isSelected = _selectedColors
-                                                .contains(color);
-                                            return FilterChip(
-                                              label: Text(color),
-                                              selected: isSelected,
-                                              onSelected: (selected) {
-                                                setModalState(() {
-                                                  if (selected) {
-                                                    _selectedColors.add(color);
-                                                  } else {
-                                                    _selectedColors.remove(
-                                                      color,
-                                                    );
-                                                  }
-                                                });
-                                              },
-                                            );
-                                          }).toList(),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        const Divider(),
-                                        Text(
-                                          "Select Size Type:",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                            color: Colors.grey[700],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        DropdownButtonFormField<String>(
-                                          value: _selectedSizeType,
-                                          hint: const Text(
-                                            'Choose a size type',
-                                          ),
-                                          decoration: const InputDecoration(
-                                            border: OutlineInputBorder(),
-                                            contentPadding:
-                                                EdgeInsets.symmetric(
-                                                  horizontal: 10,
+                                          child: SingleChildScrollView(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Center(
+                                                  child: Text(
+                                                    "Add Your Price, Location, Colors & Sizes for:",
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Theme.of(context).primaryColor,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
                                                 ),
-                                          ),
-                                          items: _availableSizeTypes.map((
-                                            type,
-                                          ) {
-                                            return DropdownMenuItem<String>(
-                                              value: type,
-                                              child: Text(type),
-                                            );
-                                          }).toList(),
-                                          onChanged: (value) {
-                                            setModalState(() {
-                                              _selectedSizeType = value;
-                                              _selectedStandardSizes.clear();
-                                              _selectedNumericSizes.clear();
-                                              _selectedSuitSizes.clear();
-                                            });
-                                          },
-                                        ),
-                                        const SizedBox(height: 20),
-                                        if (_selectedSizeType != null) ...[
-                                          Text(
-                                            "Select Size:",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                              color: Colors.grey[700],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          if (_selectedSizeType ==
-                                              'Standard/Missy Sizes')
-                                            _buildStandardSizeSelector(
-                                              setModalState,
-                                            )
-                                          else if (_selectedSizeType ==
-                                              'Numeric Sizes (US/UK)')
-                                            _buildNumericSizeSelector(
-                                              setModalState,
-                                            )
-                                          else if (_selectedSizeType ==
-                                              'Suit Sizes')
-                                            _buildSuitSizeSelector(
-                                              setModalState,
-                                            ),
-                                          const SizedBox(height: 20),
-                                        ],
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.end,
-                                          children: [
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.pop(context);
-                                              },
-                                              child: const Text("Cancel"),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            ElevatedButton(
-                                              onPressed: () async {
-                                                List<String> sizesToSave = [];
-                                                if (_selectedSizeType ==
-                                                    'Standard/Missy Sizes') {
-                                                  sizesToSave =
-                                                      _selectedStandardSizes;
-                                                } else if (_selectedSizeType ==
-                                                    'Numeric Sizes (US/UK)') {
-                                                  sizesToSave =
-                                                      _selectedNumericSizes;
-                                                } else if (_selectedSizeType ==
-                                                    'Suit Sizes') {
-                                                  sizesToSave =
-                                                      _selectedSuitSizes;
-                                                }
-
-                                                if (priceController
-                                                        .text
-                                                        .isEmpty ||
-                                                    locationController
-                                                        .text
-                                                        .isEmpty ||
-                                                    _selectedColors.isEmpty ||
-                                                    sizesToSave.isEmpty) {
-                                                  if (mounted) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                          'Please fill in all fields: price, location, colors, and at least one size.',
-                                                        ),
+                                                Center(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.only(bottom: 16.0),
+                                                    child: Text(
+                                                      adminProductName,
+                                                      style: TextStyle(
+                                                        fontSize: 20,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Theme.of(context).primaryColor,
                                                       ),
+                                                      textAlign: TextAlign.center,
+                                                    ),
+                                                  ),
+                                                ),
+                                                TextField(
+                                                  controller: priceController,
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
+                                                    labelText: "Price (R)",
+                                                    hintText: "e.g., 150.00",
+                                                    border: OutlineInputBorder(),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                TextField(
+                                                  controller: locationController,
+                                                  decoration: const InputDecoration(
+                                                    labelText: "Location (e.g., Shop A12, Market St)",
+                                                    hintText: "e.g., My Store Front, City",
+                                                    border: OutlineInputBorder(),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 20),
+                                                const Divider(),
+                                                Text(
+                                                  "Select Colors:",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                    color: Colors.grey[700],
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Wrap(
+                                                  spacing: 8.0,
+                                                  runSpacing: 8.0,
+                                                  children: _availableColors.map((color) {
+                                                    final isSelected = _selectedColors.contains(color);
+                                                    return FilterChip(
+                                                      label: Text(color),
+                                                      selected: isSelected,
+                                                      onSelected: (selected) {
+                                                        setModalState(() {
+                                                          if (selected) {
+                                                            _selectedColors.add(color);
+                                                          } else {
+                                                            _selectedColors.remove(color);
+                                                          }
+                                                        });
+                                                      },
+                                                      backgroundColor: isSelected ? Theme.of(context).primaryColor.withOpacity(0.2) : Colors.grey.shade100,
+                                                      selectedColor: Theme.of(context).primaryColor,
+                                                      labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
+                                                       
                                                     );
-                                                  }
-                                                  return;
-                                                }
+                                                  }).toList(),
+                                                ),
+                                                const SizedBox(height: 20),
+                                                const Divider(),
+                                                Text(
+                                                  "Select Size Type:",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                    color: Colors.grey[700],
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                DropdownButtonFormField<String>(
+                                                  value: _selectedSizeType,
+                                                  hint: const Text('Choose a size type'),
+                                                  decoration: const InputDecoration(
+                                                    border: OutlineInputBorder(),
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                                                  ),
+                                                  items: _availableSizeTypes.map((type) {
+                                                    return DropdownMenuItem<String>(
+                                                      value: type,
+                                                      child: Text(type),
+                                                    );
+                                                  }).toList(),
+                                                  onChanged: (value) {
+                                                    setModalState(() {
+                                                      _selectedSizeType = value;
+                                                      _selectedStandardSizes.clear();
+                                                      _selectedNumericSizes.clear();
+                                                      _selectedSuitSizes.clear();
+                                                    });
+                                                  },
+                                                ),
+                                                const SizedBox(height: 20),
+                                                if (_selectedSizeType != null) ...[
+                                                  Text(
+                                                    "Select Size:",
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 16,
+                                                      color: Colors.grey[700],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  if (_selectedSizeType == 'Standard/Missy Sizes')
+                                                    _buildStandardSizeSelector(setModalState)
+                                                  else if (_selectedSizeType == 'Numeric Sizes (US/UK)')
+                                                    _buildNumericSizeSelector(setModalState)
+                                                  else if (_selectedSizeType == 'Suit Sizes')
+                                                    _buildSuitSizeSelector(setModalState),
+                                                  const SizedBox(height: 20),
+                                                ],
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                  children: [
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: const Text("Cancel"),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    ElevatedButton(
+                                                      onPressed: () async {
+                                                        List<String> sizesToSave = [];
+                                                        if (_selectedSizeType == 'Standard/Missy Sizes') {
+                                                          sizesToSave = _selectedStandardSizes;
+                                                        } else if (_selectedSizeType == 'Numeric Sizes (US/UK)') {
+                                                          sizesToSave = _selectedNumericSizes;
+                                                        } else if (_selectedSizeType == 'Suit Sizes') {
+                                                          sizesToSave = _selectedSuitSizes;
+                                                        }
 
-                                                try {
-                                                  Api().showLoading(context);
-                                                  await addSellerProduct(
-                                                    prod.id,
-                                                    adminProductName,
-                                                    adminProductDescription,
-                                                    adminProductImageUrl,
-                                                    _selectedColors,
-                                                    sizesToSave,
-                                                  );
-                                                  if (mounted) {
-                                                    Navigator.pop(context);
-                                                  }
-                                                } catch (e) {
-                                                  if (mounted) {
-                                                    Navigator.pop(context);
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Error adding product: $e',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                              child: const Text("Submit"),
+                                                        if (priceController.text.isEmpty ||
+                                                            locationController.text.isEmpty ||
+                                                            _selectedColors.isEmpty ||
+                                                            sizesToSave.isEmpty) {
+                                                          if (mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'Please fill in all fields: price, location, colors, and at least one size.',
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }
+                                                          return;
+                                                        }
+
+                                                        try {
+                                                          Api().showLoading(context);
+                                                          await addSellerProduct(
+                                                            prod.id,
+                                                            adminProductName,
+                                                            adminProductDescription,
+                                                            adminProductImageUrl,
+                                                            _selectedColors,
+                                                            sizesToSave,
+                                                          );
+                                                          if (mounted) {
+                                                            Navigator.pop(context); // Dismiss loading
+                                                            Navigator.pop(context); // Dismiss modal
+                                                          }
+                                                        } catch (e) {
+                                                          if (mounted) {
+                                                            Navigator.pop(context);
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              SnackBar(
+                                                                content: Text('Error adding product: $e'),
+                                                              ),
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      child: const Text("Submit"),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 10),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 10),
-                                      ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                                 );
                               },
                             );
-                          },
-                        );
-                      }
-                    },
-                  ),
-                );
-              },
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
             );
           },
         );
       },
     );
   }
+  // --- END ADD PRODUCT TAB ---
+
+
+  // --- ORDERS TAB (Maintains List layout) ---
+  Widget ordersTab() {
+    final currentSellerId = user?.uid;
+    if (currentSellerId == null) {
+      return const Center(child: Text("Please log in to view your sales."));
+    }
+
+    // Wrap the Order List in a constrained container for web aesthetic
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(maxWidth: 1000),
+        child: FutureBuilder<QuerySnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('orders')
+              .orderBy('createdAt', descending: true)
+              .get(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text("Error: ${snapshot.error}"));
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Center(child: Text("No orders found."));
+            }
+
+            final allOrders = snapshot.data!.docs;
+            final relevantOrders = _filterOrders(allOrders, currentSellerId);
+
+            if (relevantOrders.isEmpty) {
+              return const Center(
+                child: Text("No orders found for your products."),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: relevantOrders.length,
+              itemBuilder: (context, index) {
+                final orderDoc = relevantOrders[index];
+                final orderData = orderDoc.data() as Map<String, dynamic>;
+                final orderId = orderDoc.id;
+                final customerId = orderData['userId'] as String;
+
+                final orderRef = orderData['orderReference'] ?? orderId.substring(0, 8).toUpperCase();
+                final currentStatus = orderData['status'] ?? 'pending';
+                final orderDate = (orderData['createdAt'] as Timestamp?)?.toDate();
+
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(customerId)
+                      .get(),
+                  builder: (context, customerSnapshot) {
+                    String customerName = 'Unknown Customer';
+                    if (customerSnapshot.connectionState == ConnectionState.done && customerSnapshot.hasData) {
+                      final customerData = customerSnapshot.data!.data() as Map<String, dynamic>?;
+                      if (customerData != null && customerData.containsKey('name')) {
+                        customerName = customerData['name'] ?? 'Unknown Customer';
+                      }
+                    }
+
+                    return Card(
+                      color: Theme.of(context).cardColor,
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        title: _buildOrderSummary(
+                          orderRef: orderRef,
+                          customerName: customerName,
+                          orderDate: orderDate,
+                          currentStatus: currentStatus,
+                          context: context,
+                        ),
+                        children: [
+                          _buildOrderDetails(
+                            context,
+                            orderData,
+                            orderId,
+                            currentSellerId,
+                            orderStatuses,
+                            updateOrderStatus,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+  // --- END ORDERS TAB ---
+
+
+  // --- SHARED BUILDERS (No functional changes) ---
 
   Widget _buildStandardSizeSelector(StateSetter setModalState) {
     return Wrap(
       spacing: 8.0,
+      runSpacing: 8.0,
       children: _availableStandardSizes.map((size) {
         final isSelected = _selectedStandardSizes.contains(size);
         return FilterChip(
@@ -1096,6 +1101,9 @@ class _SellerProductPageState extends State<SellerProductPage>
               }
             });
           },
+          selectedColor: Theme.of(context).primaryColor,
+          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
+           
         );
       }).toList(),
     );
@@ -1123,6 +1131,9 @@ class _SellerProductPageState extends State<SellerProductPage>
               }
             });
           },
+          selectedColor: Theme.of(context).primaryColor,
+          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
+           
         );
       }).toList(),
     );
@@ -1146,11 +1157,18 @@ class _SellerProductPageState extends State<SellerProductPage>
               }
             });
           },
+          selectedColor: Theme.of(context).primaryColor,
+          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
+           
         );
       }).toList(),
     );
   }
 
+  // (Helper functions _getStatusColor, _getStatusIcon, _filterOrders,
+  // _buildOrderSummary, _buildOrderDetails, _showStatusUpdateDialog)
+  // ... (are kept as is from the original code)
+  
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'pending_payment':
@@ -1210,116 +1228,6 @@ class _SellerProductPageState extends State<SellerProductPage>
         return false;
       });
     }).toList();
-  }
-
-  Widget ordersTab(
-    User? user,
-    BuildContext context,
-    Function(String, String) updateOrderStatus,
-    List<String> orderStatuses,
-  ) {
-    final currentSellerId = user?.uid;
-    if (currentSellerId == null) {
-      return const Center(child: Text("Please log in to view your sales."));
-    }
-
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('orders')
-          .orderBy('createdAt', descending: true)
-          .get(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}"));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text("No orders found."));
-        }
-
-        final allOrders = snapshot.data!.docs;
-        final relevantOrders = _filterOrders(allOrders, currentSellerId);
-
-        if (relevantOrders.isEmpty) {
-          return const Center(
-            child: Text("No orders found for your products."),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16.0),
-          itemCount: relevantOrders.length,
-          itemBuilder: (context, index) {
-            final orderDoc = relevantOrders[index];
-            final orderData = orderDoc.data() as Map<String, dynamic>;
-            final orderId = orderDoc.id;
-            final customerId = orderData['userId'] as String;
-
-            final orderRef =
-                orderData['orderReference'] ??
-                orderId.substring(0, 8).toUpperCase();
-            final currentStatus = orderData['status'] ?? 'pending';
-            final orderDate = (orderData['createdAt'] as Timestamp?)?.toDate();
-
-            return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(customerId)
-                  .get(),
-              builder: (context, customerSnapshot) {
-                String customerName = 'Unknown Customer';
-                if (customerSnapshot.connectionState == ConnectionState.done &&
-                    customerSnapshot.hasData) {
-                  final customerData =
-                      customerSnapshot.data!.data() as Map<String, dynamic>?;
-                  if (customerData != null &&
-                      customerData.containsKey('name')) {
-                    customerName = customerData['name'] ?? 'Unknown Customer';
-                  }
-                }
-
-                return Card(
-                  color: Colors.grey[50],
-                  elevation: 4,
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 0,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    title: _buildOrderSummary(
-                      orderRef: orderRef,
-                      customerName: customerName,
-                      orderDate: orderDate,
-                      currentStatus: currentStatus,
-                      context: context,
-                    ),
-                    children: [
-                      _buildOrderDetails(
-                        context,
-                        orderData,
-                        orderId,
-                        currentSellerId,
-                        orderStatuses,
-                        updateOrderStatus,
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
   }
 
   Widget _buildOrderSummary({
@@ -1528,21 +1436,25 @@ class _SellerProductPageState extends State<SellerProductPage>
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text("Update Order Status"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: orderStatuses.map((status) {
-                    return RadioListTile<String>(
-                      title: Text(status.toUpperCase().replaceAll('_', ' ')),
-                      value: status,
-                      groupValue: tempSelectedStatus,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          tempSelectedStatus = value;
-                        });
-                      },
-                    );
-                  }).toList(),
+              // Constrain width of alert dialog for desktop
+              content: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: 400), 
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: orderStatuses.map((status) {
+                      return RadioListTile<String>(
+                        title: Text(status.toUpperCase().replaceAll('_', ' ')),
+                        value: status,
+                        groupValue: tempSelectedStatus,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            tempSelectedStatus = value;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
               actions: [
@@ -1552,8 +1464,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    if (tempSelectedStatus != null &&
-                        tempSelectedStatus != currentStatus) {
+                    if (tempSelectedStatus != null && tempSelectedStatus != currentStatus) {
                       await updateOrderStatus(orderId, tempSelectedStatus!);
                       if (context.mounted) Navigator.pop(context);
                     } else {
@@ -1581,34 +1492,46 @@ class _SellerProductPageState extends State<SellerProductPage>
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    
+    // Check if the screen is large enough for desktop layout
+    final isDesktop = isLargeScreen(context);
+
     return Scaffold(
       backgroundColor: color.scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            labelColor: color.primaryColor,
-            unselectedLabelColor: color.hintColor,
-            indicatorColor: color.primaryColor,
-            tabs: const [
-              Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
-              Tab(text: "My Products", icon: Icon(Icons.inventory)),
-              Tab(text: "Add Product", icon: Icon(Icons.add_shopping_cart)),
-              Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
+      body: Center(
+        child: Container(
+          // Constrain the entire content view on large screens
+          constraints: BoxConstraints(maxWidth: 1200),
+          child: Column(
+            children: [
+              TabBar(
+                controller: _tabController,
+                labelColor: color.primaryColor,
+                unselectedLabelColor: color.hintColor,
+                indicatorColor: color.primaryColor,
+                isScrollable: isDesktop ? false : true, // Full width tabs on desktop
+                tabs: const [
+                  Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
+                  Tab(text: "My Products", icon: Icon(Icons.inventory)),
+                  Tab(text: "Add Product", icon: Icon(Icons.add_shopping_cart)),
+                  Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Pass isDesktop to Dashboard for responsive grid layout
+                    dashboardTab(), 
+                    myProductsTab(),
+                    addProductTab(),
+                    ordersTab(),
+                  ],
+                ),
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                dashboardTab(),
-                myProductsTab(),
-                addProductTab(),
-                ordersTab(user, context, updateOrderStatus, orderStatuses),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

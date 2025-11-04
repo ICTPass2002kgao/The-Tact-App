@@ -5,6 +5,15 @@ import 'package:flutter/material.dart'; // Ensure Material is imported for Mater
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart'; // For opening URLs (documents)
 
+// Import foundation for kIsWeb check
+import 'package:flutter/foundation.dart';
+
+// --- PLATFORM UTILITIES ---
+const double _desktopContentMaxWidth = 1000.0;
+bool isLargeScreen(BuildContext context) =>
+    MediaQuery.of(context).size.width >= 800; // Adjusted breakpoint for admin console
+// --------------------------
+
 // Placeholder for your Api utility class (if needed for messages)
 class Api {
   void showMessage(
@@ -88,7 +97,7 @@ class _TactsoBranchesApplicationsState
           });
         }
       } catch (e) {
-        print('Error fetching university data: $e');
+        // print('Error fetching university data: $e'); // Suppressed print
         if (mounted) {}
       }
     }
@@ -164,9 +173,11 @@ class _TactsoBranchesApplicationsState
           'Application status changed to "$newStatus".',
           CupertinoColors.activeGreen,
         );
+        // Manually trigger a rebuild to update streams immediately
+        setState(() {}); 
       }
     } catch (e) {
-      print('Error updating status: $e');
+      // print('Error updating status: $e'); // Suppressed print
       if (mounted) {
         Api().showMessage(
           context,
@@ -180,18 +191,22 @@ class _TactsoBranchesApplicationsState
 
   // Function to launch URL for document download
   Future<void> _launchUrl(String url) async {
-    if (await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
-      // Success, nothing to do
-    } else {
-      if (mounted) {
-        Api().showMessage(
-          context,
-          'Error',
-          'Could not open document. Invalid URL or no app to handle it.',
-          CupertinoColors.systemRed,
-        );
+    try {
+      // Use launchUrl which is platform-safe
+      if (await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
+        // Success
+      } else {
+        throw 'Could not launch $url';
       }
-      throw 'Could not launch $url';
+    } catch (e) {
+        if (mounted) {
+          Api().showMessage(
+            context,
+            'Error',
+            'Could not open document. Invalid URL or no app to handle it.',
+            CupertinoColors.systemRed,
+          );
+        }
     }
   }
 
@@ -209,233 +224,240 @@ class _TactsoBranchesApplicationsState
       context: context,
       builder: (BuildContext context) {
         final colorScheme = Theme.of(context);
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setStateInPopup) {
-            return CupertinoActionSheet(
-              title: Text(
-                'Application Details for ${applicationDetails['fullName'] ?? 'Applicant'}',
-                style: TextStyle(
-                  color: colorScheme.primaryColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              message: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Display all static applicant details
-                    _buildDetailRow(
-                      'Full Name:',
-                      applicationDetails['fullName'],
-                    ),
-                    _buildDetailRow('Email:', applicationDetails['email']),
-                    _buildDetailRow('Phone:', applicationDetails['phone']),
-                    _buildDetailRow(
-                      'Physical Address:',
-                      applicationDetails['physicalAddress'],
-                    ),
-                    _buildDetailRow(
-                      'Graduation Year:',
-                      applicationDetails['yearOfCompletion'],
-                    ),
-                    _buildDetailRow(
-                      'Highest Qualification:',
-                      applicationDetails['highestQualification'],
-                    ),
-                    _buildDetailRow(
-                      'Primary Program:',
-                      applicationDetails['primaryProgram'],
-                    ),
-                    _buildDetailRow(
-                      'Secondary Program:',
-                      applicationDetails['secondChoiceProgram'],
-                    ),
-                    _buildDetailRow(
-                      'Third Program:',
-                      applicationDetails['thirdChoiceProgram'],
-                    ),
-                    _buildDetailRow(
-                      'Applying for Residence:',
-                      (applicationDetails['applyingForResidence'] ?? false)
-                          ? 'Yes'
-                          : 'No',
-                    ),
-                    _buildDetailRow(
-                      'Applying for Funding:',
-                      (applicationDetails['applyingForFunding'] ?? false)
-                          ? 'Yes'
-                          : 'No',
-                    ),
-                    _buildDetailRow(
-                      'Parent 1 Name:',
-                      applicationDetails['parent1Name'],
-                    ),
-                    _buildDetailRow(
-                      'Parent 1 Occupation:',
-                      applicationDetails['parent1Occupation'],
-                    ),
-                    _buildDetailRow(
-                      'Parent 1 Income:',
-                      applicationDetails['parent1Income'],
-                    ),
-                    _buildDetailRow(
-                      'Parent 2 Name:',
-                      applicationDetails['parent2Name'],
-                    ),
-                    _buildDetailRow(
-                      'Parent 2 Occupation:',
-                      applicationDetails['parent2Occupation'],
-                    ),
-                    _buildDetailRow(
-                      'Parent 2 Income:',
-                      applicationDetails['parent2Income'],
-                    ),
-                    _buildDetailRow('Current Status:', currentStatus),
-                    _buildDetailRow(
-                      'Submitted On:',
-                      DateFormat('MMM dd, yyyy HH:mm').format(
-                        (applicationData['submissionDate'] as Timestamp)
-                            .toDate(),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-                    Text(
-                      'Submitted Documents:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primaryColor,
-                      ),
-                    ),
-                    // Loop through documents
-                    if (applicationDetails['documents'] is Map &&
-                        (applicationDetails['documents'] as Map).isNotEmpty)
-                      ...(applicationDetails['documents'] as Map).entries.map((
-                        entry,
-                      ) {
-                        String docName = entry.key
-                            .toString()
-                            .replaceAll('_', ' ')
-                            .toUpperCase();
-                        String docUrl = entry.value.toString();
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => _launchUrl(docUrl),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  CupertinoIcons.doc_fill,
-                                  size: 20,
-                                  color: CupertinoColors.activeBlue,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Download $docName',
-                                    style: TextStyle(
-                                      color: colorScheme.primaryColor,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList()
-                    else
-                      Text(
-                        'No documents submitted.',
-                        style: TextStyle(color: colorScheme.primaryColor),
-                      ),
-
-                    const SizedBox(height: 16),
-                    Text(
-                      'Update Status:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primaryColor,
-                      ),
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: CupertinoColors.systemGrey4,
-                          ),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: _selectedStatus,
-                            hint: const Text('Select Status'),
-                            items: _applicationStatuses.map((String status) {
-                              return DropdownMenuItem<String>(
-                                value: status,
-                                child: Text(status),
-                              );
-                            }).toList(),
-                            onChanged: (String? newValue) {
-                              setStateInPopup(() {
-                                _selectedStatus = newValue;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: <CupertinoActionSheetAction>[
-                CupertinoActionSheetAction(
-                  child: Text(
-                    'Update Status',
+        return Center(
+          // FIX: Constrain the modal width for desktop viewing
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 600),
+            child: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setStateInPopup) {
+                return CupertinoActionSheet(
+                  title: Text(
+                    'Application Details for ${applicationDetails['fullName'] ?? 'Applicant'}',
                     style: TextStyle(
                       color: colorScheme.primaryColor,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  onPressed: () {
-                    if (_selectedStatus != null &&
-                        _selectedStatus!.isNotEmpty) {
-                      _updateApplicationStatus(
-                        applicationId: applicationId,
-                        newStatus: _selectedStatus!,
-                        globalApplicationRequestId:
-                            applicationData['globalApplicationRequestId'],
-                        userId: applicationData['userId'],
-                      );
-                      Navigator.pop(context); // Close after updating
-                    } else {
-                      Api().showMessage(
-                        context,
-                        'Input Error',
-                        'Please select a status.',
-                        CupertinoColors.systemOrange,
-                      );
-                    }
-                  },
-                ),
-                CupertinoActionSheetAction(
-                  isDestructiveAction: true,
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(color: colorScheme.primaryColorDark),
+                  message: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Display all static applicant details
+                        _buildDetailRow(
+                          'Full Name:',
+                          applicationDetails['fullName'],
+                        ),
+                        _buildDetailRow('Email:', applicationDetails['email']),
+                        _buildDetailRow('Phone:', applicationDetails['phone']),
+                        _buildDetailRow(
+                          'Physical Address:',
+                          applicationDetails['physicalAddress'],
+                        ),
+                        _buildDetailRow(
+                          'Graduation Year:',
+                          applicationDetails['yearOfCompletion'],
+                        ),
+                        _buildDetailRow(
+                          'Highest Qualification:',
+                          applicationDetails['highestQualification'],
+                        ),
+                        _buildDetailRow(
+                          'Primary Program:',
+                          applicationDetails['primaryProgram'],
+                        ),
+                        _buildDetailRow(
+                          'Secondary Program:',
+                          applicationDetails['secondChoiceProgram'],
+                        ),
+                        _buildDetailRow(
+                          'Third Program:',
+                          applicationDetails['thirdChoiceProgram'],
+                        ),
+                        _buildDetailRow(
+                          'Applying for Residence:',
+                          (applicationDetails['applyingForResidence'] ?? false)
+                              ? 'Yes'
+                              : 'No',
+                        ),
+                        _buildDetailRow(
+                          'Applying for Funding:',
+                          (applicationDetails['applyingForFunding'] ?? false)
+                              ? 'Yes'
+                              : 'No',
+                        ),
+                        _buildDetailRow(
+                          'Parent 1 Name:',
+                          applicationDetails['parent1Name'],
+                        ),
+                        _buildDetailRow(
+                          'Parent 1 Occupation:',
+                          applicationDetails['parent1Occupation'],
+                        ),
+                        _buildDetailRow(
+                          'Parent 1 Income:',
+                          applicationDetails['parent1Income'],
+                        ),
+                        _buildDetailRow(
+                          'Parent 2 Name:',
+                          applicationDetails['parent2Name'],
+                        ),
+                        _buildDetailRow(
+                          'Parent 2 Occupation:',
+                          applicationDetails['parent2Occupation'],
+                        ),
+                        _buildDetailRow(
+                          'Parent 2 Income:',
+                          applicationDetails['parent2Income'],
+                        ),
+                        _buildDetailRow('Current Status:', currentStatus),
+                        _buildDetailRow(
+                          'Submitted On:',
+                          DateFormat('MMM dd, yyyy HH:mm').format(
+                            (applicationData['submissionDate'] as Timestamp)
+                                .toDate(),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                        Text(
+                          'Submitted Documents:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primaryColor,
+                          ),
+                        ),
+                        // Loop through documents
+                        if (applicationDetails['documents'] is Map &&
+                            (applicationDetails['documents'] as Map).isNotEmpty)
+                          ...(applicationDetails['documents'] as Map).entries.map((
+                            entry,
+                          ) {
+                            String docName = entry.key
+                                .toString()
+                                .replaceAll('_', ' ')
+                                .toUpperCase();
+                            String docUrl = entry.value.toString();
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
+                              child: CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () => _launchUrl(docUrl),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      CupertinoIcons.doc_fill,
+                                      size: 20,
+                                      color: CupertinoColors.activeBlue,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Download $docName',
+                                        style: TextStyle(
+                                          color: colorScheme.primaryColor,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList()
+                        else
+                          Text(
+                            'No documents submitted.',
+                            style: TextStyle(color: colorScheme.primaryColor),
+                          ),
+
+                        const SizedBox(height: 16),
+                        Text(
+                          'Update Status:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primaryColor,
+                          ),
+                        ),
+                        // Status Dropdown
+                        Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: CupertinoColors.systemGrey4,
+                              ),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                isExpanded: true,
+                                value: _selectedStatus,
+                                hint: const Text('Select Status'),
+                                items: _applicationStatuses.map((String status) {
+                                  return DropdownMenuItem<String>(
+                                    value: status,
+                                    child: Text(status),
+                                  );
+                                }).toList(),
+                                onChanged: (String? newValue) {
+                                  setStateInPopup(() {
+                                    _selectedStatus = newValue;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            );
-          },
+                  actions: <CupertinoActionSheetAction>[
+                    CupertinoActionSheetAction(
+                      child: Text(
+                        'Update Status',
+                        style: TextStyle(
+                          color: colorScheme.primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () {
+                        if (_selectedStatus != null &&
+                            _selectedStatus!.isNotEmpty) {
+                          _updateApplicationStatus(
+                            applicationId: applicationId,
+                            newStatus: _selectedStatus!,
+                            globalApplicationRequestId:
+                                applicationData['globalApplicationRequestId'],
+                            userId: applicationData['userId'],
+                          );
+                          Navigator.pop(context); // Close after updating
+                        } else {
+                          Api().showMessage(
+                            context,
+                            'Input Error',
+                            'Please select a status.',
+                            CupertinoColors.systemOrange,
+                          );
+                        }
+                      },
+                    ),
+                    CupertinoActionSheetAction(
+                      isDestructiveAction: true,
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(color: colorScheme.primaryColorDark),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         );
       },
     );
@@ -539,6 +561,7 @@ class _TactsoBranchesApplicationsState
                 const SizedBox(height: 20),
                 CupertinoButton.filled(
                   onPressed: () {
+                    // NOTE: This assumes '/login' is the Material route for login
                     Navigator.of(context).pushReplacementNamed('/login');
                   },
                   child: const Text('Login'),
@@ -561,6 +584,8 @@ class _TactsoBranchesApplicationsState
       );
     }
 
+    // Since this page uses CupertinoTabScaffold, we ensure its builder contents
+    // are wrapped correctly for desktop/web.
     return CupertinoTabScaffold(
       tabBar: CupertinoTabBar(
         backgroundColor: color.appBarTheme.backgroundColor,
@@ -593,10 +618,15 @@ class _TactsoBranchesApplicationsState
                   ),
                 ],
               ),
-              // Removed Drawer as the logout is now in the AppBar Actions
-              body: index == 0
-                  ? _buildDashboardTab(context)
-                  : _buildApplicationsTab(context),
+              // FIX: Wrap the body content in a Center/ConstrainedBox for web/desktop
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+                  child: index == 0
+                      ? _buildDashboardTab(context)
+                      : _buildApplicationsTab(context),
+                ),
+              ),
             );
           },
         );
@@ -606,12 +636,14 @@ class _TactsoBranchesApplicationsState
 
   Widget _buildDashboardTab(BuildContext context) {
     final color = Theme.of(context);
+    final isDesktop = isLargeScreen(context);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWelcomeBanner(context), // 💥 NEW WELCOME BANNER
+          _buildWelcomeBanner(context), // Welcome Banner
 
           Text(
             'Application Metrics',
@@ -623,82 +655,95 @@ class _TactsoBranchesApplicationsState
           ),
           const Divider(height: 20, thickness: 1),
 
-          // Total Applications Card
-          _buildMetricCard(
-            context,
-            'Total Applications Received',
-            CupertinoColors.systemBlue,
-            CupertinoIcons.collections_solid,
-            _firestore
-                .collection('tactso_branches')
-                .doc(_currentuid)
-                .collection('application_requests')
-                .snapshots(),
-            (snapshot) => snapshot.data?.docs.length ?? 0,
-          ),
-          // New Applications Card
-          _buildMetricCard(
-            context,
-            'New Applications (Pending Review)',
-            CupertinoColors.systemOrange,
-            CupertinoIcons.envelope_badge_fill,
-            _firestore
-                .collection('tactso_branches')
-                .doc(_currentuid)
-                .collection('application_requests')
-                .where('status', isEqualTo: 'New')
-                .snapshots(),
-            (snapshot) => snapshot.data?.docs.length ?? 0,
-          ),
-          // Reviewed Applications Card
-          _buildMetricCard(
-            context,
-            'Applications Reviewed',
-            CupertinoColors.systemGreen,
-            CupertinoIcons.checkmark_shield_fill,
-            _firestore
-                .collection('tactso_branches')
-                .doc(_currentuid)
-                .collection('application_requests')
-                .where('status', isEqualTo: 'Reviewed')
-                .snapshots(),
-            (snapshot) => snapshot.data?.docs.length ?? 0,
-          ),
-          // Applied Applications Card
-          _buildMetricCard(
-            context,
-            'Applications Sent to University (Applied)',
-            CupertinoColors.systemPurple,
-            CupertinoIcons.rocket_fill,
-            _firestore
-                .collection('tactso_branches')
-                .doc(_currentuid)
-                .collection('application_requests')
-                .where('status', isEqualTo: 'Application Submitted')
-                .snapshots(),
-            (snapshot) => snapshot.data?.docs.length ?? 0,
+          // FIX: Use Wrap for metrics on desktop to show them side-by-side
+          Wrap(
+            spacing: 16.0,
+            runSpacing: 16.0,
+            children: [
+              _buildMetricCard(
+                context,
+                'Total Applications Received',
+                CupertinoColors.systemBlue,
+                CupertinoIcons.collections_solid,
+                _firestore
+                    .collection('tactso_branches')
+                    .doc(_currentuid)
+                    .collection('application_requests')
+                    .snapshots(),
+                (snapshot) => snapshot.data?.docs.length ?? 0,
+                isDesktop: isDesktop,
+              ),
+              _buildMetricCard(
+                context,
+                'New Applications (Pending Review)',
+                CupertinoColors.systemOrange,
+                CupertinoIcons.envelope_badge_fill,
+                _firestore
+                    .collection('tactso_branches')
+                    .doc(_currentuid)
+                    .collection('application_requests')
+                    .where('status', isEqualTo: 'New')
+                    .snapshots(),
+                (snapshot) => snapshot.data?.docs.length ?? 0,
+                isDesktop: isDesktop,
+              ),
+              _buildMetricCard(
+                context,
+                'Applications Reviewed',
+                CupertinoColors.systemGreen,
+                CupertinoIcons.checkmark_shield_fill,
+                _firestore
+                    .collection('tactso_branches')
+                    .doc(_currentuid)
+                    .collection('application_requests')
+                    .where('status', isEqualTo: 'Reviewed')
+                    .snapshots(),
+                (snapshot) => snapshot.data?.docs.length ?? 0,
+                isDesktop: isDesktop,
+              ),
+              _buildMetricCard(
+                context,
+                'Applications Sent to University (Applied)',
+                CupertinoColors.systemPurple,
+                CupertinoIcons.rocket_fill,
+                _firestore
+                    .collection('tactso_branches')
+                    .doc(_currentuid)
+                    .collection('application_requests')
+                    .where('status', isEqualTo: 'Application Submitted')
+                    .snapshots(),
+                (snapshot) => snapshot.data?.docs.length ?? 0,
+                isDesktop: isDesktop,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // --- NEW: Helper Widget for Metric Cards ---
+  // --- NEW: Helper Widget for Metric Cards (Updated with responsiveness) ---
   Widget _buildMetricCard(
     BuildContext context,
     String title,
     Color color,
     IconData icon,
     Stream<QuerySnapshot> stream,
-    int Function(AsyncSnapshot<QuerySnapshot> snapshot) countExtractor,
-  ) {
+    int Function(AsyncSnapshot<QuerySnapshot> snapshot) countExtractor, {
+    required bool isDesktop,
+  }) {
+    final double cardWidth = isDesktop
+        ? (_desktopContentMaxWidth / 2) - 80 // Two columns on desktop
+        : double.infinity;
+        
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Card(
+          return Card(
             margin: EdgeInsets.only(bottom: 16.0),
             child: SizedBox(
+              width: cardWidth,
               height: 100,
               child: Center(child: CupertinoActivityIndicator()),
             ),
@@ -716,9 +761,10 @@ class _TactsoBranchesApplicationsState
 
         return Card(
           color: color.withOpacity(0.1),
-          elevation: 0, // Less prominent elevation
+          elevation: 0, 
           margin: const EdgeInsets.only(bottom: 16.0),
-          child: Padding(
+          child: Container(
+            width: cardWidth, // Apply responsive width
             padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -898,7 +944,10 @@ class _TactsoBranchesApplicationsState
                     );
                   }
 
+                  // Note: A short delay helps ensure the stream updates before fetching the single doc,
+                  // but generally streams should handle this without manual delay.
                   await Future.delayed(const Duration(milliseconds: 500));
+                  
                   DocumentSnapshot updatedDoc = await _firestore
                       .collection('tactso_branches')
                       .doc(_currentuid)

@@ -8,6 +8,7 @@ class AuthTextField extends StatelessWidget {
   final IconData? icon;
   final bool? visible;
   final Widget? suffixIcon;
+  
   const AuthTextField({
     Key? key,
     this.controller,
@@ -22,32 +23,50 @@ class AuthTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    
+    // Determine the text color for inside the field (should contrast with fillColor)
+    final inputTextColor = color.textTheme.bodyLarge?.color ?? Colors.black; 
+    
+    // Determine the icon/hint text color (should be visible but soft)
+    final secondaryColor = color.scaffoldBackgroundColor.withOpacity(0.7);
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.only(bottom: 16.0), // Slightly increased bottom padding for spacing
       child: TextFormField(
-        style: TextStyle(color: color.scaffoldBackgroundColor),
+        style: TextStyle(color: inputTextColor),
         onChanged: (value) => onChange?.call(value),
         controller: controller,
         validator: (value) => onValidate(value),
         obscureText: visible ?? false,
         decoration: InputDecoration(
+          // Default Border (Unfocused State)
           border: OutlineInputBorder(
-            borderSide: BorderSide(color: color.scaffoldBackgroundColor),
+            borderSide: BorderSide(color: secondaryColor),
             borderRadius: BorderRadius.circular(15),
           ),
+          
+          // Focused Border
           focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: color.scaffoldBackgroundColor),
+            borderSide: BorderSide(color: color.primaryColor, width: 2), // Highlight focus with primary color
             borderRadius: BorderRadius.circular(15),
           ),
-          focusColor: color.scaffoldBackgroundColor,
-          fillColor: color.hintColor.withOpacity(0.2),
+          
+          // Background Fill
+          fillColor: color.hintColor.withOpacity(0.1), // Soft, subtle background fill
           filled: true,
+          
           suffixIcon: suffixIcon,
+          
+          // Prefix Icon Color
           prefixIcon: icon != null
-              ? Icon(icon, color: color.scaffoldBackgroundColor)
+              ? Icon(icon, color: color.primaryColor) // Use primary color for clarity
               : null,
+              
+          // Hint Text
           hintText: placeholder,
-          hintStyle: TextStyle(color: color.scaffoldBackgroundColor),
+          hintStyle: TextStyle(color: color.hintColor.withOpacity(0.7)),
+          
+          contentPadding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0), // Ensure adequate padding
         ),
       ),
     );

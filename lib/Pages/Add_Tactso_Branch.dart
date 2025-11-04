@@ -1,4 +1,4 @@
-import 'dart:io';
+// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, use_build_context_synchronously, unnecessary_null_comparison, avoid_print
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,9 +6,17 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:text_field_validation/text_field_validation.dart';
-import 'package:ttact/Components/API.dart'; // Assuming API.dart is the file name
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Components/TextFields.dart';
+import 'package:flutter/foundation.dart'; // REQUIRED for kIsWeb
+
+// FIX: Alias dart:io for platform safety
+import 'dart:io' as io show File;
+
+// --- PLATFORM UTILITIES ---
+const double _desktopContentMaxWidth = 700.0;
+// --------------------------
 
 class AddTactsoBranch extends StatefulWidget {
   const AddTactsoBranch({super.key});
@@ -18,24 +26,19 @@ class AddTactsoBranch extends StatefulWidget {
 }
 
 class _AddTactsoBranchState extends State<AddTactsoBranch> {
-  final TextEditingController universityNameController =
-      TextEditingController();
-  final TextEditingController applicationLinkController =
-      TextEditingController();
-  final TextEditingController institutionAddressController =
-      TextEditingController();
+  final TextEditingController universityNameController = TextEditingController();
+  final TextEditingController applicationLinkController = TextEditingController();
+  final TextEditingController institutionAddressController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
 
-  // 💥 MODIFIED: Education Officer Details Controllers ONLY
-  final TextEditingController educationOfficerNameController =
-      TextEditingController();
+  final TextEditingController educationOfficerNameController = TextEditingController();
 
   List<XFile> imageFiles = []; // General University Images
-  // 💥 MODIFIED: Single officer face image file
-  XFile? educationOfficerImageFile;
+  XFile? educationOfficerImageFile; // Officer face image
 
   final ImagePicker _picker = ImagePicker();
+  final bool _isWeb = kIsWeb;
 
   bool isApplicationOpen = false;
   bool hasMultipleCampuses = false;
@@ -45,7 +48,10 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
   @override
   void initState() {
     super.initState();
-    // Start with a single campus controller if needed, but the build() handles it
+    // Initialize one controller for the initial field if starting in single mode
+    if (!hasMultipleCampuses && campusNamesControllers.isEmpty) {
+      campusNamesControllers.add(TextEditingController());
+    }
   }
 
   @override
@@ -55,8 +61,6 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     institutionAddressController.dispose();
     passwordController.dispose();
     emailController.dispose();
-
-    // 💥 MODIFIED: Dispose ONLY the Education Officer controller
     educationOfficerNameController.dispose();
 
     for (var controller in campusNamesControllers) {
@@ -76,7 +80,6 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     }
   }
 
-  // 💥 MODIFIED: New function for Education Officer Image
   Future<void> pickEducationOfficerImage() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
@@ -84,6 +87,24 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
         educationOfficerImageFile = picked;
       });
     }
+  }
+
+  // --- File Upload Helper (Platform-Safe) ---
+  Future<String> _uploadFile(XFile file, String path) async {
+      final ref = FirebaseStorage.instance.ref(path);
+      UploadTask uploadTask;
+
+      if (_isWeb) {
+          // Web: Upload using bytes
+          final bytes = await file.readAsBytes();
+          uploadTask = ref.putData(bytes, SettableMetadata(contentType: 'image/${file.name.split('.').last}'));
+      } else {
+          // Native: Upload using dart:io.File
+          uploadTask = ref.putFile(io.File(file.path));
+      }
+      
+      final snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
   }
 
   // --- Campus Logic (UNCHANGED) ---
@@ -147,7 +168,6 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
         imageFiles.isEmpty ||
         educationOfficerImageFile == null ||
         educationOfficerNameController.text.isEmpty ||
-        (campusNamesControllers.isEmpty && !hasMultipleCampuses) ||
         (hasMultipleCampuses &&
             campusNamesControllers.any((c) => c.text.isEmpty))) {
       Api().showMessage(
@@ -162,24 +182,21 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     Api().showLoading(context);
 
     try {
-      // 1. Upload University Images (UNCHANGED)
+      // 1. Upload University Images (PLATFORM-SAFE)
       List<String> imageUrls = [];
       for (var file in imageFiles) {
-        final ref = FirebaseStorage.instance.ref(
+        final url = await _uploadFile(
+          file,
           "Tactso Branches/${universityNameController.text}/University_Images/${DateTime.now().millisecondsSinceEpoch}_${file.name}",
         );
-        await ref.putFile(File(file.path));
-        final url = await ref.getDownloadURL();
         imageUrls.add(url);
       }
 
-      // 💥 MODIFIED: Upload Education Officer Face Image ONLY
-      final educationOfficerRef = FirebaseStorage.instance.ref(
+      // 💥 MODIFIED: Upload Education Officer Face Image
+      final educationOfficerImageUrl = await _uploadFile(
+        educationOfficerImageFile!,
         "Tactso Branches/${universityNameController.text}/EducationOfficer/${educationOfficerNameController.text}_${DateTime.now().millisecondsSinceEpoch}",
       );
-      await educationOfficerRef.putFile(File(educationOfficerImageFile!.path));
-      final educationOfficerImageUrl = await educationOfficerRef
-          .getDownloadURL();
 
       // 3. Create Firebase Auth User (UNCHANGED)
       final userCredential = await FirebaseAuth.instance
@@ -190,13 +207,11 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
 
       // 4. Prepare Campus Data (UNCHANGED)
       List<Map<String, dynamic>> campusesData = [];
-      if (campusNamesControllers.isNotEmpty) {
-        for (var campusController in campusNamesControllers) {
+      for (var campusController in campusNamesControllers) {
           campusesData.add({'campusName': campusController.text});
-        }
       }
 
-      // 5. Add University/Branch Details to Firestore (MODIFIED)
+      // 5. Add University/Branch Details to Firestore
       await FirebaseFirestore.instance
           .collection('tactso_branches')
           .doc(userCredential.user!.uid)
@@ -211,12 +226,13 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
             'applicationLink': applicationLinkController.text,
             'address': institutionAddressController.text,
             'isApplicationOpen': isApplicationOpen,
-            // 💥 MODIFIED: Officer Details for Biometric Access (ONLY Education Officer)
+            // 💥 MODIFIED: Officer Details for Biometric Access
             'educationOfficerName': educationOfficerNameController.text,
             'educationOfficerFaceUrl': educationOfficerImageUrl,
             'authorizedUserFaceUrls': [educationOfficerImageUrl],
           });
 
+      if (!context.mounted) return;
       Navigator.pop(context); // Dismiss loading dialog
       Api().showMessage(
         context,
@@ -238,11 +254,11 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
         educationOfficerImageFile = null;
         isApplicationOpen = false;
         hasMultipleCampuses = false;
-        for (var controller in campusNamesControllers) {
-          controller.dispose();
-        }
+        // Reset campus controllers properly
+        campusNamesControllers.forEach((c) => c.dispose());
         campusNamesControllers.clear();
         campusNameInputFields.clear();
+        campusNamesControllers.add(TextEditingController()); // Add back the default single controller
       });
     } on FirebaseAuthException catch (e) {
       Navigator.pop(context);
@@ -266,248 +282,235 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 900;
 
     // Ensure one controller exists for single campus mode, only if none exist
     if (!hasMultipleCampuses && campusNamesControllers.isEmpty) {
       campusNamesControllers.add(TextEditingController());
-    } else if (hasMultipleCampuses && campusNamesControllers.isEmpty) {
-      // If multiple is enabled but no fields, add one
-      _addCampusInputField();
     }
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: ListView(
-        children: [
-          Text(
-            'Add TACTSO University & Campus Details',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color.primaryColor,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // --- General University Images Picker ---
-          Text(
-            'University/Campus Images:',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          Card(
-            color: Colors.transparent,
-            elevation: 10,
-            child: GestureDetector(
-              onTap: () => pickImages(),
-              child: Container(
-                alignment: Alignment.center,
-                height: 150,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: color.scaffoldBackgroundColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: color.primaryColor,
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignCenter,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    imageFiles.isNotEmpty
-                        ? Icons.check_circle_outline
-                        : Icons.add_a_photo_outlined,
-                    size: 50,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (imageFiles.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(18.0),
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: imageFiles.map((file) {
-                  return Image.file(
-                    File(file.path),
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                  );
-                }).toList(),
-              ),
-            ),
-          const SizedBox(height: 20),
-
-          // --- General University Fields ---
-          AuthTextField(
-            onValidate: TextFieldValidation.name,
-            placeholder: 'University Name (e.g., North-West University)',
-            controller: universityNameController,
-          ),
-          AuthTextField(
-            onValidate: TextFieldValidation.url,
-            placeholder: 'Overall University Application Link',
-            controller: applicationLinkController,
-          ),
-          AuthTextField(
-            onValidate: TextFieldValidation.name,
-            placeholder: 'University Main Address',
-            controller: institutionAddressController,
-          ),
-          AuthTextField(
-            onValidate: TextFieldValidation.email,
-            placeholder: 'University Admin Email (e.g., admin@university.com)',
-            controller: emailController,
-          ),
-          AuthTextField(
-            onValidate: TextFieldValidation.password,
-            placeholder: 'Password for University Admin Login',
-            controller: passwordController,
-          ),
-          const SizedBox(height: 20),
-
-          // 💥 MODIFIED: Education Officer Details for Biometric Access
-          Text(
-            'Biometric Access Officer (Education Officer)',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color.primaryColor,
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Education Officer Details
-          AuthTextField(
-            onValidate: TextFieldValidation.name,
-            placeholder: 'Education Officer Full Name',
-            controller: educationOfficerNameController,
-          ),
-          _buildOfficerImagePicker(
-            context,
-            'Education Officer Face Image',
-            'Upload Education Officer Face (From Gallery/Files)',
-            educationOfficerImageFile,
-            pickEducationOfficerImage,
-          ),
-          const SizedBox(height: 20),
-
-          // --- Campus Logic Section (UNCHANGED) ---
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Flexible(
-                child: Text(
-                  'Does this University have multiple Campuses?',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-              Switch(
-                activeTrackColor: color.splashColor,
-                value: hasMultipleCampuses,
-                onChanged: (value) {
-                  setState(() {
-                    hasMultipleCampuses = value;
-                    if (!hasMultipleCampuses) {
-                      // Clear all but one controller/field
-                      if (campusNamesControllers.length > 1) {
-                        for (
-                          var i = 1;
-                          i < campusNamesControllers.length;
-                          i++
-                        ) {
-                          campusNamesControllers[i].dispose();
-                        }
-                      }
-                      campusNamesControllers.removeRange(
-                        1,
-                        campusNamesControllers.length,
-                      );
-                      campusNameInputFields.clear();
-                      // The single remaining controller will be handled below
-                    } else if (campusNamesControllers.isEmpty) {
-                      _addCampusInputField(); // Ensure at least one field if switching to multiple
-                    }
-                  });
-                },
-                activeColor: color.scaffoldBackgroundColor,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Conditional display for adding campus names
-          if (hasMultipleCampuses) ...[
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Add Campus Names:',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ...campusNameInputFields,
-            CustomOutlinedButton(
-              onPressed: _addCampusInputField,
-              text: "Add Another Campus",
-              backgroundColor: color.primaryColor,
-              foregroundColor: color.scaffoldBackgroundColor,
-              width: double.infinity,
-            ),
-          ] else if (campusNamesControllers.isNotEmpty) // Single campus field
+    
+    // Determine the list of fields based on multi-campus switch
+    final List<Widget> campusFields = hasMultipleCampuses 
+        ? campusNameInputFields 
+        : (campusNamesControllers.isNotEmpty ? [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: AuthTextField(
                 onValidate: TextFieldValidation.name,
-                placeholder:
-                    'Campus Name (e.g., Main Campus or Potchefstroom Campus)',
+                placeholder: 'Campus Name (e.g., Main Campus)',
                 controller: campusNamesControllers.first,
               ),
             ),
+          ] : []);
 
-          const SizedBox(height: 10),
 
-          // --- Application Open Switch ---
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Center(
+      // FIX 2: Constrain the form width for desktop 
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ListView(
             children: [
-              const Flexible(
-                child: Text(
-                  'Is Application Open for this University/Campuses?',
-                  style: TextStyle(fontSize: 16),
+              Text(
+                'Add TACTSO University Branch',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color.primaryColor,
                 ),
+                textAlign: TextAlign.center,
               ),
-              Switch(
-                activeTrackColor: color.splashColor,
-                value: isApplicationOpen,
-                onChanged: (value) {
-                  setState(() {
-                    isApplicationOpen = value;
-                  });
-                },
-                activeColor: color.scaffoldBackgroundColor,
+              const SizedBox(height: 20),
+              
+              // --- DESKTOP TWO-COLUMN SPLIT ---
+              isDesktop 
+                ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Column 1: General Info & Campus Logic
+                    Expanded(child: _buildGeneralInfoColumn(context, color, campusFields)),
+                    const SizedBox(width: 20),
+                    // Column 2: Officer & Auth Details
+                    Expanded(child: _buildOfficerAndAuthColumn(context, color)),
+                  ],
+                )
+                // MOBILE/VERTICAL LAYOUT
+                : Column(
+                  children: [
+                    _buildGeneralInfoColumn(context, color, campusFields),
+                    const SizedBox(height: 20),
+                    _buildOfficerAndAuthColumn(context, color),
+                  ],
+                ),
+              
+              const SizedBox(height: 30),
+
+              // --- Submit Button ---
+              CustomOutlinedButton(
+                onPressed: _addTactsoBranch,
+                text: "Add University & Campuses",
+                backgroundColor: color.primaryColor,
+                foregroundColor: color.scaffoldBackgroundColor,
+                width: double.infinity,
               ),
+              const SizedBox(height: 40),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // --- Submit Button ---
-          CustomOutlinedButton(
-            onPressed: _addTactsoBranch,
-            text: "Add University & Campuses",
-            backgroundColor: color.primaryColor,
-            foregroundColor: color.scaffoldBackgroundColor,
-            width: double.infinity,
-          ),
-          const SizedBox(height: 40),
-        ],
+        ),
       ),
     );
   }
 
-  // Helper widget for officer image pickers (MODIFIED placeholder text)
+  // --- Helper for General Info & Campus Fields ---
+  Widget _buildGeneralInfoColumn(BuildContext context, ThemeData color, List<Widget> campusFields) {
+      return Card(
+        elevation: 5,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                Text('1. University Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.primaryColor)),
+                const SizedBox(height: 10),
+                AuthTextField(onValidate: TextFieldValidation.name, placeholder: 'University Name', controller: universityNameController),
+                AuthTextField(onValidate: TextFieldValidation.url, placeholder: 'Overall Application Link', controller: applicationLinkController),
+                AuthTextField(onValidate: TextFieldValidation.name, placeholder: 'University Main Address', controller: institutionAddressController),
+                
+                const SizedBox(height: 20),
+                
+                // --- General University Images Picker ---
+                Text('2. University/Campus Images (Min 1)', style: TextStyle(fontWeight: FontWeight.bold)),
+                Card(
+                  color: Colors.transparent,
+                  elevation: 2,
+                  child: GestureDetector(
+                    onTap: pickImages,
+                    child: Container(
+                      alignment: Alignment.center,
+                      height: 120,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: color.scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: color.primaryColor.withOpacity(0.5), width: 1),
+                      ),
+                      child: Center(
+                        child: Icon(imageFiles.isNotEmpty ? Icons.check_circle_outline : Icons.add_a_photo_outlined, size: 40, color: imageFiles.isNotEmpty ? Colors.green : color.primaryColor),
+                      ),
+                    ),
+                  ),
+                ),
+                if (imageFiles.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Wrap(
+                      spacing: 10, runSpacing: 10,
+                      children: imageFiles.map((file) {
+                          // PLATFORM-SAFE Image Preview
+                          return ClipRRect(borderRadius: BorderRadius.circular(8), child: _buildImagePreview(file, 60));
+                      }).toList(),
+                    ),
+                  ),
+                  
+                const SizedBox(height: 20),
+                
+                // --- Campus Logic Section ---
+                Text('3. Campus/Branch Structure', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.primaryColor)),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Flexible(child: Text('Multiple Campuses?')),
+                    Switch(
+                      activeTrackColor: color.splashColor,
+                      value: hasMultipleCampuses,
+                      onChanged: (value) {
+                        setState(() {
+                          hasMultipleCampuses = value;
+                          // Complex state reset logic remains handled by parent functions
+                          if (!hasMultipleCampuses && campusNamesControllers.length > 1) {
+                            campusNamesControllers.removeRange(1, campusNamesControllers.length);
+                            campusNameInputFields.clear();
+                          } else if (hasMultipleCampuses && campusNamesControllers.isEmpty) {
+                            _addCampusInputField();
+                          }
+                        });
+                      },
+                      activeColor: color.scaffoldBackgroundColor,
+                    ),
+                  ],
+                ),
+                ...campusFields,
+                if (hasMultipleCampuses)
+                    CustomOutlinedButton(
+                      onPressed: _addCampusInputField,
+                      text: "Add Another Campus",
+                      backgroundColor: color.primaryColor.withOpacity(0.1),
+                      foregroundColor: color.primaryColor,
+                      width: double.infinity,
+                    ),
+                    
+                const SizedBox(height: 10),
+                
+                // Application Status Switch
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Flexible(child: Text('Applications Currently Open?')),
+                    Switch(
+                      activeTrackColor: color.splashColor,
+                      value: isApplicationOpen,
+                      onChanged: (value) => setState(() => isApplicationOpen = value),
+                      activeColor: color.scaffoldBackgroundColor,
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      );
+  }
+  
+  // --- Helper for Officer & Auth Details Column ---
+  Widget _buildOfficerAndAuthColumn(BuildContext context, ThemeData color) {
+      return Card(
+        elevation: 5,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                Text('4. Education Officer & Admin Login', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.primaryColor)),
+                const SizedBox(height: 10),
+                
+                // Officer Details
+                AuthTextField(onValidate: TextFieldValidation.name, placeholder: 'Education Officer Full Name', controller: educationOfficerNameController),
+                
+                // Officer Biometric Image Picker
+                _buildOfficerImagePicker(
+                  context,
+                  'Education Officer Face Image',
+                  'Upload Officer Face (Required for Biometric Access)',
+                  educationOfficerImageFile,
+                  pickEducationOfficerImage,
+                ),
+                
+                const SizedBox(height: 20),
+                
+                Text('Admin Login Credentials', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.primaryColor)),
+                const SizedBox(height: 10),
+                
+                // Auth Fields (Already defined in parent)
+                AuthTextField(onValidate: TextFieldValidation.email, placeholder: 'University Admin Email', controller: emailController),
+                AuthTextField(onValidate: TextFieldValidation.password, placeholder: 'Password for Admin Login', controller: passwordController),
+            ],
+          ),
+        ),
+      );
+  }
+  
+  // Helper widget for officer image pickers
   Widget _buildOfficerImagePicker(
     BuildContext context,
     String title,
@@ -518,7 +521,7 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     final color = Theme.of(context);
     return Card(
       color: Colors.transparent,
-      elevation: 5,
+      elevation: 2,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -526,19 +529,40 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
           height: 100,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: color.scaffoldBackgroundColor,
+            color: color.cardColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.primaryColor, width: 1),
+            border: Border.all(color: color.primaryColor.withOpacity(0.5), width: 1),
           ),
           child: Center(
             child: Text(
               file != null ? '$title Added! ✅' : placeholder,
               textAlign: TextAlign.center,
-              style: TextStyle(color: color.textTheme.bodyLarge?.color),
+              style: TextStyle(color: file != null ? Colors.green.shade700 : color.hintColor),
             ),
           ),
         ),
       ),
     );
+  }
+  
+  // FIX: Platform-safe image preview helper
+  Widget _buildImagePreview(XFile file, double size) {
+    if (_isWeb) {
+        // Web: Cannot use File(file.path) directly; use placeholder
+        return Container(
+            width: size,
+            height: size,
+            color: Theme.of(context).dividerColor.withOpacity(0.5),
+            child: Icon(Icons.photo, size: size * 0.5, color: Theme.of(context).hintColor),
+        );
+    } else {
+        // Native: Use File(file.path)
+        return Image.file(
+            io.File(file.path),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+        );
+    }
   }
 }
