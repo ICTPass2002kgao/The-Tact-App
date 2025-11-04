@@ -33,19 +33,17 @@ jobs:
       # BUILD FLUTTER WEB APP
       # ----------------------------------------------------------------------
       - name: Build Flutter Web App
-        # The --base-href is VITAL as it tells Flutter that its root path is /web/
-        run: flutter build web --web-renderer html --base-href /web/
+        # Removed '--web-renderer html' which caused the exit code 64 error.
+        # The crucial '--base-href /web/' remains for correct routing.
+        run: flutter build web --base-href /web/
 
       # ----------------------------------------------------------------------
-      # COPY ARTIFACTS INTO FIREBASE HOSTING DIRECTORY (THE FIX)
+      # COPY ARTIFACTS INTO FIREBASE HOSTING DIRECTORY (This remains essential)
       # ----------------------------------------------------------------------
       - name: Copy Flutter Web Build to Hosting Directory
         run: |
-          # Create the /web directory inside the public folder if it doesn't exist
           mkdir -p public/web/
-          # Copy all built assets from build/web/ into public/web/
           cp -r build/web/* public/web/
-
       # ----------------------------------------------------------------------
       # DEPLOYMENT JOB
       # ----------------------------------------------------------------------
