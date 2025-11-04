@@ -56,4 +56,3 @@ jobs:
           channelId: live
           projectId: tact-3c612
           target: DANKIE # Optional: specify a hosting target if you have multiple sites
-          entryPoint: public/ # The folder containing the landing page and the copied web app
