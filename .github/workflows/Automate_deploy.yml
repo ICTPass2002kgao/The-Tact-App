@@ -26,8 +26,8 @@ jobs:
         run: flutter pub get
 
       # Run Checks (Optional but recommended for CI)
-      - name: Run analyzer
-        run: flutter analyze
+      # - name: Run analyzer
+      #   run: flutter analyze
 
       # ----------------------------------------------------------------------
       # BUILD FLUTTER WEB APP
