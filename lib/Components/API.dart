@@ -85,7 +85,6 @@ String selectedProvince,
     try {
       final color = Theme.of(context);
 
-      showLoading(context);
 
       UserCredential credentials = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -143,11 +142,11 @@ if (role == 'Seller') {
 
       Navigator.pop(context);
 
-                      AdManager().showRewardedInterstitialAd((ad, reward) {
-                        print(
-                          'User earned reward: ${reward.amount} ${reward.type}',
-                        );
-                      });
+                      // AdManager().showRewardedInterstitialAd((ad, reward) {
+                      //   print(
+                      //     'User earned reward: ${reward.amount} ${reward.type}',
+                      //   );
+                      // });
       showMessage(
         context,
 

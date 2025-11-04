@@ -12,15 +12,15 @@ class AdManager {
 
   /// Ad Unit IDs (replace with your real ones when live)
   final String _bannerAdUnitId = Platform.isAndroid
-      ? 'ca-app-pub-3940256099942544/6300978111'
+      ? 'ca-app-pub-6759693957212853/4627097298'
       : 'ca-app-pub-3940256099942544/6300978111';
 
   final String _interstitialAdUnitId = Platform.isAndroid
-      ? 'ca-app-pub-3940256099942544/1033173712'
+      ? 'ca-app-pub-6759693957212853/8015639971'
       : 'ca-app-pub-3940256099942544/1033173712';
 
   final String _rewardedInterstitialAdUnitId = Platform.isAndroid
-      ? 'ca-app-pub-3940256099942544/5354046340'
+      ? 'ca-app-pub-6759693957212853/4756966871'
       : 'ca-app-pub-3940256099942544/5354046340';
 
   InterstitialAd? _interstitialAd;

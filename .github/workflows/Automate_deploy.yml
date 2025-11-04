@@ -1,0 +1,48 @@
+# .github/workflows/firebase_hosting_deploy.yml
+name: Flutter CI/CD to Firebase Hosting
+
+# Controls when the workflow is triggered
+on:
+  push:
+    branches: [ "main" ] # Runs on every push to the main branch
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks out your repository under $GITHUB_WORKSPACE
+      - uses: actions/checkout@v4
+
+      # Setup Flutter environment
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # Install Dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Run Checks (Optional but recommended for CI)
+      - name: Run analyzer
+        run: flutter analyze
+
+      # Build the Flutter web app to create the 'web' folder in the 'public' directory
+      - name: Build Web App
+        run: flutter build web --web-renderer html --base-href /web/
+
+      # ----------------------------------------------------------------------
+      # DEPLOYMENT JOB
+      # ----------------------------------------------------------------------
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          # Use your service account secret
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}"
+          channelId: live
+          projectId: tact-3c612 # Ensure this matches your project ID
+          target: DANKIE # Optional: specify a hosting target if you have multiple sites
+          entryPoint: public/ # Tells the action where to look for the hosting content

@@ -178,13 +178,13 @@ class _UniversityApplicationScreenState
   String? _idPassportUrl;
   String? _schoolResultsUrl;
   String? _passportPhotoUrl;
-  AdManager adManager = AdManager();
+  // AdManager adManager = AdManager();
   @override
   void initState() {
     super.initState();
     _checkCurrentUserAndApplications();
-    adManager.loadRewardedInterstitialAd();
-    adManager.loadInterstitialAd();
+    // adManager.loadRewardedInterstitialAd();
+    // adManager.loadInterstitialAd();
   }
 
   @override
@@ -682,9 +682,9 @@ class _UniversityApplicationScreenState
         'applicationRequestId': globalApplicationRequestRef.id,
       });
       Navigator.pop(context);
-      adManager.showRewardedInterstitialAd((ad, reward) {
-        print('User earned reward: ${reward.amount} ${reward.type}');
-      });
+      // adManager.showRewardedInterstitialAd((ad, reward) {
+      //   print('User earned reward: ${reward.amount} ${reward.type}');
+      // });
       Api().showMessage(
         context,
         'Application Submitted Successfully!',

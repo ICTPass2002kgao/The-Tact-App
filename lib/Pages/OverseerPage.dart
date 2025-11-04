@@ -4,18 +4,29 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
+// Assuming these are local files you already have
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:pdf/pdf.dart'; // Import for PDF generation
-import 'package:pdf/widgets.dart' as pw; // Import for PDF widgets
-import 'package:printing/printing.dart'; // Import for printing/sharing
-import 'package:path_provider/path_provider.dart'; // Import for path provider
-import 'package:ttact/Components/Play_Song.dart';
+// PDF Generation Imports
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-
+// Music Imports
+import 'package:ttact/Components/Play_Song.dart';
 import 'package:ttact/Pages/Downloaded_Songs.dart';
- 
+
+// --- Paystack API Imports ---
+import 'package:http/http.dart' as http; // For making HTTP requests
+import 'dart:convert'; // For encoding/decoding JSON
+// ----------------------------
+
+// NOTE: You will need a package like 'url_launcher' in your pubspec.yaml
+// and import 'package:url_launcher/url_launcher.dart'; to make the
+// `launchUrl(Uri.parse(authUrl))` call functional.
+
 class OverseerPage extends StatefulWidget {
   const OverseerPage({super.key});
 
@@ -29,18 +40,160 @@ class _OverseerPageState extends State<OverseerPage>
 
   Uint8List? _logoBytes;
 
-  String _selectedCategory =
-      'All';  
+  String _selectedCategory = 'All';
   String _searchQuery = '';
-  int _songPlayCount = 0;  
-  final AdManager adManager = AdManager();  
+  int _songPlayCount = 0;
+  final AdManager adManager = AdManager(); // Assuming AdManager is defined elsewhere
+
+  // --- PAYSTACK/SUBSCRIPTION STATE & CONSTANTS ---
+  // ** IMPORTANT: REPLACE WITH YOUR ACTUAL DEPLOYED CLOUD FUNCTION BASE URL **
+  // This must be the URL of your 'api' Express function endpoint.
+  static const String cloudFunctionBaseUrl =
+      'https://us-central1-PROJECT_ID.cloudfunctions.net/api'; // <--- UPDATE THIS
+  
+  // These tiers MUST exactly match the TIER_X_CENTS constants in index.js
+  static const int tier1AmountCents = 18900; // R189.00 (50+ members)
+  static const int tier2AmountCents = 25000; // R250.00 (300+ members)
+  static const int tier3AmountCents = 29900; // R299.00 (500+ members)
+  
+  // Local state to track the Paystack subscription status from Firestore
+  bool _isSubscriptionActive = false;
+  // ---------------------------------------------------
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
     _loadLogoBytes();
+    _checkSubscriptionStatusFromFirestore(); // Check Paystack subscription status
   }
+
+  // --- PAYSTACK SUBSCRIPTION STATUS CHECK ---
+
+  Future<void> _checkSubscriptionStatusFromFirestore() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) setState(() => _isSubscriptionActive = false);
+      return;
+    }
+
+    try {
+      // Fetch the overseer's document to check the Paystack subscription status field
+      final doc = await FirebaseFirestore.instance
+          .collection('overseers')
+          .doc(uid)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          // The Cloud Function webhook sets 'subscriptionStatus' to 'active' on success
+          _isSubscriptionActive = doc.exists && doc.data()?['subscriptionStatus'] == 'active';
+        });
+      }
+    } catch (e) {
+      print("Firestore Subscription Check Error: $e");
+      if (mounted) setState(() => _isSubscriptionActive = false);
+    }
+  }
+
+  // Helper to get the total member count for the current Overseer
+  Future<int> _getTotalOverseerMemberCount() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('overseerUid', isEqualTo: uid)
+        .get();
+    return snapshot.docs.length;
+  }
+  
+  // --- PAYSTACK SUBSCRIPTION INITIATION LOGIC ---
+
+  /// Determines the required subscription amount in cents based on member count.
+  int _determineSubscriptionAmount(int memberCount) {
+    if (memberCount >= 500) {
+      return tier3AmountCents; // R299.00
+    } else if (memberCount >= 300) {
+      return tier2AmountCents; // R250.00
+    } else if (memberCount >= 50) {
+      return tier1AmountCents; // R189.00 (Minimum tier)
+    } else {
+      // If the user attempts to subscribe but is below 50, use the base rate.
+      return tier1AmountCents;
+    }
+  }
+  
+  Future<void> _initiatePaystackSubscription(int memberCount, BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.email == null) {
+      Api().showMessage(context, 'Please log in to subscribe.', 'Error', Theme.of(context).primaryColorDark);
+      return;
+    }
+
+    final amountCents = _determineSubscriptionAmount(memberCount);
+    final tierName = memberCount >= 500 ? 'Tier 3 (500+)' : (memberCount >= 300 ? 'Tier 2 (300-499)' : 'Tier 1 (50+)');
+    
+    // 1. Call Cloud Function to initialize the Paystack subscription payment
+    Api().showLoading(context);
+    try {
+      // The endpoint MUST match the Express route: /api/initialize-subscription
+      final response = await http.post(
+        Uri.parse('$cloudFunctionBaseUrl/initialize-subscription'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': user.email,
+          'amount': amountCents,
+          'uid': user.uid,
+          'tier': tierName,
+          'memberCount': memberCount,
+        }),
+      );
+      
+      Navigator.pop(context); // Dismiss loading dialog
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final authUrl = data['authorization_url'] as String?;
+
+        if (authUrl != null) {
+          // 2. Launch Paystack Checkout (Authorization URL)
+          showCupertinoDialog(
+            context: context,
+            builder: (ctx) => CupertinoAlertDialog(
+              title: const Text('Complete Subscription'),
+              content: Text('Please proceed to the Paystack page to authorize your card for automatic monthly payments based on the $tierName plan (R${(amountCents / 100).toStringAsFixed(2)}).'),
+              actions: [
+                CupertinoDialogAction(
+                  child: const Text('Open Payment Page'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    // TODO: Implement actual URL launch using a package like url_launcher
+                    // For example: launchUrl(Uri.parse(authUrl));
+                    Api().showMessage(context, 'Launching Paystack for authorization...', 'Info', Theme.of(context).primaryColor);
+                    // Placeholder for launching URL:
+                    print('Launching Paystack URL: $authUrl');
+                  },
+                ),
+              ],
+            ),
+          );
+        } else {
+          Api().showMessage(context, 'Failed to get payment URL.', 'Error', Theme.of(context).primaryColorDark);
+        }
+
+      } else {
+        final errorData = json.decode(response.body);
+        Api().showMessage(context, errorData['error'] ?? 'Subscription initialization failed.', 'Error', Theme.of(context).primaryColorDark);
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      Api().showMessage(context, 'An error occurred during subscription setup: $e', 'Error', Theme.of(context).primaryColorDark);
+    }
+  }
+
+  // ----------------------------------------------
+
 
   Future<void> _loadLogoBytes() async {
     try {
@@ -72,6 +225,7 @@ class _OverseerPageState extends State<OverseerPage>
   String? selectedCommunityElder;
   String? selectedCommunityName;
   String selectedProvince = '';
+  
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
@@ -188,7 +342,7 @@ class _OverseerPageState extends State<OverseerPage>
                               return Center(child: Text('No members found.'));
                             }
                             var totalMembers = asyncSnapshot.data!.docs.length;
-                             return Column(
+                            return Column(
                               children: [
                                 Container(
                                   width: double.infinity,
@@ -318,7 +472,7 @@ class _OverseerPageState extends State<OverseerPage>
                                                 children: [
                                                   for (var info in oveerData)
                                                     Text(
-                                                      '${info['districts'].length ?? 0}',
+                                                      '${info['districts']?.length ?? 0}',
                                                       style: TextStyle(
                                                         fontSize: 50,
                                                         fontWeight:
@@ -498,9 +652,8 @@ class _OverseerPageState extends State<OverseerPage>
                                   ListView.builder(
                                     itemCount: filteredSongs.length,
                                     itemBuilder: (context, index) {
-                                      final song =
-                                          filteredSongs[index].data()
-                                              as Map<String, dynamic>;
+                                      final song = filteredSongs[index].data()
+                                          as Map<String, dynamic>;
 
                                       return Padding(
                                         padding: const EdgeInsets.all(8.0),
@@ -511,13 +664,13 @@ class _OverseerPageState extends State<OverseerPage>
                                             ),
                                             border: Border.all(width: 1.5),
                                           ),
-                                          child: ListTile( 
+                                          child: ListTile(
                                             onTap: () {
                                               _songPlayCount++;
                                               print(
                                                 'Song play count: $_songPlayCount',
                                               );
-                                  void playSong() {
+                                              void playSong() {
                                                 showCupertinoSheet(
                                                   enableDrag: true,
                                                   context: context,
@@ -525,12 +678,10 @@ class _OverseerPageState extends State<OverseerPage>
                                                     return PlaySong(
                                                       songs: filteredSongs
                                                           .map(
-                                                            (doc) =>
-                                                                doc.data()
-                                                                    as Map<
-                                                                      String,
-                                                                      dynamic
-                                                                    >,
+                                                            (doc) => doc.data()
+                                                                as Map<
+                                                                    String,
+                                                                    dynamic>,
                                                           )
                                                           .toList(),
                                                       initialIndex: index,
@@ -539,11 +690,11 @@ class _OverseerPageState extends State<OverseerPage>
                                                 );
                                               }
 
-                                              if (_songPlayCount >= 4) { 
-                                                     adManager.showRewardedInterstitialAd((
+                                              if (_songPlayCount >= 4) {
+                                                adManager.showRewardedInterstitialAd((
                                                   ad,
                                                   reward,
-                                                ) { 
+                                                ) {
                                                   print(
                                                     'User earned reward: ${reward.amount} ${reward.type}',
                                                   );
@@ -551,14 +702,14 @@ class _OverseerPageState extends State<OverseerPage>
                                                   _songPlayCount = 0;
                                                 });
                                                 AdManager().loadRewardedInterstitialAd(
-                                                  onAdFailed: () { 
+                                                  onAdFailed: () {
                                                     playSong();
                                                     _songPlayCount =
-                                                        0;   },
+                                                        0;
+                                                  },
                                                 );
-                                              } else { 
+                                              } else {
                                                 playSong();
-                                                
                                               }
                                             },
                                             minVerticalPadding: 1,
@@ -617,7 +768,8 @@ class _OverseerPageState extends State<OverseerPage>
                                           color.splashColor,
                                         ),
                                       ),
-                                      icon: Icon(Icons.download_done, size: 40),
+                                      icon:
+                                          Icon(Icons.download_done, size: 40),
                                     ),
                                   ),
                                 ],
@@ -708,9 +860,8 @@ class _OverseerPageState extends State<OverseerPage>
                               child: Text('No overseer data found.'),
                             );
                           }
-                          var overseerData =
-                              snapshot.data!.docs.first.data()
-                                  as Map<String, dynamic>;
+                          var overseerData = snapshot.data!.docs.first.data()
+                              as Map<String, dynamic>;
 
                           selectedProvince = overseerData['province'];
 
@@ -718,13 +869,16 @@ class _OverseerPageState extends State<OverseerPage>
                               overseerData['districts'] ?? [];
 
                           // Find the selected district object
-                          Map<String, dynamic>? selectedDistrict = districts
-                              .firstWhere(
-                                (d) =>
-                                    d['districtElderName'] ==
-                                    selectedDistrictElder,
-                                orElse: () => null,
-                              );
+                          Map<String, dynamic>? selectedDistrict;
+                          try {
+                            selectedDistrict = districts.firstWhere(
+                              (d) =>
+                                  d['districtElderName'] ==
+                                  selectedDistrictElder,
+                            );
+                          } catch (_) {
+                            // If not found, it remains null
+                          }
 
                           // Get unique district elder names
                           List<String> districtElderNames = districts
@@ -737,30 +891,29 @@ class _OverseerPageState extends State<OverseerPage>
                           // Get unique community elder names and community names for selected district
                           List<String> communityElderNames =
                               selectedDistrict != null
-                              ? (selectedDistrict['communities']
-                                            as List<dynamic>?)
-                                        ?.map(
-                                          (c) =>
-                                              c['communityElderName']
-                                                  as String?,
-                                        )
-                                        .where((name) => name != null)
-                                        .cast<String>()
-                                        .toSet()
-                                        .toList() ??
-                                    []
-                              : [];
+                                  ? (selectedDistrict['communities']
+                                          as List<dynamic>?)
+                                      ?.map(
+                                        (c) => c['communityElderName']
+                                            as String?,
+                                      )
+                                      .where((name) => name != null)
+                                      .cast<String>()
+                                      .toSet()
+                                      .toList() ??
+                                      []
+                                  : [];
                           List<String> communityNames = selectedDistrict != null
                               ? (selectedDistrict['communities']
-                                            as List<dynamic>?)
-                                        ?.map(
-                                          (c) => c['communityName'] as String?,
-                                        )
-                                        .where((name) => name != null)
-                                        .cast<String>()
-                                        .toSet()
-                                        .toList() ??
-                                    []
+                                      as List<dynamic>?)
+                                  ?.map(
+                                    (c) => c['communityName'] as String?,
+                                  )
+                                  .where((name) => name != null)
+                                  .cast<String>()
+                                  .toSet()
+                                  .toList() ??
+                                  []
                               : [];
 
                           return Column(
@@ -783,10 +936,14 @@ class _OverseerPageState extends State<OverseerPage>
                                   setState(() {
                                     selectedDistrictElder = value;
                                     // Update selectedDistrict and reset community selections
-                                    selectedDistrict = districts.firstWhere(
-                                      (d) => d['districtElderName'] == value,
-                                      orElse: () => null,
-                                    );
+                                    try {
+                                      selectedDistrict = districts.firstWhere(
+                                        (d) =>
+                                            d['districtElderName'] == value,
+                                      );
+                                    } catch (_) {
+                                      selectedDistrict = null;
+                                    }
                                     selectedCommunityElder = null;
                                     selectedCommunityName = null;
                                   });
@@ -801,7 +958,6 @@ class _OverseerPageState extends State<OverseerPage>
                                       .map(
                                         (e) => DropdownMenuItem(
                                           alignment: Alignment.center,
-
                                           value: e,
                                           child: Text(e),
                                         ),
@@ -1036,41 +1192,44 @@ class _OverseerPageState extends State<OverseerPage>
                                                   child: Text('Cancel'),
                                                 ),
                                                 SizedBox(height: 10),
-
                                                 TextButton(
                                                   onPressed: () async {
                                                     Api().showLoading(context);
                                                     week1 =
                                                         double.tryParse(
-                                                          week1Controller.text,
-                                                        ) ??
-                                                        0.0;
+                                                              week1Controller
+                                                                  .text,
+                                                            ) ??
+                                                            0.0;
                                                     week2 =
                                                         double.tryParse(
-                                                          week2Controller.text,
-                                                        ) ??
-                                                        0.0;
+                                                              week2Controller
+                                                                  .text,
+                                                            ) ??
+                                                            0.0;
                                                     week3 =
                                                         double.tryParse(
-                                                          week3Controller.text,
-                                                        ) ??
-                                                        0.0;
+                                                              week3Controller
+                                                                  .text,
+                                                            ) ??
+                                                            0.0;
                                                     week4 =
                                                         double.tryParse(
-                                                          week4Controller.text,
-                                                        ) ??
-                                                        0.0;
+                                                              week4Controller
+                                                                  .text,
+                                                            ) ??
+                                                            0.0;
 
                                                     await FirebaseFirestore
                                                         .instance
                                                         .collection('users')
                                                         .doc(member.id)
                                                         .update({
-                                                          'week1': week1,
-                                                          'week2': week2,
-                                                          'week3': week3,
-                                                          'week4': week4,
-                                                        });
+                                                      'week1': week1,
+                                                      'week2': week2,
+                                                      'week3': week3,
+                                                      'week4': week4,
+                                                    });
                                                     Navigator.pop(context);
                                                     Navigator.pop(context);
 
@@ -1118,6 +1277,10 @@ class _OverseerPageState extends State<OverseerPage>
                   child: FutureBuilder<QuerySnapshot>(
                     future: FirebaseFirestore.instance
                         .collection('overseers')
+                        .where(
+                          'uid',
+                          isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+                        )
                         .get(),
                     builder: (context, asyncSnapshot) {
                       var overseerData = asyncSnapshot.data?.docs ?? [];
@@ -1134,6 +1297,53 @@ class _OverseerPageState extends State<OverseerPage>
                       return Center(
                         child: GestureDetector(
                           onTap: () async {
+                            // 🚀 SUBSCRIPTION & LIMIT LOGIC 🚀
+                            int totalOverseerMembers =
+                                await _getTotalOverseerMemberCount();
+                            await _checkSubscriptionStatusFromFirestore(); // Refresh Paystack status
+
+                            int memberLimit = 999999; // Default: No limit
+
+                            // --- TIER CHECK & SUBSCRIPTION PROMPT LOGIC ---
+                            if (totalOverseerMembers > 50 &&
+                                !_isSubscriptionActive) {
+                              
+                              final currentTierAmount = _determineSubscriptionAmount(totalOverseerMembers);
+
+                              Api().showMessage(
+                                context,
+                                'You have $totalOverseerMembers members. To view all members on reports, please subscribe (R${(currentTierAmount / 100).toStringAsFixed(2)}/month). The report will be **limited to 50 members**.',
+                                'Subscription Required',
+                                color.primaryColor,
+                              );
+                              memberLimit = 50; // Enforce 50-member limit
+
+                              // Show a dialog to prompt for subscription
+                              showCupertinoDialog(
+                                context: context,
+                                builder: (ctx) => CupertinoAlertDialog(
+                                  title: const Text('Unlock Unlimited Reporting'),
+                                  content: Text(
+                                      'Your member count is $totalOverseerMembers. Subscribing will unlock unlimited reporting and authorize your card for monthly billing at the current tier price (R${(currentTierAmount / 100).toStringAsFixed(2)}).'),
+                                  actions: [
+                                    CupertinoDialogAction(
+                                      child: const Text('Cancel'),
+                                      onPressed: () => Navigator.pop(ctx),
+                                    ),
+                                    CupertinoDialogAction(
+                                      child: const Text('Authorize Card Now'),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        _initiatePaystackSubscription(
+                                            totalOverseerMembers, context);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            // ------------------------------------
+
                             FirebaseFirestore firestore =
                                 FirebaseFirestore.instance;
                             QuerySnapshot<Map<String, dynamic>> snapshot =
@@ -1142,9 +1352,7 @@ class _OverseerPageState extends State<OverseerPage>
                                     .where(
                                       'uid',
                                       isEqualTo: FirebaseAuth
-                                          .instance
-                                          .currentUser
-                                          ?.uid,
+                                          .instance.currentUser?.uid,
                                     )
                                     .get();
 
@@ -1156,12 +1364,12 @@ class _OverseerPageState extends State<OverseerPage>
                             String overseerSurname =
                                 overseerData?['surname'] ?? 'N/A';
 
-                            // Assuming these are declared in your State class
-                            String? selectedProvince = province;
-
-                            // You'll also need a way to store the currently selected district object
-                            // so you can filter communities based on it.
-                            Map<String, dynamic>? selectedDistrict;
+                            String? currentSelectedDistrictElder =
+                                selectedDistrictElder;
+                            String? currentSelectedCommunityElder =
+                                selectedCommunityElder;
+                            String? currentSelectedCommunityName =
+                                selectedCommunityName;
 
                             // Function to get distinct district elder names
                             List<String> getDistrictElderNames(
@@ -1174,13 +1382,12 @@ class _OverseerPageState extends State<OverseerPage>
                               }
                               return (data['districts'] as List<dynamic>)
                                   .map(
-                                    (district) =>
-                                        district['districtElderName']
-                                            as String?,
+                                    (district) => district['districtElderName']
+                                        as String?,
                                   )
                                   .where((name) => name != null)
                                   .cast<String>()
-                                  .toSet() // Use a Set to get unique names
+                                  .toSet()
                                   .toList();
                             }
 
@@ -1201,7 +1408,7 @@ class _OverseerPageState extends State<OverseerPage>
                                   )
                                   .where((name) => name != null)
                                   .cast<String>()
-                                  .toSet() // Use a Set to get unique names
+                                  .toSet()
                                   .toList();
                             }
 
@@ -1221,7 +1428,7 @@ class _OverseerPageState extends State<OverseerPage>
                                   )
                                   .where((name) => name != null)
                                   .cast<String>()
-                                  .toSet() // Use a Set to get unique names
+                                  .toSet()
                                   .toList();
                             }
 
@@ -1236,49 +1443,64 @@ class _OverseerPageState extends State<OverseerPage>
                               builder: (context) {
                                 return StatefulBuilder(
                                   builder: (context, setState) {
+                                    Map<String, dynamic>? selectedDistrict;
+
+                                    if (overseerData?.containsKey('districts') ==
+                                        true) {
+                                      try {
+                                        selectedDistrict = (overseerData![
+                                                    'districts']
+                                                as List<dynamic>?)
+                                            ?.firstWhere(
+                                              (district) =>
+                                                  district[
+                                                      'districtElderName'] ==
+                                                  currentSelectedDistrictElder,
+                                            ) as Map<String, dynamic>?;
+                                      } catch (_) {
+                                        selectedDistrict = null;
+                                      }
+                                    }
+
                                     // Prepare lists for dropdowns
                                     final List<String> districtElderNames =
                                         getDistrictElderNames(overseerData);
                                     final List<String> communityElderNames =
                                         getCommunityElderNamesForDistrict(
-                                          selectedDistrict,
-                                        );
+                                            selectedDistrict);
                                     final List<String> communityNames =
                                         getCommunityNamesForDistrict(
-                                          selectedDistrict,
-                                        );
+                                            selectedDistrict);
 
                                     return Center(
                                       child: Container(
                                         width: double.infinity,
-                                        margin: const EdgeInsets.all(
-                                          16.0,
-                                        ), // This creates the horizontal margin, making it "fuller" within the screen
+                                        margin: const EdgeInsets.all(16.0),
                                         decoration: BoxDecoration(
-                                          color: color
-                                              .scaffoldBackgroundColor, // Background color of the sheet
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ), // Rounded corners
+                                          color:
+                                              color.scaffoldBackgroundColor,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                0.1,
-                                              ),
+                                              color:
+                                                  Colors.black.withOpacity(0.1),
                                               blurRadius: 10,
                                               spreadRadius: 5,
                                             ),
                                           ],
                                         ),
                                         child: Padding(
-                                          padding: const EdgeInsets.all(16.0),
+                                          padding:
+                                              const EdgeInsets.all(16.0),
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
                                             mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                             children: [
                                               DropdownButton<String>(
-                                                value: selectedDistrictElder,
+                                                value:
+                                                    currentSelectedDistrictElder,
                                                 hint: Text(
                                                   'Choose a District Elder',
                                                 ),
@@ -1292,39 +1514,21 @@ class _OverseerPageState extends State<OverseerPage>
                                                     .toList(),
                                                 onChanged: (value) {
                                                   setState(() {
-                                                    selectedDistrictElder =
+                                                    currentSelectedDistrictElder =
                                                         value;
-                                                    // When a district elder is selected, find the corresponding district
-                                                    // and update the selectedDistrict. This allows filtering communities.
-                                                    selectedDistrict =
-                                                        (overseerData?['districts']
-                                                                    as List<
-                                                                      dynamic
-                                                                    >?)
-                                                                ?.firstWhere(
-                                                                  (district) =>
-                                                                      district['districtElderName'] ==
-                                                                      value,
-                                                                  orElse: () =>
-                                                                      null,
-                                                                )
-                                                            as Map<
-                                                              String,
-                                                              dynamic
-                                                            >?;
-
                                                     // Reset community selections if district changes
-                                                    selectedCommunityElder =
+                                                    currentSelectedCommunityElder =
                                                         null;
-                                                    selectedCommunityName =
+                                                    currentSelectedCommunityName =
                                                         null;
                                                   });
                                                 },
                                               ),
-                                              if (selectedDistrictElder !=
+                                              if (currentSelectedDistrictElder !=
                                                   null) ...[
                                                 DropdownButton<String>(
-                                                  value: selectedCommunityElder,
+                                                  value:
+                                                      currentSelectedCommunityElder,
                                                   hint: Text(
                                                     'Choose a Community Elder',
                                                   ),
@@ -1338,13 +1542,14 @@ class _OverseerPageState extends State<OverseerPage>
                                                       .toList(),
                                                   onChanged: (value) {
                                                     setState(() {
-                                                      selectedCommunityElder =
+                                                      currentSelectedCommunityElder =
                                                           value;
                                                     });
                                                   },
                                                 ),
                                                 DropdownButton<String>(
-                                                  value: selectedCommunityName,
+                                                  value:
+                                                      currentSelectedCommunityName,
                                                   hint: Text(
                                                     'Choose a Community Name',
                                                   ),
@@ -1358,7 +1563,7 @@ class _OverseerPageState extends State<OverseerPage>
                                                       .toList(),
                                                   onChanged: (value) {
                                                     setState(() {
-                                                      selectedCommunityName =
+                                                      currentSelectedCommunityName =
                                                           value;
                                                     });
                                                   },
@@ -1367,22 +1572,23 @@ class _OverseerPageState extends State<OverseerPage>
                                               SizedBox(height: 20),
                                               CustomOutlinedButton(
                                                 onPressed: () async {
-                                                  // Add validation here if needed to ensure all are selected
-                                                  if (selectedDistrictElder !=
+                                                  // Check if all selection fields are filled
+                                                  if (currentSelectedDistrictElder !=
                                                           null &&
-                                                      selectedCommunityElder !=
+                                                      currentSelectedCommunityElder !=
                                                           null &&
-                                                      selectedCommunityName !=
+                                                      currentSelectedCommunityName !=
                                                           null) {
                                                     Navigator.pop(context);
                                                     await _generatePdfAndDownload(
-                                                      selectedDistrictElder!,
-                                                      selectedCommunityElder!,
-                                                      selectedCommunityName!,
+                                                      currentSelectedDistrictElder!,
+                                                      currentSelectedCommunityElder!,
+                                                      currentSelectedCommunityName!,
                                                       selectedProvince,
                                                       overseerName,
                                                       overseerSurname,
                                                       overseerData!,
+                                                      memberLimit, // Pass the determined limit
                                                     );
                                                   } else {
                                                     // Show a snackbar or alert to inform the user to select all fields
@@ -1466,7 +1672,7 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   // --- PDF Generation Logic ---
-  // --- PDF Generation Logic ---
+  // Updated signature with memberLimit
   Future<void> _generatePdfAndDownload(
     String selectedDistrictElder,
     String selectedCommunityElder,
@@ -1475,6 +1681,7 @@ class _OverseerPageState extends State<OverseerPage>
     String overseerName,
     String overseerSurname,
     Map<String, dynamic> overseerData,
+    int memberLimit, // NEW ARGUMENT
   ) async {
     Api().showLoading(context); // Show loading indicator
     try {
@@ -1483,6 +1690,7 @@ class _OverseerPageState extends State<OverseerPage>
         selectedDistrictElder,
         selectedCommunityName,
         selectedCommunityElder,
+        memberLimit, // Pass the limit
       );
 
       // Check if the balanceSheetTable is null (meaning no members were found)
@@ -1706,21 +1914,31 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   // Helper for PDF Balance Sheet Table
+  // Updated signature with memberLimit
   Future<pw.Widget?> _buildPdfBalanceSheetTable(
     BuildContext context,
     String selectedDistrictElder,
     String selectedCommunityName,
     String selectedCommunityElder,
+    int memberLimit, // NEW ARGUMENT
   ) async {
     FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-    var memberLatestData = await firestore
+    // Build the base query
+    Query<Map<String, dynamic>> query = firestore
         .collection('users')
         .where('districtElderName', isEqualTo: selectedDistrictElder)
         .where('communityName', isEqualTo: selectedCommunityName)
         .where('communityElderName', isEqualTo: selectedCommunityElder)
-        .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-        .get();
+        .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid);
+
+    // Apply limit if enforced by subscription check
+    if (memberLimit < 999999) {
+      // Enforces the limit on the Firestore query
+      query = query.limit(memberLimit);
+    }
+
+    var memberLatestData = await query.get();
 
     if (memberLatestData.docs.isEmpty) {
       Api().showMessage(
@@ -1760,10 +1978,10 @@ class _OverseerPageState extends State<OverseerPage>
 
       var total =
           (double.parse(memberWeek1) +
-                  double.parse(memberWeek2) +
-                  double.parse(memberWeek3) +
-                  double.parse(memberWeek4))
-              .toStringAsFixed(2);
+                      double.parse(memberWeek2) +
+                      double.parse(memberWeek3) +
+                      double.parse(memberWeek4))
+                  .toStringAsFixed(2);
 
       tableData.add(<String>[
         '${memberName} ${memberSurname}',
@@ -1874,7 +2092,7 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-   // Helper for PDF signature rows
+  // Helper for PDF signature rows
   pw.Widget _buildPdfSignatureRow(String role, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 4.0),

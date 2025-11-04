@@ -3,7 +3,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
- import 'package:ionicons/ionicons.dart';
+import 'package:ionicons/ionicons.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Play_Song.dart';
@@ -167,86 +167,110 @@ class _HomePageState extends State<HomePage>
                           ),
                         ),
                         SizedBox(height: 5),
-                        FutureBuilder(
+                        FutureBuilder<QuerySnapshot>(
+                          // Specify the type
+                          // 1. Filter: isGreaterThanOrEqualTo today
+                          //    (Firestore Timestamp comparison is simple and reliable)
+                          // 2. Order: By parsedDate ascending (earliest first)
+                          // 3. Limit: To show only the next few events (e.g., 3)
                           future: FirebaseFirestore.instance
                               .collection('upcoming_events')
+                              .where(
+                                'parsedDate',
+                                isGreaterThanOrEqualTo: Timestamp.fromDate(
+                                  DateTime.now(),
+                                ),
+                              )
+                              .orderBy('parsedDate', descending: false)
+                              .limit(3) // Limit to the top 3 upcoming events
                               .get(),
-                          builder: (context, snapshots) {
-                            return GestureDetector(
-                              onTap: () {
-                                showModalBottomSheet(
-                                  scrollControlDisabledMaxHeightRatio: 0.8,
-                                  context: context,
-                                  builder: (context) {
-                                    return EventDetailBottomSheet(
-                                      posterUrl: 'assets/Poster.jpg',
-                                      date: '17',
-                                      eventMonth: 'Aug',
-                                      title: 'Music Concert',
-                                      description:
-                                          'Join us for a musical evening with Overseer MJ Kubheka.',
-                                    );
-                                  },
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              // Shimmer or a simple loading indicator
+                              return Column(
+                                children: [
+                                  Center(
+                                    child: Container(
+                                      width: 100,
+                                      child: LinearProgressIndicator(
+                                        color: color.primaryColor,
+                                        backgroundColor:
+                                            color.scaffoldBackgroundColor,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 10),
+                                ],
+                              );
+                            }
+
+                            if (snapshot.hasError) {
+                              return Text(
+                                'Error loading events: ${snapshot.error}',
+                              );
+                            }
+
+                            if (!snapshot.hasData ||
+                                snapshot.data!.docs.isEmpty) {
+                              return const Text('No upcoming events found.');
+                            }
+
+                            // Map the documents to your UpcomingEventsCard widgets
+                            final events = snapshot.data!.docs;
+
+                            return Column(
+                              children: events.map((doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+
+                                // Extract the fields from the document
+                                final String date = data['day'] ?? '';
+                                final String eventMonth = data['month'] ?? '';
+                                final String eventTitle =
+                                    data['title'] ?? 'No Title';
+                                final String eventDescription =
+                                    data['description'] ?? 'No Description';
+                                final String posterUrl =
+                                    data['posterUrl'] ?? '';
+
+                                // Use the original structure to display and open the bottom sheet
+                                return Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: 5.0,
+                                  ), // Add spacing between cards
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      showModalBottomSheet(
+                                        context: context,
+                                        builder: (context) {
+                                          return FractionallySizedBox(
+                                            child: EventDetailBottomSheet(
+                                              date: date,
+                                              eventMonth: eventMonth,
+                                              title: eventTitle,
+                                              description: eventDescription,
+                                              posterUrl: posterUrl.isNotEmpty
+                                                  ? posterUrl
+                                                  : null, // Pass poster URL
+                                              // Add other necessary event details here
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                    child: UpcomingEventsCard(
+                                      date: date,
+                                      eventMonth: eventMonth,
+                                      eventTitle: eventTitle,
+                                      eventDescription: eventDescription,
+                                      // You might need to adjust UpcomingEventsCard to take a posterUrl
+                                      // or display only text if it's a small card.
+                                    ),
+                                  ),
                                 );
-                              },
-                              child: UpcomingEventsCard(
-                                date: '17',
-                                eventMonth: 'Aug',
-                                eventTitle: 'Music Concert',
-                                eventDescription:
-                                    'Join us for a musical evening with Overseer MJ Kubheka.',
-                              ),
+                              }).toList(),
                             );
                           },
-                        ),
-                        SizedBox(height: 5),
-                        GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              scrollControlDisabledMaxHeightRatio: 0.8,
-                              context: context,
-                              builder: (context) {
-                                return EventDetailBottomSheet(
-                                  date: '18',
-                                  eventMonth: 'Aug',
-                                  title: 'Community Service',
-                                  description:
-                                      'Participate in our community service event.',
-                                );
-                              },
-                            );
-                          },
-                          child: UpcomingEventsCard(
-                            date: '18',
-                            eventMonth: 'Aug',
-                            eventTitle: 'Community Service',
-                            eventDescription:
-                                'Participate in our community service event.',
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              scrollControlDisabledMaxHeightRatio: 0.8,
-                              context: context,
-                              builder: (context) {
-                                return EventDetailBottomSheet(
-                                  date: '20',
-                                  eventMonth: 'Sep',
-                                  title: 'TACTSO SPORTS & MUSIC FESTIVAL',
-                                  description:
-                                      'Join us for a day of sports and music with TTACTSO.',
-                                );
-                              },
-                            );
-                          },
-                          child: UpcomingEventsCard(
-                            date: '20',
-                            eventMonth: 'Sep',
-                            eventTitle: 'TACTSO SPORTS & MUSIC FESTIVAL',
-                            eventDescription:
-                                'Join us for a day of sports and music with TTACTSO.',
-                          ),
                         ),
                       ],
                     ),
@@ -551,52 +575,68 @@ class _HomePageState extends State<HomePage>
                                             border: Border.all(width: 1.5),
                                           ),
                                           child: ListTile(
-                                           // Your song list widget's onTap function
-// ...
-onTap: () {
-  _songPlayCount++;
-  print('Song play count: $_songPlayCount');
+                                            // Your song list widget's onTap function
+                                            // ...
+                                            onTap: () {
+                                              _songPlayCount++;
+                                              print(
+                                                'Song play count: $_songPlayCount',
+                                              );
 
-  // Function to play the song, regardless of ad status
-  void playSong() {
-    showCupertinoSheet(
-      enableDrag: true,
-      context: context,
-      pageBuilder: (context) {
-        return PlaySong(
-          songs: filteredSongs.map((doc) => doc.data() as Map<String, dynamic>).toList(),
-          initialIndex: index,
-        );
-      },
-    );
-  }
+                                              // Function to play the song, regardless of ad status
+                                              void playSong() {
+                                                showCupertinoSheet(
+                                                  enableDrag: true,
+                                                  context: context,
+                                                  pageBuilder: (context) {
+                                                    return PlaySong(
+                                                      songs: filteredSongs
+                                                          .map(
+                                                            (doc) =>
+                                                                doc.data()
+                                                                    as Map<
+                                                                      String,
+                                                                      dynamic
+                                                                    >,
+                                                          )
+                                                          .toList(),
+                                                      initialIndex: index,
+                                                    );
+                                                  },
+                                                );
+                                              }
 
-  if (_songPlayCount >= 4) {
-    // Show the rewarded ad with a failure callback
-    adManager.showRewardedInterstitialAd(
-      (ad, reward) {
-        // Ad success: play the song and reset count
-        print('User earned reward: ${reward.amount} ${reward.type}');
-        playSong();
-        _songPlayCount = 0;
-      },
-    );
+                                              if (_songPlayCount >= 4) {
+                                                // Show the rewarded ad with a failure callback
+                                                adManager.showRewardedInterstitialAd((
+                                                  ad,
+                                                  reward,
+                                                ) {
+                                                  // Ad success: play the song and reset count
+                                                  print(
+                                                    'User earned reward: ${reward.amount} ${reward.type}',
+                                                  );
+                                                  playSong();
+                                                  _songPlayCount = 0;
+                                                });
 
-    // **NEW:** Listen for ad load failure
-    adManager.loadRewardedInterstitialAd(
-      onAdFailed: () {
-        // Ad failure: still play the song, but don't reset count.
-        // This is a business decision. You might want to let the user
-        // try again for a reward.
-        playSong();
-        _songPlayCount = 0; // Or don't reset it, it's your call.
-      },
-    );
-  } else {
-    // If ad counter is not met, just play the song
-    playSong();
-  }
-}, minVerticalPadding: 1,
+                                                // **NEW:** Listen for ad load failure
+                                                adManager.loadRewardedInterstitialAd(
+                                                  onAdFailed: () {
+                                                    // Ad failure: still play the song, but don't reset count.
+                                                    // This is a business decision. You might want to let the user
+                                                    // try again for a reward.
+                                                    playSong();
+                                                    _songPlayCount =
+                                                        0; // Or don't reset it, it's your call.
+                                                  },
+                                                );
+                                              } else {
+                                                // If ad counter is not met, just play the song
+                                                playSong();
+                                              }
+                                            },
+                                            minVerticalPadding: 1,
                                             trailing: Icon(
                                               Icons.more_vert_outlined,
                                             ),

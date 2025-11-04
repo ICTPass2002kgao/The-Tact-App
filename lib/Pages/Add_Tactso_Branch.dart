@@ -6,7 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:text_field_validation/text_field_validation.dart';
-import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/API.dart'; // Assuming API.dart is the file name
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Components/TextFields.dart';
 
@@ -27,24 +27,25 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
 
-  List<XFile> imageFiles = [];
+  // 💥 MODIFIED: Education Officer Details Controllers ONLY
+  final TextEditingController educationOfficerNameController =
+      TextEditingController();
+
+  List<XFile> imageFiles = []; // General University Images
+  // 💥 MODIFIED: Single officer face image file
+  XFile? educationOfficerImageFile;
+
   final ImagePicker _picker = ImagePicker();
 
   bool isApplicationOpen = false;
-
-  // NEW: State for handling multiple campuses
   bool hasMultipleCampuses = false;
   List<TextEditingController> campusNamesControllers = [];
-  List<Widget> campusNameInputFields =
-      []; // To hold the actual TextField widgets
+  List<Widget> campusNameInputFields = [];
 
   @override
   void initState() {
     super.initState();
-    // Initially add one campus input field if not using the single campus logic
-    // or if hasMultipleCampuses is true by default (though it's false here).
-    // If you always want at least one campus field, uncomment this:
-    // _addCampusInputField();
+    // Start with a single campus controller if needed, but the build() handles it
   }
 
   @override
@@ -54,11 +55,17 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     institutionAddressController.dispose();
     passwordController.dispose();
     emailController.dispose();
+
+    // 💥 MODIFIED: Dispose ONLY the Education Officer controller
+    educationOfficerNameController.dispose();
+
     for (var controller in campusNamesControllers) {
       controller.dispose();
     }
     super.dispose();
   }
+
+  // --- Image Pickers ---
 
   Future<void> pickImages() async {
     final picked = await _picker.pickMultiImage();
@@ -69,7 +76,18 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     }
   }
 
-  // NEW: Method to add a new campus input field dynamically
+  // 💥 MODIFIED: New function for Education Officer Image
+  Future<void> pickEducationOfficerImage() async {
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        educationOfficerImageFile = picked;
+      });
+    }
+  }
+
+  // --- Campus Logic (UNCHANGED) ---
+
   void _addCampusInputField() {
     final newController = TextEditingController();
     campusNamesControllers.add(newController);
@@ -100,7 +118,6 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
     });
   }
 
-  // NEW: Method to remove a campus input field dynamically
   void _removeCampusInputField(TextEditingController controllerToRemove) {
     setState(() {
       campusNamesControllers.remove(controllerToRemove);
@@ -114,109 +131,121 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
                       controllerToRemove),
             )),
       );
-      controllerToRemove.dispose(); // Dispose the controller when removed
+      controllerToRemove.dispose();
     });
   }
 
+  // --- Submission Logic (MODIFIED) ---
+
   Future<void> _addTactsoBranch() async {
-    // Basic validation to ensure required fields are not empty
+    // 💥 MODIFIED: Basic validation for single officer
     if (universityNameController.text.isEmpty ||
         applicationLinkController.text.isEmpty ||
         institutionAddressController.text.isEmpty ||
         emailController.text.isEmpty ||
         passwordController.text.isEmpty ||
-        imageFiles.isEmpty) {
+        imageFiles.isEmpty ||
+        educationOfficerImageFile == null ||
+        educationOfficerNameController.text.isEmpty ||
+        (campusNamesControllers.isEmpty && !hasMultipleCampuses) ||
+        (hasMultipleCampuses &&
+            campusNamesControllers.any((c) => c.text.isEmpty))) {
       Api().showMessage(
         context,
-        'Please fill in all general fields and upload images.',
+        'Please fill in all general fields, Education Officer details, campus names, and upload all images.',
         'Error',
         Theme.of(context).colorScheme.error,
       );
       return;
     }
 
-    // Validate campus names if multiple campuses are enabled
-
-    Api().showLoading(context); // Show loading indicator
+    Api().showLoading(context);
 
     try {
-      // Upload images to Firebase Storage
+      // 1. Upload University Images (UNCHANGED)
       List<String> imageUrls = [];
       for (var file in imageFiles) {
         final ref = FirebaseStorage.instance.ref(
-          "Tactso Branches/${universityNameController.text}/${DateTime.now().millisecondsSinceEpoch}_${file.name}",
+          "Tactso Branches/${universityNameController.text}/University_Images/${DateTime.now().millisecondsSinceEpoch}_${file.name}",
         );
         await ref.putFile(File(file.path));
         final url = await ref.getDownloadURL();
         imageUrls.add(url);
       }
 
-      // Create a Firebase user for this specific branch (email/password)
+      // 💥 MODIFIED: Upload Education Officer Face Image ONLY
+      final educationOfficerRef = FirebaseStorage.instance.ref(
+        "Tactso Branches/${universityNameController.text}/EducationOfficer/${educationOfficerNameController.text}_${DateTime.now().millisecondsSinceEpoch}",
+      );
+      await educationOfficerRef.putFile(File(educationOfficerImageFile!.path));
+      final educationOfficerImageUrl = await educationOfficerRef
+          .getDownloadURL();
+
+      // 3. Create Firebase Auth User (UNCHANGED)
       final userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: emailController.text,
             password: passwordController.text,
           );
 
-      // Prepare campus data to be stored
+      // 4. Prepare Campus Data (UNCHANGED)
       List<Map<String, dynamic>> campusesData = [];
-      if (hasMultipleCampuses) {
+      if (campusNamesControllers.isNotEmpty) {
         for (var campusController in campusNamesControllers) {
           campusesData.add({'campusName': campusController.text});
         }
-      } else {
-        // If not multiple campuses, add a single campus using the university name
-        // or a default campus name if that's your logic.
-        // For now, we'll add the first campus name from the controllers,
-        // which should be available if validation passed.
-        if (campusNamesControllers.isNotEmpty) {
-          campusesData.add({
-            'campusName':
-                campusNamesControllers.first.text, // Use the single campus name
-          });
-        }
       }
 
-      // Add the university and campus details to Firestore
-      await FirebaseFirestore.instance.collection('tactso_branches').add({
-        'universityName': universityNameController.text,
-        'email': userCredential.user!.email,
-        'uid': userCredential.user!.uid,
-        'imageUrl': imageUrls,
-        'hasMultipleCampuses': hasMultipleCampuses,
-        'campuses': campusesData, // Store the list of campuses
-        'createdAt': FieldValue.serverTimestamp(),
-        'applicationLink': applicationLinkController.text,
-        'address': institutionAddressController.text,
-        'isApplicationOpen': isApplicationOpen,
-      });
+      // 5. Add University/Branch Details to Firestore (MODIFIED)
+      await FirebaseFirestore.instance
+          .collection('tactso_branches')
+          .doc(userCredential.user!.uid)
+          .set({
+            'universityName': universityNameController.text,
+            'email': userCredential.user!.email,
+            'uid': userCredential.user!.uid,
+            'imageUrl': imageUrls,
+            'hasMultipleCampuses': hasMultipleCampuses,
+            'campuses': campusesData,
+            'createdAt': FieldValue.serverTimestamp(),
+            'applicationLink': applicationLinkController.text,
+            'address': institutionAddressController.text,
+            'isApplicationOpen': isApplicationOpen,
+            // 💥 MODIFIED: Officer Details for Biometric Access (ONLY Education Officer)
+            'educationOfficerName': educationOfficerNameController.text,
+            'educationOfficerFaceUrl': educationOfficerImageUrl,
+            'authorizedUserFaceUrls': [educationOfficerImageUrl],
+          });
 
-      Navigator.pop(context); // Dismiss loading dialog on success
+      Navigator.pop(context); // Dismiss loading dialog
       Api().showMessage(
         context,
-        'University "${universityNameController.text}" and its campuses added successfully!',
+        'University "${universityNameController.text}" and its campuses added successfully! Education Officer setup complete.',
         'Successful',
         Theme.of(context).splashColor,
       );
 
-      // Clear controllers and reset state after successful submission
+      // Clear controllers and reset state
       universityNameController.clear();
       applicationLinkController.clear();
       institutionAddressController.clear();
       emailController.clear();
       passwordController.clear();
+      educationOfficerNameController.clear();
+
       setState(() {
         imageFiles = [];
+        educationOfficerImageFile = null;
         isApplicationOpen = false;
         hasMultipleCampuses = false;
         for (var controller in campusNamesControllers) {
-          controller.dispose(); // Dispose each controller
+          controller.dispose();
         }
         campusNamesControllers.clear();
         campusNameInputFields.clear();
       });
     } on FirebaseAuthException catch (e) {
-      Navigator.pop(context); // Dismiss loading dialog on FirebaseAuth error
+      Navigator.pop(context);
       Api().showMessage(
         context,
         e.message ?? 'An authentication error occurred.',
@@ -224,7 +253,7 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
         Theme.of(context).colorScheme.error,
       );
     } catch (e) {
-      Navigator.pop(context); // Dismiss loading dialog on any other error
+      Navigator.pop(context);
       Api().showMessage(
         context,
         'Failed to add university/campus: $e',
@@ -237,15 +266,34 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+
+    // Ensure one controller exists for single campus mode, only if none exist
+    if (!hasMultipleCampuses && campusNamesControllers.isEmpty) {
+      campusNamesControllers.add(TextEditingController());
+    } else if (hasMultipleCampuses && campusNamesControllers.isEmpty) {
+      // If multiple is enabled but no fields, add one
+      _addCampusInputField();
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: ListView(
         children: [
           Text(
             'Add TACTSO University & Campus Details',
-            style: TextStyle(fontSize: 18),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color.primaryColor,
+            ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
+
+          // --- General University Images Picker ---
+          Text(
+            'University/Campus Images:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           Card(
             color: Colors.transparent,
             elevation: 10,
@@ -253,7 +301,7 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               onTap: () => pickImages(),
               child: Container(
                 alignment: Alignment.center,
-                height: 250,
+                height: 150,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: color.scaffoldBackgroundColor,
@@ -280,16 +328,20 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               padding: const EdgeInsets.all(18.0),
               child: Wrap(
                 spacing: 10,
+                runSpacing: 10,
                 children: imageFiles.map((file) {
                   return Image.file(
                     File(file.path),
-                    width: 100,
-                    height: 100,
+                    width: 80,
+                    height: 80,
                     fit: BoxFit.cover,
                   );
                 }).toList(),
               ),
             ),
+          const SizedBox(height: 20),
+
+          // --- General University Fields ---
           AuthTextField(
             onValidate: TextFieldValidation.name,
             placeholder: 'University Name (e.g., North-West University)',
@@ -315,11 +367,39 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
             placeholder: 'Password for University Admin Login',
             controller: passwordController,
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 20),
+
+          // 💥 MODIFIED: Education Officer Details for Biometric Access
+          Text(
+            'Biometric Access Officer (Education Officer)',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Education Officer Details
+          AuthTextField(
+            onValidate: TextFieldValidation.name,
+            placeholder: 'Education Officer Full Name',
+            controller: educationOfficerNameController,
+          ),
+          _buildOfficerImagePicker(
+            context,
+            'Education Officer Face Image',
+            'Upload Education Officer Face (From Gallery/Files)',
+            educationOfficerImageFile,
+            pickEducationOfficerImage,
+          ),
+          const SizedBox(height: 20),
+
+          // --- Campus Logic Section (UNCHANGED) ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              const Flexible(
                 child: Text(
                   'Does this University have multiple Campuses?',
                   style: TextStyle(fontSize: 16),
@@ -327,27 +407,29 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               ),
               Switch(
                 activeTrackColor: color.splashColor,
-                inactiveTrackColor: color.primaryColorDark,
-                inactiveThumbColor: color.scaffoldBackgroundColor,
-                focusColor: color.scaffoldBackgroundColor,
                 value: hasMultipleCampuses,
                 onChanged: (value) {
                   setState(() {
                     hasMultipleCampuses = value;
                     if (!hasMultipleCampuses) {
-                      // Clear campus fields if switch is turned off
-                      for (var controller in campusNamesControllers) {
-                        controller.dispose();
+                      // Clear all but one controller/field
+                      if (campusNamesControllers.length > 1) {
+                        for (
+                          var i = 1;
+                          i < campusNamesControllers.length;
+                          i++
+                        ) {
+                          campusNamesControllers[i].dispose();
+                        }
                       }
-                      campusNamesControllers.clear();
+                      campusNamesControllers.removeRange(
+                        1,
+                        campusNamesControllers.length,
+                      );
                       campusNameInputFields.clear();
-                      // Add one default campus field if you want one to always exist
-                      // _addCampusInputField(); // uncomment if you always want one default
-                    } else {
-                      // If enabling multiple campuses, ensure at least one input field exists
-                      if (campusNamesControllers.isEmpty) {
-                        _addCampusInputField();
-                      }
+                      // The single remaining controller will be handled below
+                    } else if (campusNamesControllers.isEmpty) {
+                      _addCampusInputField(); // Ensure at least one field if switching to multiple
                     }
                   });
                 },
@@ -355,17 +437,18 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               ),
             ],
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
+
           // Conditional display for adding campus names
           if (hasMultipleCampuses) ...[
-            Align(
+            const Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Add Campus Names:',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
-            ...campusNameInputFields, // Display dynamically added campus fields
+            ...campusNameInputFields,
             CustomOutlinedButton(
               onPressed: _addCampusInputField,
               text: "Add Another Campus",
@@ -373,28 +456,24 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               foregroundColor: color.scaffoldBackgroundColor,
               width: double.infinity,
             ),
-          ] else if (campusNamesControllers
-              .isEmpty) // If not multiple campuses, but no campus field exists, add one.
+          ] else if (campusNamesControllers.isNotEmpty) // Single campus field
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: AuthTextField(
                 onValidate: TextFieldValidation.name,
-                placeholder: 'Campus Name (e.g., Main Campus)',
-                controller: () {
-                  // Ensure there's always one controller for single campus mode
-                  if (campusNamesControllers.isEmpty) {
-                    campusNamesControllers.add(TextEditingController());
-                  }
-                  return campusNamesControllers.first;
-                }(),
+                placeholder:
+                    'Campus Name (e.g., Main Campus or Potchefstroom Campus)',
+                controller: campusNamesControllers.first,
               ),
             ),
 
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
+
+          // --- Application Open Switch ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              const Flexible(
                 child: Text(
                   'Is Application Open for this University/Campuses?',
                   style: TextStyle(fontSize: 16),
@@ -402,9 +481,6 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               ),
               Switch(
                 activeTrackColor: color.splashColor,
-                inactiveTrackColor: color.primaryColorDark,
-                inactiveThumbColor: color.scaffoldBackgroundColor,
-                focusColor: color.scaffoldBackgroundColor,
                 value: isApplicationOpen,
                 onChanged: (value) {
                   setState(() {
@@ -415,7 +491,9 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
               ),
             ],
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
+
+          // --- Submit Button ---
           CustomOutlinedButton(
             onPressed: _addTactsoBranch,
             text: "Add University & Campuses",
@@ -423,7 +501,43 @@ class _AddTactsoBranchState extends State<AddTactsoBranch> {
             foregroundColor: color.scaffoldBackgroundColor,
             width: double.infinity,
           ),
+          const SizedBox(height: 40),
         ],
+      ),
+    );
+  }
+
+  // Helper widget for officer image pickers (MODIFIED placeholder text)
+  Widget _buildOfficerImagePicker(
+    BuildContext context,
+    String title,
+    String placeholder,
+    XFile? file,
+    VoidCallback onTap,
+  ) {
+    final color = Theme.of(context);
+    return Card(
+      color: Colors.transparent,
+      elevation: 5,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          height: 100,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: color.scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.primaryColor, width: 1),
+          ),
+          child: Center(
+            child: Text(
+              file != null ? '$title Added! ✅' : placeholder,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: color.textTheme.bodyLarge?.color),
+            ),
+          ),
+        ),
       ),
     );
   }

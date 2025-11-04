@@ -1,101 +1,111 @@
-// // lib/Components/Audio_Handler.dart
-// import 'package:audio_service/audio_service.dart';
-// import 'package:just_audio/just_audio.dart'; 
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:rxdart/rxdart.dart'; // Import rxdart for the combineLatest stream
 
-// class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
-//   final _player = AudioPlayer();
-//   // Using a private, internal list of URIs to build the audio source.
-//   final _uriPlaylist = ConcatenatingAudioSource(children: []);
+class MyAudioHandler extends BaseAudioHandler {
+  final _player = AudioPlayer();
 
-//   MyAudioHandler() { 
-//     _player.playbackEventStream.map(_transformEvent).pipe(playbackState); 
+  MyAudioHandler() {
+    // We listen to the JustAudio streams and combine them to produce a single
+    // PlaybackState stream. This is the recommended robust pattern.
+    _listenForPlaybackStateChanges(); 
+
+    // Initialize playback state immediately
+    playbackState.add(playbackState.value.copyWith(
+        controls: [MediaControl.play, MediaControl.stop],
+        processingState: AudioProcessingState.idle,
+        playing: false, 
+      ));
+  }
+
+  /// Combines the streams from just_audio to produce a single stream of PlaybackState.
+  void _listenForPlaybackStateChanges() {
+    // Listen to all relevant player streams
+    Rx.combineLatest4<ProcessingState, bool, Duration, Duration?, PlaybackState>(
+      _player.processingStateStream,
+      _player.playingStream,
+      _player.positionStream.throttleTime(const Duration(seconds: 1)), // Throttle position updates
+      _player.bufferedPositionStream,
+      (processingState, playing, position, bufferedPosition) {
+        // Map JustAudio's ProcessingState to AudioService's AudioProcessingState
+        final audioServiceProcessingState = const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[processingState] ?? AudioProcessingState.idle;
+
+        // Construct the PlaybackState
+        return playbackState.value.copyWith(
+          // Use updatePosition (older audio_service) or position (newer audio_service)
+          // We use 'updatePosition' for maximum compatibility based on your error report
+          updatePosition: position, 
+          bufferedPosition: bufferedPosition ?? Duration.zero,
+          playing: playing,
+          processingState: audioServiceProcessingState, 
+          
+          controls: [
+            MediaControl.skipToPrevious,
+            playing ? MediaControl.pause : MediaControl.play,
+            MediaControl.skipToNext,
+            MediaControl.stop,
+          ],
+        );
+      },
+    ).listen((state) => playbackState.add(state));
+
+    // Also listen to duration changes separately to update the MediaItem
+    _player.durationStream.listen((duration) {
+      final media = mediaItem.value;
+      if (media != null && duration != null) {
+        mediaItem.add(media.copyWith(duration: duration));
+      }
+    });
     
-//     _player.currentIndexStream.listen((index) {
-//       if (index != null && queue.value.isNotEmpty) {
-//         // 🐛 FIX: Update mediaItem when the index changes
-//         mediaItem.add(queue.value[index]); 
-//       }
-//     });
-//   } 
-  
-//   // Renamed to avoid conflict with BaseAudioHandler's updateQueue
-//   Future<void> loadNewPlaylist(List<MediaItem> songs, int initialIndex) async {
-//     // 1. Convert MediaItems to AudioSources
-//     final newSources = songs.map((item) {
-//       // You must handle empty ID/URI gracefully
-//       if (item.id.isEmpty) {
-//         return AudioSource.uri(Uri.parse('asset:///assets/audio/empty_track.mp3'), tag: item);
-//       }
-//       return AudioSource.uri(Uri.parse(item.id), tag: item);
-//     }).toList();
-    
-//     // 2. Update internal just_audio source
-//     await _uriPlaylist.clear();
-//     await _uriPlaylist.addAll(newSources);
-//     await _player.setAudioSource(_uriPlaylist, initialIndex: initialIndex, preload: true);
-    
-//     // 3. Update audio_service queue (This is what the notification/OS sees)
-//     queue.add(songs);
+    // Listen for completion (optional, as the state listener covers it)
+    // _player.playerStateStream.listen((playerState) {
+    //   if (playerState.processingState == ProcessingState.completed) {
+    //     // Handle next song or stop playback if PlaySong isn't managing it
+    //   }
+    // });
+  }
 
-//     // 4. Update the current item based on the initial index
-//     if (initialIndex < songs.length) {
-//       mediaItem.add(songs[initialIndex]);
-//     }
+  // Custom method used by PlaySong to load and start a new song
+  Future<void> playSong(String url, String title, String artist) async {
+    final item = MediaItem(
+      id: url,
+      title: title,
+      artist: artist,
+      artUri: Uri.parse('https://cdn-icons-png.flaticon.com/512/727/727245.png'),
+    );
 
-//     // Update controls after loading
-//     playbackState.add(playbackState.value.copyWith(controls: [
-//       MediaControl.skipToPrevious, MediaControl.pause, MediaControl.skipToNext, MediaControl.stop
-//     ]));
-//   }
- 
-//   // Implement skipToQueueItem required by your calling function
-//   @override
-//   Future<void> skipToQueueItem(int index) async {
-//     if (index < queue.value.length) {
-//       await _player.seek(Duration.zero, index: index);
-//       // The currentIndexStream listener handles mediaItem.add()
-//     }
-//   }
+    mediaItem.add(item); 
+    await _player.setUrl(url); 
+    await _player.play();
+  }
 
-//   @override
-//   Future<void> play() => _player.play();
-//   @override
-//   Future<void> pause() => _player.pause();
-//   @override
-//   Future<void> stop() async {
-//     await _player.stop();
-//     // This is required to remove the notification/service
-//     await super.stop();
-//   }
-//   @override
-//   Future<void> skipToNext() => _player.seekToNext();
-//   @override
-//   Future<void> skipToPrevious() => _player.seekToPrevious();
-//   @override
-//   Future<void> seek(Duration position) => _player.seek(position);
- 
-//   PlaybackState _transformEvent(PlaybackEvent event) {
-//     return PlaybackState(
-//       controls: [
-//         MediaControl.skipToPrevious,
-//         _player.playing ? MediaControl.pause : MediaControl.play,
-//         MediaControl.skipToNext,
-//         MediaControl.stop,
-//       ],
-//       systemActions: const {MediaAction.seek, MediaAction.skipToNext, MediaAction.skipToPrevious},
-//       androidCompactActionIndices: const [0, 1, 2],
-//       processingState: const {
-//         ProcessingState.idle: AudioProcessingState.idle,
-//         ProcessingState.loading: AudioProcessingState.loading,
-//         ProcessingState.buffering: AudioProcessingState.buffering,
-//         ProcessingState.ready: AudioProcessingState.ready,
-//         ProcessingState.completed: AudioProcessingState.completed,
-//       }[_player.processingState] ?? AudioProcessingState.idle, // Added null check/default
-//       playing: _player.playing,
-//       updatePosition: _player.position,
-//       bufferedPosition: _player.bufferedPosition,
-//       speed: _player.speed,
-//       queueIndex: event.currentIndex,
-//     );
-//   }
-// }
+  // --- BaseAudioHandler Overrides ---
+
+  @override
+  Future<void> play() => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> stop() => _player.stop();
+
+  @override
+  // Correctly uses positional argument for JustAudio's seek method.
+  Future<void> seek(Duration position) {
+    return _player.seek(position); 
+  }
+
+  // Skip methods remain empty as their logic is in PlaySong.dart
+  @override
+  Future<void> skipToNext() async {}
+
+  @override
+  Future<void> skipToPrevious() async {}
+}

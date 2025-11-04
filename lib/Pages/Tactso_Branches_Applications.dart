@@ -51,6 +51,7 @@ class _TactsoBranchesApplicationsState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   String? _universityName;
+  String? _adminEmail; // Store admin email for the welcome banner
   String? _currentuid;
   bool _isLoadingUniversityData = true;
 
@@ -72,6 +73,8 @@ class _TactsoBranchesApplicationsState
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
       _currentuid = currentUser.uid;
+      _adminEmail = currentUser.email; // Get email from Auth user
+
       try {
         DocumentSnapshot universityDoc = await _firestore
             .collection('tactso_branches')
@@ -80,19 +83,13 @@ class _TactsoBranchesApplicationsState
 
         if (universityDoc.exists) {
           setState(() {
-            _universityName = universityDoc['name'];
+            _universityName =
+                universityDoc['educationOfficerName'] ?? 'University Admin';
           });
         }
       } catch (e) {
         print('Error fetching university data: $e');
-        if (mounted) {
-          Api().showMessage(
-            context,
-            'Error',
-            'Could not load university data.',
-            CupertinoColors.systemRed,
-          );
-        }
+        if (mounted) {}
       }
     }
     setState(() {
@@ -103,6 +100,7 @@ class _TactsoBranchesApplicationsState
   Future<void> _logout() async {
     await _auth.signOut();
     if (mounted) {
+      // NOTE: Assuming '/login' is the route name for your login page
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     }
   }
@@ -182,8 +180,8 @@ class _TactsoBranchesApplicationsState
 
   // Function to launch URL for document download
   Future<void> _launchUrl(String url) async {
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    if (await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
+      // Success, nothing to do
     } else {
       if (mounted) {
         Api().showMessage(
@@ -216,7 +214,10 @@ class _TactsoBranchesApplicationsState
             return CupertinoActionSheet(
               title: Text(
                 'Application Details for ${applicationDetails['fullName'] ?? 'Applicant'}',
-                style: TextStyle(color: colorScheme.primaryColor),
+                style: TextStyle(
+                  color: colorScheme.primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               message: SingleChildScrollView(
                 child: Column(
@@ -252,7 +253,7 @@ class _TactsoBranchesApplicationsState
                     _buildDetailRow(
                       'Third Program:',
                       applicationDetails['thirdChoiceProgram'],
-                    ), 
+                    ),
                     _buildDetailRow(
                       'Applying for Residence:',
                       (applicationDetails['applyingForResidence'] ?? false)
@@ -306,7 +307,7 @@ class _TactsoBranchesApplicationsState
                         color: colorScheme.primaryColor,
                       ),
                     ),
-                    // Loop through documents (assuming 'documents' is a Map in applicationDetails)
+                    // Loop through documents
                     if (applicationDetails['documents'] is Map &&
                         (applicationDetails['documents'] as Map).isNotEmpty)
                       ...(applicationDetails['documents'] as Map).entries.map((
@@ -315,7 +316,7 @@ class _TactsoBranchesApplicationsState
                         String docName = entry.key
                             .toString()
                             .replaceAll('_', ' ')
-                            .toUpperCase(); // e.g., 'proof_of_id' -> 'PROOF OF ID'
+                            .toUpperCase();
                         String docUrl = entry.value.toString();
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -324,7 +325,11 @@ class _TactsoBranchesApplicationsState
                             onPressed: () => _launchUrl(docUrl),
                             child: Row(
                               children: [
-                                const Icon(CupertinoIcons.doc_fill, size: 20),
+                                const Icon(
+                                  CupertinoIcons.doc_fill,
+                                  size: 20,
+                                  color: CupertinoColors.activeBlue,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -333,8 +338,7 @@ class _TactsoBranchesApplicationsState
                                       color: colorScheme.primaryColor,
                                       decoration: TextDecoration.underline,
                                     ),
-                                    overflow: TextOverflow
-                                        .ellipsis, // Handle long URLs
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -393,7 +397,10 @@ class _TactsoBranchesApplicationsState
                 CupertinoActionSheetAction(
                   child: Text(
                     'Update Status',
-                    style: TextStyle(color: colorScheme.primaryColor),
+                    style: TextStyle(
+                      color: colorScheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   onPressed: () {
                     if (_selectedStatus != null &&
@@ -435,7 +442,6 @@ class _TactsoBranchesApplicationsState
   }
 
   Widget _buildDetailRow(String label, dynamic value) {
-    // Ensure value is displayed as string, or 'N/A' if null/empty
     String displayValue = (value == null || (value is String && value.isEmpty))
         ? 'N/A'
         : value.toString();
@@ -445,7 +451,7 @@ class _TactsoBranchesApplicationsState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 140, // Slightly wider for labels
+            width: 150, // Slightly wider for labels
             child: Text(
               label,
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -456,6 +462,56 @@ class _TactsoBranchesApplicationsState
       ),
     );
   }
+
+  // --- NEW: Custom Widget for the Welcome Banner ---
+  Widget _buildWelcomeBanner(BuildContext context) {
+    final color = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20.0),
+      margin: const EdgeInsets.only(bottom: 20.0),
+      decoration: BoxDecoration(
+        color: color.primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(15.0),
+        border: Border.all(color: color.primaryColor, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome Back, Admin!',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: color.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _universityName ?? 'University Admin',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color.textTheme.bodyLarge?.color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(CupertinoIcons.mail_solid, size: 16, color: color.hintColor),
+              const SizedBox(width: 5),
+              Text(
+                _adminEmail ?? 'No Email Found',
+                style: TextStyle(fontSize: 14, color: color.hintColor),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- End Custom Widget ---
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +564,7 @@ class _TactsoBranchesApplicationsState
     return CupertinoTabScaffold(
       tabBar: CupertinoTabBar(
         backgroundColor: color.appBarTheme.backgroundColor,
-        activeColor: color.scaffoldBackgroundColor,
+        activeColor: color.primaryColor, // Use primary color for active tab
         inactiveColor: color.hintColor,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
@@ -526,47 +582,18 @@ class _TactsoBranchesApplicationsState
           builder: (BuildContext context) {
             return Scaffold(
               appBar: AppBar(
-                title: Text(
-                  '${_universityName ?? 'University'} Admin Dashboard',
-                ),
+                title: Text('${_universityName ?? 'University'} Admin Console'),
                 backgroundColor: color.primaryColor,
                 foregroundColor: color.scaffoldBackgroundColor,
+                actions: [
+                  IconButton(
+                    icon: const Icon(CupertinoIcons.square_arrow_right),
+                    onPressed: _logout,
+                    tooltip: 'Logout',
+                  ),
+                ],
               ),
-              drawer: Drawer(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    DrawerHeader(
-                      decoration: BoxDecoration(color: color.primaryColor),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Welcome,',
-                            style: TextStyle(
-                              color: color.scaffoldBackgroundColor,
-                              fontSize: 18,
-                            ),
-                          ),
-                          Text(
-                            _universityName ?? 'University Admin',
-                            style: TextStyle(
-                              color: color.scaffoldBackgroundColor,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ListTile(
-                      leading: const Icon(CupertinoIcons.square_arrow_right),
-                      title: const Text('Logout'),
-                      onTap: _logout,
-                    ),
-                  ],
-                ),
-              ),
+              // Removed Drawer as the logout is now in the AppBar Actions
               body: index == 0
                   ? _buildDashboardTab(context)
                   : _buildApplicationsTab(context),
@@ -579,227 +606,157 @@ class _TactsoBranchesApplicationsState
 
   Widget _buildDashboardTab(BuildContext context) {
     final color = Theme.of(context);
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildWelcomeBanner(context), // 💥 NEW WELCOME BANNER
+
           Text(
-            'Overview',
+            'Application Metrics',
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: color.primaryColor,
             ),
           ),
-          const SizedBox(height: 20),
+          const Divider(height: 20, thickness: 1),
+
           // Total Applications Card
-          StreamBuilder<QuerySnapshot>(
-            stream: _firestore
+          _buildMetricCard(
+            context,
+            'Total Applications Received',
+            CupertinoColors.systemBlue,
+            CupertinoIcons.collections_solid,
+            _firestore
                 .collection('tactso_branches')
                 .doc(_currentuid)
                 .collection('application_requests')
                 .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CupertinoActivityIndicator());
-              }
-              if (snapshot.hasError) {
-                return Text(
-                  'Error loading total applications: ${snapshot.error}',
-                  style: const TextStyle(color: CupertinoColors.systemRed),
-                );
-              }
-              final totalApplications = snapshot.data?.docs.length ?? 0;
-              return Card(
-                color: CupertinoColors.systemBlue.withOpacity(0.1),
-                elevation: 4,
-                margin: const EdgeInsets.only(bottom: 16.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total Applications',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.activeBlue,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$totalApplications',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.activeBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            (snapshot) => snapshot.data?.docs.length ?? 0,
           ),
           // New Applications Card
-          StreamBuilder<QuerySnapshot>(
-            stream: _firestore
+          _buildMetricCard(
+            context,
+            'New Applications (Pending Review)',
+            CupertinoColors.systemOrange,
+            CupertinoIcons.envelope_badge_fill,
+            _firestore
                 .collection('tactso_branches')
                 .doc(_currentuid)
                 .collection('application_requests')
                 .where('status', isEqualTo: 'New')
                 .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CupertinoActivityIndicator());
-              }
-              if (snapshot.hasError) {
-                return Text(
-                  'Error loading new applications: ${snapshot.error}',
-                  style: const TextStyle(color: CupertinoColors.systemRed),
-                );
-              }
-              final newApplications = snapshot.data?.docs.length ?? 0;
-              return Card(
-                color: CupertinoColors.systemOrange.withOpacity(0.1),
-                elevation: 4,
-                margin: const EdgeInsets.only(bottom: 16.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'New Applications (Pending Review)',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.systemOrange,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$newApplications',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.systemOrange,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            (snapshot) => snapshot.data?.docs.length ?? 0,
           ),
           // Reviewed Applications Card
-          StreamBuilder<QuerySnapshot>(
-            stream: _firestore
+          _buildMetricCard(
+            context,
+            'Applications Reviewed',
+            CupertinoColors.systemGreen,
+            CupertinoIcons.checkmark_shield_fill,
+            _firestore
                 .collection('tactso_branches')
                 .doc(_currentuid)
                 .collection('application_requests')
                 .where('status', isEqualTo: 'Reviewed')
                 .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CupertinoActivityIndicator());
-              }
-              if (snapshot.hasError) {
-                return Text(
-                  'Error loading reviewed applications: ${snapshot.error}',
-                  style: const TextStyle(color: CupertinoColors.systemRed),
-                );
-              }
-              final reviewedApplications = snapshot.data?.docs.length ?? 0;
-              return Card(
-                color: CupertinoColors.systemGreen.withOpacity(0.1),
-                elevation: 4,
-                margin: const EdgeInsets.only(bottom: 16.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Applications Reviewed',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.activeGreen,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$reviewedApplications',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.activeGreen,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            (snapshot) => snapshot.data?.docs.length ?? 0,
           ),
           // Applied Applications Card
-          StreamBuilder<QuerySnapshot>(
-            stream: _firestore
+          _buildMetricCard(
+            context,
+            'Applications Sent to University (Applied)',
+            CupertinoColors.systemPurple,
+            CupertinoIcons.rocket_fill,
+            _firestore
                 .collection('tactso_branches')
                 .doc(_currentuid)
                 .collection('application_requests')
-                .where('status', isEqualTo: 'Applied')
+                .where('status', isEqualTo: 'Application Submitted')
                 .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CupertinoActivityIndicator());
-              }
-              if (snapshot.hasError) {
-                return Text(
-                  'Error loading applied applications: ${snapshot.error}',
-                  style: const TextStyle(color: CupertinoColors.systemRed),
-                );
-              }
-              final appliedApplications = snapshot.data?.docs.length ?? 0;
-              return Card(
-                color: CupertinoColors.systemPurple.withOpacity(0.1),
-                elevation: 4,
-                margin: const EdgeInsets.only(bottom: 16.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Applications Sent to University (Applied)',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.systemPurple,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$appliedApplications',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: CupertinoColors.systemPurple,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            (snapshot) => snapshot.data?.docs.length ?? 0,
           ),
         ],
       ),
     );
   }
+
+  // --- NEW: Helper Widget for Metric Cards ---
+  Widget _buildMetricCard(
+    BuildContext context,
+    String title,
+    Color color,
+    IconData icon,
+    Stream<QuerySnapshot> stream,
+    int Function(AsyncSnapshot<QuerySnapshot> snapshot) countExtractor,
+  ) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            margin: EdgeInsets.only(bottom: 16.0),
+            child: SizedBox(
+              height: 100,
+              child: Center(child: CupertinoActivityIndicator()),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return Card(
+            color: color.withOpacity(0.1),
+            margin: const EdgeInsets.only(bottom: 16.0),
+            child: Text('Error: ${snapshot.error}'),
+          );
+        }
+
+        final count = countExtractor(snapshot);
+
+        return Card(
+          color: color.withOpacity(0.1),
+          elevation: 0, // Less prominent elevation
+          margin: const EdgeInsets.only(bottom: 16.0),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(icon, size: 32, color: color),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+  // --- End Helper Widget ---
 
   Widget _buildApplicationsTab(BuildContext context) {
     final color = Theme.of(context);
@@ -828,7 +785,7 @@ class _TactsoBranchesApplicationsState
             child: Padding(
               padding: EdgeInsets.all(16.0),
               child: Text(
-                'No new or reviewed applications currently pending action.',
+                '🎉 All caught up! No new or reviewed applications pending action.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18),
               ),
@@ -846,20 +803,14 @@ class _TactsoBranchesApplicationsState
                 application['applicationDetails'] as Map<String, dynamic>?;
 
             if (applicationDetails == null) {
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
+              return const Padding(
+                padding: EdgeInsets.all(8.0),
                 child: Card(
-                  color: color.scaffoldBackgroundColor,
-                  margin: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: CupertinoListTile(
-                      title: const Text('Invalid Application Data'),
-                      subtitle: Text('Document ID: ${doc.id}'),
-                      leading: const Icon(
-                        CupertinoIcons.xmark_circle_fill,
-                        color: CupertinoColors.systemRed,
-                      ),
+                  child: CupertinoListTile(
+                    title: Text('Invalid Application Data'),
+                    leading: Icon(
+                      CupertinoIcons.xmark_circle_fill,
+                      color: CupertinoColors.systemRed,
                     ),
                   ),
                 ),
@@ -878,76 +829,97 @@ class _TactsoBranchesApplicationsState
                   ).format(submissionTimestamp.toDate())
                 : 'N/A';
 
+            Color statusColor = currentStatus == 'New'
+                ? CupertinoColors.systemOrange
+                : CupertinoColors.systemGreen;
+
             return Card(
-              color: color.scaffoldBackgroundColor.withOpacity(0.8),
-              elevation: 2,
-              margin: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: CupertinoListTile(
-                  title: Text(
-                    'Applicant: $fullName',
-                    style: TextStyle(color: color.textTheme.bodyLarge?.color),
+              color: color.scaffoldBackgroundColor,
+              elevation: 4,
+              shadowColor: statusColor.withOpacity(0.5),
+              margin: const EdgeInsets.symmetric(
+                vertical: 8.0,
+                horizontal: 4.0,
+              ),
+              child: CupertinoListTile(
+                title: Text(
+                  fullName,
+                  style: TextStyle(
+                    color: color.textTheme.bodyLarge?.color,
+                    fontWeight: FontWeight.bold,
                   ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Program: $primaryProgram',
-                        style: TextStyle(color: color.hintColor),
-                      ),
-                      Text(
-                        'Current Status: $currentStatus',
-                        style: TextStyle(
-                          color: color.hintColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Submitted on: $submissionDate',
-                        style: TextStyle(color: color.hintColor),
-                      ),
-                    ],
-                  ),
-                  trailing: const Icon(
-                    CupertinoIcons.chevron_right,
-                    color: CupertinoColors.systemGrey,
-                  ),
-                  onTap: () async {
-                    String initialStatus = application['status'] ?? 'New';
-                    if (initialStatus == 'New') {
-                      await _updateApplicationStatus(
-                        applicationId: doc.id,
-                        newStatus: 'Reviewed',
-                        globalApplicationRequestId:
-                            application['globalApplicationRequestId'],
-                        userId: application['userId'],
-                      );
-                    }
-
-                    await Future.delayed(const Duration(milliseconds: 500));
-                    DocumentSnapshot updatedDoc = await _firestore
-                        .collection('tactso_branches')
-                        .doc(_currentuid)
-                        .collection('application_requests')
-                        .doc(doc.id)
-                        .get();
-
-                    if (updatedDoc.exists) {
-                      _showApplicationDetails(
-                        updatedDoc.data() as Map<String, dynamic>,
-                        updatedDoc.id,
-                      );
-                    } else {
-                      Api().showMessage(
-                        context,
-                        'Error',
-                        'Application not found after update.',
-                        CupertinoColors.systemRed,
-                      );
-                    }
-                  },
                 ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Program: $primaryProgram',
+                      style: TextStyle(color: color.hintColor),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8.0,
+                          height: 8.0,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Status: $currentStatus',
+                          style: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Submitted: $submissionDate',
+                      style: TextStyle(color: color.hintColor, fontSize: 12),
+                    ),
+                  ],
+                ),
+                trailing: const Icon(
+                  CupertinoIcons.chevron_right,
+                  color: CupertinoColors.systemGrey,
+                ),
+                onTap: () async {
+                  String initialStatus = application['status'] ?? 'New';
+                  if (initialStatus == 'New') {
+                    await _updateApplicationStatus(
+                      applicationId: doc.id,
+                      newStatus: 'Reviewed',
+                      globalApplicationRequestId:
+                          application['globalApplicationRequestId'],
+                      userId: application['userId'],
+                    );
+                  }
+
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  DocumentSnapshot updatedDoc = await _firestore
+                      .collection('tactso_branches')
+                      .doc(_currentuid)
+                      .collection('application_requests')
+                      .doc(doc.id)
+                      .get();
+
+                  if (updatedDoc.exists) {
+                    _showApplicationDetails(
+                      updatedDoc.data() as Map<String, dynamic>,
+                      updatedDoc.id,
+                    );
+                  } else {
+                    Api().showMessage(
+                      context,
+                      'Error',
+                      'Application not found after update.',
+                      CupertinoColors.systemRed,
+                    );
+                  }
+                },
               ),
             );
           },

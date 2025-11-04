@@ -40,20 +40,13 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.0.13"
+        versionCode = 17
+        versionName = "1.0.17"
         
         // FIXED: Kotlin DSL syntax for manifestPlaceholders
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
     }
-
-    configurations.all {
-        resolutionStrategy {
-            force("com.stripe:financial-connections:21.20.2")
-            force("com.stripe:financial-connections-core:21.20.2")
-        }
-    }
-
+ 
     // --- START: CUSTOM CODE FOR RELEASE SIGNING ---
     signingConfigs {
         create("release") {
@@ -82,10 +75,7 @@ flutter {
     source = "../.."
 }
 
-dependencies {
-    implementation("com.stripe:stripe-android:21.20.2") {
-        exclude(group = "com.stripe", module = "financial-connections")
-    }
+dependencies { 
     // FIXED: Kotlin DSL syntax for dependencies
     implementation("com.google.android.gms:play-services-ads:22.6.0")
 }

@@ -1,9 +1,11 @@
+// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:text_field_validation/text_field_validation.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:ttact/Components/TextFields.dart';
+import 'package:ttact/Components/TextFields.dart'; // Note: Assuming this is correct, but typically named 'TextField.dart'
 
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});
@@ -14,67 +16,179 @@ class ForgotPassword extends StatefulWidget {
 
 class _ForgotPasswordState extends State<ForgotPassword> {
   final TextEditingController emailController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    super.dispose();
+  }
+
+  // Custom reset logic to handle form validation and Firebase call
+  Future<void> _handlePasswordReset() async {
+    final color = Theme.of(context);
+
+    // 1. Validate the form (checks both empty and valid email)
+    if (_formKey.currentState?.validate() ?? false) {
+      Api().showLoading(context);
+
+      try {
+        FirebaseAuth auth = FirebaseAuth.instance;
+        await auth.sendPasswordResetEmail(email: emailController.text.trim());
+
+        if (!context.mounted) return;
+        Navigator.pop(context); // Close loading dialog
+
+        Api().showMessage(
+          context,
+          'Password reset link sent to ${emailController.text.trim()}',
+          'Success',
+          color.splashColor,
+        );
+
+        // Optionally, pop the ForgotPassword screen after success
+        // Navigator.pop(context);
+      } on FirebaseAuthException catch (e) {
+        if (!context.mounted) return;
+        Navigator.pop(context); // Close loading dialog
+
+        String errorMessage;
+        if (e.code == 'user-not-found') {
+          errorMessage = 'No user found for that email address.';
+        } else {
+          errorMessage = e.message ?? 'An unknown error occurred.';
+        }
+
+        Api().showMessage(
+          context,
+          errorMessage,
+          'Error',
+          color.primaryColorDark,
+        );
+      } catch (e) {
+        if (!context.mounted) return;
+        Navigator.pop(context); // Close loading dialog
+
+        Api().showMessage(
+          context,
+          'An unexpected error occurred: ${e.toString()}',
+          'Error',
+          color.primaryColorDark,
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+
     return Scaffold(
+      // Set Scaffold background to transparent for the gradient
+      backgroundColor: Colors.transparent,
+
       appBar: AppBar(
         title: Text('Forgot Password'),
-        centerTitle: true,
-        backgroundColor: color.primaryColor,
-        foregroundColor: color.scaffoldBackgroundColor,
+        centerTitle: true, 
+        backgroundColor: color.scaffoldBackgroundColor.withOpacity(0.8),
+        elevation: 0, // Remove shadow
+        foregroundColor: color.primaryColor,
       ),
-      backgroundColor: color.scaffoldBackgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(18.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Please enter your email address to reset your password.',
-                style: TextStyle(fontSize: 16, color: color.primaryColor),
-                textAlign: TextAlign.center,
+
+      // Apply the Gradient to the entire body container
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            tileMode: TileMode.mirror,
+            transform: GradientRotation(6.28 / 2),
+            colors: [
+              color.scaffoldBackgroundColor,
+              color.primaryColor.withOpacity(0.6),
+              color.hintColor,
+            ],
+          ),
+        ),
+
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Container(
+              constraints: BoxConstraints(maxWidth: 450),
+              // Wrap content in a Card for the clean, contained look
+              child: Card(
+                elevation: 10,
+                color: color.primaryColor.withOpacity(0.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(30.0),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Reset Your Password',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: color.scaffoldBackgroundColor,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Enter your account email address below and we will send you a link to reset your password.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: color.hintColor,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 30),
+
+                        // Email Field with better styling
+                        AuthTextField(
+                          onValidate: (value) =>
+                              TextFieldValidation.email(value!),
+                          placeholder: 'Email Address',
+                          controller: emailController,
+                          // Ensure text field background is white for contrast against the card
+                          // Note: If AuthTextField doesn't expose a style property, it might not look right.
+                          // Assuming your custom component handles internal styling well.
+                        ),
+                        SizedBox(height: 30),
+
+                        // Reset Button
+                        CustomOutlinedButton(
+                          onPressed: _handlePasswordReset,
+                          text: 'Send Reset Link',
+                          backgroundColor: color.primaryColor,
+                          foregroundColor: Colors.white,
+                          width: double.infinity,
+                        ),
+                        SizedBox(height: 10),
+
+                        // Back to Login Button (Optional but useful)
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Back to Login',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-            AuthTextField(
-              onValidate: TextFieldValidation.email,
-              placeholder: 'Email Address',
-              controller: emailController,
-            ),
-            SizedBox(height: 20),
-            CustomOutlinedButton(
-              onPressed: () async {
-                if (emailController.text.isNotEmpty &&
-                    TextFieldValidation.email(emailController.text) == null) {
-                  Api().showLoading(context);
-                  FirebaseAuth auth = FirebaseAuth.instance;
-                  await auth.sendPasswordResetEmail(
-                    email: emailController.text,
-                  );
-                  Navigator.pop(context);
-                  Api().showMessage(
-                    context,
-                    'Password reset link sent to ${emailController.text}',
-                    'Success',
-                    color.splashColor,
-                  );
-                } else {
-                  Api().showMessage(
-                    context,
-                    'Please enter a valid email address',
-                    'Error',
-                    color.primaryColorDark,
-                  );
-                }
-              },
-              text: 'Reset Password',
-              backgroundColor: color.primaryColor,
-              foregroundColor: color.scaffoldBackgroundColor,
-              width: double.infinity,
-            ),
-          ],
+          ),
         ),
       ),
     );

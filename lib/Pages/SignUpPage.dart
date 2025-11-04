@@ -7,9 +7,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
- import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http;
 import 'package:ttact/Components/AdBanner.dart';
- 
+
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
 
@@ -187,7 +187,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   TextEditingController txtPassword = TextEditingController();
   TextEditingController txtConfirmPassword = TextEditingController();
-   bool _obscurePassword = true;
+  bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool isChecked = false;
   Api backendService = Api();
@@ -1014,6 +1014,9 @@ class _SignUpPageState extends State<SignUpPage> {
                 foregroundColor: colorScheme.scaffoldBackgroundColor,
                 text: 'SIGN UP',
                 onPressed: () async {
+
+      Api().showLoading(context);
+                  await _getAddress();
                   if (!_validateFields()) {
                     return;
                   }
@@ -1082,11 +1085,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         'Account details updated successfully!',
                         colorScheme.splashColor,
                       );
-                      adManager.showRewardedInterstitialAd((ad, reward) {
-                        print(
-                          'User earned reward: ${reward.amount} ${reward.type}',
-                        );
-                      });
+                      if (Platform.isAndroid) {
+                        adManager.showRewardedInterstitialAd((ad, reward) {
+                          print(
+                            'User earned reward: ${reward.amount} ${reward.type}',
+                          );
+                        });
+                      }
                       Navigator.pushNamed(context, '/main-menu');
                     }
                   } catch (e) {

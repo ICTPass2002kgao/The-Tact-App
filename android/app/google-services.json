@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "219784074240-lqnl15gqj62rcdk1v01v6hakpik81usa.apps.googleusercontent.com",
+          "client_id": "219784074240-in4p1nmutaqb8nfehikns0fj091tm6rl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.thetact.ttact",
-            "certificate_hash": "4b9ee7f8571977abadaee8239e4eb3832c9d0be5"
+            "certificate_hash": "d9a87df044318946708075f0e85b756cfbe68635"
           }
         },
         {
@@ -47,7 +47,8 @@
             }
           ]
         }
-      }
+      },
+      "admob_app_id": "ca-app-pub-6759693957212853~5704923982"
     }
   ],
   "configuration_version": "1"

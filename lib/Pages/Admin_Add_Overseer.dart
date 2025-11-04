@@ -58,87 +58,100 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     overseerAddressController.dispose();
     super.dispose();
   }
+Future<void> addOverseer() async {
+  Api().showLoading(context);
+  FirebaseAuth auth = FirebaseAuth.instance;
 
-  Future<void> addOverseer() async {
-    Api().showLoading(context);
-    FirebaseAuth auth = FirebaseAuth.instance;
-
-    if (overseerNameController.text.isEmpty ||
-        overseerSurnameController.text.isEmpty ||
-        overseerEmailController.text.isEmpty ||
-        overseerPasswordController.text.isEmpty ||
-        selectedProvince == null) {
-      if (mounted) {
-        Navigator.pop(context);
-        Api().showMessage(
-          context,
-          'Please fill in all fields',
-          'Error',
-          Theme.of(context).primaryColorDark,
-        );
-      }
-      return;
-    }
-
-    try {
-      var userCredential = await auth.createUserWithEmailAndPassword(
-        email: overseerEmailController.text,
-        password: overseerPasswordController.text,
+  if (overseerNameController.text.isEmpty ||
+      overseerSurnameController.text.isEmpty ||
+      overseerEmailController.text.isEmpty ||
+      overseerPasswordController.text.isEmpty ||
+      selectedProvince == null) {
+    if (mounted) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Please fill in all fields',
+        'Error',
+        Theme.of(context).primaryColorDark,
       );
+    }
+    return;
+  }
 
-      if (!mounted) return;
+  try {
+    var userCredential = await auth.createUserWithEmailAndPassword(
+      email: overseerEmailController.text,
+      password: overseerPasswordController.text,
+    );
 
-      FirebaseFirestore firestore = FirebaseFirestore.instance;
-      await firestore.collection('overseers').add({
-        'name': overseerNameController.text,
-        'surname': overseerSurnameController.text,
-        'email': overseerEmailController.text,
-        'province': selectedProvince,
-        'uid': userCredential.user?.uid,
-        'role': 'overseer',
-        'districts': districtCommunities.entries
-            .map(
-              (entry) => {
-                'districtElderName': entry.key,
-                'communities': entry.value,
-              },
-            )
-            .toList(),
+    if (!mounted) return;
+
+    FirebaseFirestore firestore = FirebaseFirestore.instance;
+    
+    // Create the overseer document with subscription fields
+    await firestore.collection('overseers').add({
+      'name': overseerNameController.text,
+      'surname': overseerSurnameController.text,
+      'email': overseerEmailController.text,
+      'province': selectedProvince,
+      'uid': userCredential.user?.uid,
+      'role': 'overseer',
+      
+      // ADD THESE SUBSCRIPTION FIELDS:
+      'subscriptionStatus': 'inactive', // Start as inactive
+      'paystackAuthCode': null, // Will be set when they subscribe
+      'paystackEmail': null, // Will be set when they subscribe
+      'lastCharged': null,
+      'lastChargedAmount': null,
+      'currentMemberCount': 0, // Start with 0 members
+      'nextChargeDate': null,
+      'lastAttempted': null,
+      'lastAttemptedChargeAmount': null,
+      
+      'districts': districtCommunities.entries
+          .map(
+            (entry) => {
+              'districtElderName': entry.key,
+              'communities': entry.value,
+            },
+          )
+          .toList(),
+    });
+
+    if (mounted) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Overseer added successfully',
+        'Success',
+        Theme.of(context).splashColor,
+      );
+      overseerNameController.clear();
+      overseerSurnameController.clear();
+      overseerEmailController.clear();
+      overseerPasswordController.clear();
+      overseerDistrictElderController.clear();
+      overseerCommunityNameController.clear();
+      overseerCommunityElderNameController.clear();
+      selectedProvince = null;
+      setState(() {
+        isPasswordVisible = false;
+        districtCommunities.clear();
       });
-
-      if (mounted) {
-        Navigator.pop(context);
-        Api().showMessage(
-          context,
-          'Overseer added successfully',
-          'Success',
-          Theme.of(context).splashColor,
-        );
-        overseerNameController.clear();
-        overseerSurnameController.clear();
-        overseerEmailController.clear();
-        overseerPasswordController.clear();
-        overseerDistrictElderController.clear();
-        overseerCommunityNameController.clear();
-        overseerCommunityElderNameController.clear();
-        selectedProvince = null;
-        setState(() {
-          isPasswordVisible = false;
-          districtCommunities.clear();
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        Navigator.pop(context);
-        Api().showMessage(
-          context,
-          'Failed to create overseer: $error',
-          'Error',
-          Theme.of(context).primaryColorDark,
-        );
-      }
+    }
+  } catch (error) {
+    if (mounted) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Failed to create overseer: $error',
+        'Error',
+        Theme.of(context).primaryColorDark,
+      );
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
