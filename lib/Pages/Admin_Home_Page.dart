@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:intl/intl.dart'; // Import for DateFormat
-import 'package:ttact/Components/upcoming_events_card.dart'; // Import your custom card
+import 'package:intl/intl.dart'; // Import for DateFormatimport 'package:ttact/Components/Upcoming_events_card.dart'; // Must match the file system's case
+import 'package:ttact/Components/Upcoming_events_card.dart'; // Must match the file system's case
 
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});

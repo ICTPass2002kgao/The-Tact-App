@@ -29,9 +29,22 @@ jobs:
       - name: Run analyzer
         run: flutter analyze
 
-      # Build the Flutter web app to create the 'web' folder in the 'public' directory
-      - name: Build Web App
+      # ----------------------------------------------------------------------
+      # BUILD FLUTTER WEB APP
+      # ----------------------------------------------------------------------
+      - name: Build Flutter Web App
+        # The --base-href is VITAL as it tells Flutter that its root path is /web/
         run: flutter build web --web-renderer html --base-href /web/
+
+      # ----------------------------------------------------------------------
+      # COPY ARTIFACTS INTO FIREBASE HOSTING DIRECTORY (THE FIX)
+      # ----------------------------------------------------------------------
+      - name: Copy Flutter Web Build to Hosting Directory
+        run: |
+          # Create the /web directory inside the public folder if it doesn't exist
+          mkdir -p public/web/
+          # Copy all built assets from build/web/ into public/web/
+          cp -r build/web/* public/web/
 
       # ----------------------------------------------------------------------
       # DEPLOYMENT JOB
@@ -39,10 +52,10 @@ jobs:
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          # Use your service account secret
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          # IMPORTANT: Use the Firebase secret you created
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}"
           channelId: live
-          projectId: tact-3c612 # Ensure this matches your project ID
+          projectId: tact-3c612
           target: DANKIE # Optional: specify a hosting target if you have multiple sites
-          entryPoint: public/ # Tells the action where to look for the hosting content
+          entryPoint: public/ # The folder containing the landing page and the copied web app
