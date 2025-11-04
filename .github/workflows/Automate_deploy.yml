@@ -11,6 +11,8 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT_DANKIE: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}
 
     steps:
       # Checks out your repository under $GITHUB_WORKSPACE
@@ -45,14 +47,6 @@ jobs:
           mkdir -p public/web/
           cp -r build/web/* public/web/
       # ----------------------------------------------------------------------
-      # DEPLOYMENT JOB
-      # ----------------------------------------------------------------------
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: "${{ secrets.GITHUB_TOKEN }}"
-          # IMPORTANT: Use the Firebase secret you created
-          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DANKIE }}"
-          channelId: live
-          projectId: tact-3c612
-          target: DANKIE # Optional: specify a hosting target if you have multiple sites
+        run: npx firebase-tools@latest deploy --only hosting:DANKIE --project tact-3c612 --token "$FIREBASE_SERVICE_ACCOUNT_DANKIE"
+        # Ensure 'DANKIE' matches the target defined in your firebase.json
