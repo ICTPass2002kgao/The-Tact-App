@@ -13,16 +13,17 @@
     }
   ],
   "hosting": {
-    "public": "public",
+    "public": "web",  
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
-    ],
+      "**/node_modules/**",
+      "web/assets/manifest.json"    ],
+     
     "rewrites": [
       {
-        "source": "/web/**",
-        "destination": "/web/index.html"
+        "source": "**",  
+        "destination": "/index.html"
       }
     ]
   }
