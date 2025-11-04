@@ -1,13 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:audio_service/audio_service.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:audio_service/audio_service.dart'; 
 import 'package:ttact/firebase_options.dart';
 
-// ✅ Your components & pages
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Audio_Handler.dart';
 import 'package:ttact/Pages/Admin_Portal.dart';
@@ -46,13 +42,7 @@ Future<void> main() async {
   } catch (e, stackTrace) {
     debugPrint('⚠️ Failed to initialize audio service: $e');
     debugPrint('Stack trace: $stackTrace');
-  }
-const apiKey = 'goog_vjzOHNASjPBRjCWpsPrGqxRvyBn'; 
-  await Purchases.configure(
-    PurchasesConfiguration(apiKey)
-      ..appUserID = null // Use null initially, or set upon login
-       
-  );
+  } 
   runApp(const MyApp());
 }
 
@@ -122,9 +112,7 @@ class SafeInitializer extends StatelessWidget {
   const SafeInitializer({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Even if audioHandler fails, we can still show the app
-    // but without audio service functionality
+  Widget build(BuildContext context) { 
     return Introductionpage();
   }
 }
