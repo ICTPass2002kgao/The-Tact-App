@@ -5,8 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/AdBanner.dart';
+import 'package:ttact/Components/API.dart'; 
 import 'dart:io';
 
 import 'package:ttact/Components/CustomOutlinedButton.dart';

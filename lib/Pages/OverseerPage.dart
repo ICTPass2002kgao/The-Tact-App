@@ -1290,10 +1290,7 @@ class _OverseerPageState extends State<OverseerPage>
                       }
                       if (overseerData.isEmpty) {
                         return Center(child: Text('No overseers found.'));
-                      }
-                      var overseer =
-                          overseerData.first.data() as Map<String, dynamic>?;
-                      String province = overseer?['province'] ?? 'N/A';
+                      } 
                       return Center(
                         child: GestureDetector(
                           onTap: () async {

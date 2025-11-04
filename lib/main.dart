@@ -37,8 +37,7 @@ Future<void> main() async {
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
       ),
-    );
-    print('✅ Audio Service initialized successfully');
+    ); 
   } catch (e, stackTrace) {
     debugPrint('⚠️ Failed to initialize audio service: $e');
     debugPrint('Stack trace: $stackTrace');
