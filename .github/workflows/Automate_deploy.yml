@@ -48,5 +48,4 @@ jobs:
           cp -r build/web/* public/web/
       # ----------------------------------------------------------------------
       - name: Deploy to Firebase Hosting
-        run: npx firebase-tools@latest deploy --only hosting:DANKIE --project tact-3c612 --token "$FIREBASE_SERVICE_ACCOUNT_DANKIE"
-        # Ensure 'DANKIE' matches the target defined in your firebase.json
+        run: npx firebase-tools@latest deploy --only hosting:TACT --project tact-3c612 --token "$FIREBASE_SERVICE_ACCOUNT_DANKIE"
