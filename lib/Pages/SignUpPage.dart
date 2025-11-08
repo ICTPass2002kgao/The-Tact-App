@@ -224,7 +224,7 @@ class _SignUpPageState extends State<SignUpPage> {
     'Northern Cape',
   ];
 
-  String? selectedDistrictElder; 
+  String? selectedDistrictElder;
   String? selectedCommunityName;
   Map<String, dynamic>? selectedDistrictData;
   Map<String, dynamic>? currentOverseerData;
@@ -357,7 +357,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (snapshot.docs.isNotEmpty) {
         setState(() {
           currentOverseerData = snapshot.docs.first.data();
-          selectedDistrictElder = null; 
+          selectedDistrictElder = null;
           selectedCommunityName = null;
           selectedDistrictData = null;
         });
@@ -434,7 +434,7 @@ class _SignUpPageState extends State<SignUpPage> {
       );
       return false;
     }
-    
+
     if (selectedCommunityName == null) {
       Api().showMessage(
         context,
@@ -695,7 +695,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 selectedProvince = province;
                                 selectedMemberUid = null;
                                 currentOverseerData = null;
-                                selectedDistrictElder = null; 
+                                selectedDistrictElder = null;
                                 selectedCommunityName = null;
                                 selectedDistrictData = null;
                               });
@@ -757,7 +757,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 }
                                 final overseer =
                                     overseerDoc.data() as Map<String, dynamic>;
-                                return '${overseer['name']} ${overseer['surname']}';
+                                return '${overseer['overseerInitialsAndSurname']}';
                               })(),
                               onTap: () {
                                 _buildActionSheet(
@@ -767,12 +767,12 @@ class _SignUpPageState extends State<SignUpPage> {
                                     final overseer =
                                         (overseerDoc).data()
                                             as Map<String, dynamic>;
-                                    return '${overseer['name']} ${overseer['surname']}';
+                                    return '${overseer['overseerInitialsAndSurname']}';
                                   }).toList(),
                                   onSelected: (selectedName) {
                                     final selectedDoc = overseers.firstWhere(
                                       (doc) =>
-                                          '${doc['name']} ${doc['surname']}' ==
+                                          '${doc['overseerInitialsAndSurname']}' ==
                                           selectedName,
                                     );
                                     setState(() {
@@ -817,15 +817,14 @@ class _SignUpPageState extends State<SignUpPage> {
                                                     elderName,
                                                 orElse: () => null,
                                               )
-                                          as Map<String, dynamic>?; 
+                                          as Map<String, dynamic>?;
                                   selectedCommunityName = null;
                                 });
                               },
                             );
                           },
                         ),
- 
-                     ],
+                    ],
                   ),
 
                   // Email and Password Fields
@@ -1014,7 +1013,7 @@ class _SignUpPageState extends State<SignUpPage> {
                             accountNumber: txtAccountNumber.text.trim(),
                             bankCode: txtBankCodeController.text.trim(),
                             selectedProvince!,
-                            selectedDistrictElder!, 
+                            selectedDistrictElder!,
                             selectedCommunityName!,
                             context,
                           );
@@ -1038,7 +1037,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   'week4': 0.00,
                                   "role": role,
                                   "province": selectedProvince,
-                                  "districtElderName": selectedDistrictElder, 
+                                  "districtElderName": selectedDistrictElder,
                                   if (role == 'Seller')
                                     'sellerPaystackAccount': '',
                                   "uid": FirebaseAuth.instance.currentUser!.uid,

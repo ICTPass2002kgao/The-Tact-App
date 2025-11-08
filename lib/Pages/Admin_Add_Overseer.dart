@@ -106,6 +106,18 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
       // 2. Create Overseer Document in Firestore
       FirebaseFirestore firestore = FirebaseFirestore.instance;
 
+      // --- FIX: Correctly structure the districts array for Firestore ---
+      final List<Map<String, dynamic>> structuredDistricts =
+          districtCommunities.entries
+              .map(
+                (entry) => {
+                  'districtElderName': entry.key, // <-- ADDED DISTRICT NAME
+                  'communities': entry.value,
+                },
+              )
+              .toList();
+      // -------------------------------------------------------------------
+
       await firestore.collection('overseers').add({
         'overseerInitialsAndSurname': overseerInitialsAndSurname.text,
         'email': overseerEmailController.text,
@@ -117,9 +129,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         'subscriptionStatus': 'inactive',
         'paystackAuthCode': null,
         'paystackEmail': null,
-        'districts': districtCommunities.entries
-            .map((entry) => {'communities': entry.value})
-            .toList(),
+        
+        // --- USING THE CORRECTLY STRUCTURED LIST ---
+        'districts': structuredDistricts,
       });
 
       if (mounted) {

@@ -377,18 +377,26 @@ app.post('/paystack-webhook', async (req, res) => {
 });
 
 // =========================================================================
-// 4. FUNCTION EXPORTS (2ND GEN)
+// 4. FUNCTION EXPORTS (2ND GEN) - FIXED
 // =========================================================================
 
-// EXPORT 1: HTTP Express App (2nd Gen)
-// This runs the Express app 'app' for all the routes defined above.
-exports.api = onRequest(app);
+// EXPORT 1: HTTP Express App (2nd Gen) - PROPERLY WRAPPED
+// This is the key fix: wrap the Express app in a function handler
+exports.api = onRequest({
+  memory: '1GiB',
+  timeoutSeconds: 540,
+  maxInstances: 100,
+}, (req, res) => {
+  return app(req, res);
+});
 
 // EXPORT 2: SCHEDULED SUBSCRIPTION CRON JOB (2nd Gen)
 exports.monthlySubscriptionCharge = onSchedule(
   {
     schedule: '0 0 1 * *',
     timeZone: 'UTC',
+    memory: '1GiB',
+    timeoutSeconds: 540,
   },
   async (event) => {
     console.log('Starting monthly subscription charge job.');
