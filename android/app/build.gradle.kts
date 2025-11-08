@@ -40,8 +40,8 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.0.17"
+        versionCode = 18
+        versionName = "1.0.18"
         
         // FIXED: Kotlin DSL syntax for manifestPlaceholders
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"

@@ -10,7 +10,10 @@ import 'package:flutter/foundation.dart'; // Import for kIsWeb
 
 // --- PLATFORM UTILITIES ---
 // Determine if we should use Cupertino style (iOS/macOS, or forced Material on Web/Android)
-bool get _useCupertinoStyle => !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS);
+bool get _useCupertinoStyle =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS);
 const double _desktopContentMaxWidth = 700.0;
 // --------------------------
 
@@ -22,18 +25,31 @@ class AdminAddOverseer extends StatefulWidget {
 }
 
 class _AdminAddOverseerState extends State<AdminAddOverseer> {
-  final TextEditingController overseerNameController = TextEditingController();
   final TextEditingController overseerEmailController = TextEditingController();
-  final TextEditingController overseerSurnameController = TextEditingController();
-  final TextEditingController overseerPasswordController = TextEditingController();
-  final TextEditingController overseerDistrictElderController = TextEditingController();
-  final TextEditingController overseerCommunityNameController = TextEditingController();
-  final TextEditingController overseerCommunityElderNameController = TextEditingController();
+  final TextEditingController overseerCodeController = TextEditingController();
+  final TextEditingController overseerRegionController =
+      TextEditingController();
+  final TextEditingController overseerInitialsAndSurname =
+      TextEditingController();
+  final TextEditingController overseerPasswordController =
+      TextEditingController();
+  final TextEditingController overseerDistrictElderController =
+      TextEditingController();
+  final TextEditingController overseerCommunityNameController =
+      TextEditingController();
 
-  final TextEditingController overseerAddressController = TextEditingController();
+  final TextEditingController overseerAddressController =
+      TextEditingController();
   List<String> provinces = [
-    'Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape', 'Free State',
-    'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape',
+    'Gauteng',
+    'Western Cape',
+    'KwaZulu-Natal',
+    'Eastern Cape',
+    'Free State',
+    'Limpopo',
+    'Mpumalanga',
+    'North West',
+    'Northern Cape',
   ];
   String? selectedProvince;
   bool isPasswordVisible = false;
@@ -42,13 +58,12 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
 
   @override
   void dispose() {
-    overseerNameController.dispose();
     overseerEmailController.dispose();
-    overseerSurnameController.dispose();
+    overseerInitialsAndSurname.dispose();
     overseerPasswordController.dispose();
     overseerDistrictElderController.dispose();
     overseerCommunityNameController.dispose();
-    overseerCommunityElderNameController.dispose();
+
     overseerAddressController.dispose();
     super.dispose();
   }
@@ -57,8 +72,7 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     Api().showLoading(context);
     FirebaseAuth auth = FirebaseAuth.instance;
 
-    if (overseerNameController.text.isEmpty ||
-        overseerSurnameController.text.isEmpty ||
+    if (overseerInitialsAndSurname.text.isEmpty ||
         overseerEmailController.text.isEmpty ||
         overseerPasswordController.text.isEmpty ||
         selectedProvince == null ||
@@ -88,29 +102,23 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         await userCredential.user?.delete();
         return;
       }
-      
+
       // 2. Create Overseer Document in Firestore
       FirebaseFirestore firestore = FirebaseFirestore.instance;
-      
+
       await firestore.collection('overseers').add({
-        'name': overseerNameController.text,
-        'surname': overseerSurnameController.text,
+        'overseerInitialsAndSurname': overseerInitialsAndSurname.text,
         'email': overseerEmailController.text,
         'province': selectedProvince,
         'uid': userCredential.user?.uid,
         'role': 'overseer',
-        
+
         // ADD SUBSCRIPTION/MEMBER FIELDS:
         'subscriptionStatus': 'inactive',
         'paystackAuthCode': null,
         'paystackEmail': null,
         'districts': districtCommunities.entries
-            .map(
-              (entry) => {
-                'districtElderName': entry.key,
-                'communities': entry.value,
-              },
-            )
+            .map((entry) => {'communities': entry.value})
             .toList(),
       });
 
@@ -122,13 +130,11 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
           'Success',
           Theme.of(context).splashColor,
         );
-        overseerNameController.clear();
-        overseerSurnameController.clear();
+        overseerInitialsAndSurname.clear();
         overseerEmailController.clear();
         overseerPasswordController.clear();
         overseerDistrictElderController.clear();
         overseerCommunityNameController.clear();
-        overseerCommunityElderNameController.clear();
         selectedProvince = null;
         setState(() {
           isPasswordVisible = false;
@@ -168,7 +174,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
           placeholder: placeholder,
           obscureText: obscureText,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10.0), // Smaller radius for form
+            borderRadius: BorderRadius.circular(
+              10.0,
+            ), // Smaller radius for form
             border: Border.all(color: color.primaryColor.withOpacity(0.5)),
           ),
           padding: padding,
@@ -183,7 +191,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
             labelStyle: TextStyle(fontSize: 12),
             labelText: placeholder,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10.0), // Smaller radius for form
+              borderRadius: BorderRadius.circular(
+                10.0,
+              ), // Smaller radius for form
             ),
             suffixIcon: suffix,
           ),
@@ -202,7 +212,11 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
             children: [
               Text(
                 'Add New Overseer',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color.primaryColor),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color.primaryColor,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -215,11 +229,26 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      platformTextField(controller: overseerNameController, placeholder: 'First Name'),
                       const SizedBox(height: 10),
-                      platformTextField(controller: overseerSurnameController, placeholder: 'Last Name'),
+                      platformTextField(
+                        controller: overseerInitialsAndSurname,
+                        placeholder: 'Initials and Surname',
+                      ),
                       const SizedBox(height: 10),
-                      platformTextField(controller: overseerEmailController, placeholder: 'Email Address'),
+                      platformTextField(
+                        controller: overseerRegionController,
+                        placeholder: 'Region',
+                      ),
+                      const SizedBox(height: 10),
+                      platformTextField(
+                        controller: overseerCodeController,
+                        placeholder: 'Code',
+                      ),
+                      const SizedBox(height: 10),
+                      platformTextField(
+                        controller: overseerEmailController,
+                        placeholder: 'Email Address',
+                      ),
                       const SizedBox(height: 10),
                       platformTextField(
                         controller: overseerPasswordController,
@@ -232,7 +261,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                             });
                           },
                           icon: Icon(
-                            isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                            isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
                             color: color.primaryColor,
                           ),
                         ),
@@ -266,14 +297,18 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   ),
                 ),
               ),
-              
+
               // --- Dynamic District and Community Structure ---
               Text(
                 'Organization Structure',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color.primaryColor),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color.primaryColor,
+                ),
               ),
               const SizedBox(height: 10),
-              
+
               // 1. Add District Input
               Card(
                 elevation: 4,
@@ -283,7 +318,10 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Add New District Elder', style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        'Add New District Elder',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       SizedBox(height: 10),
                       Row(
                         children: [
@@ -300,14 +338,30 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                           Expanded(
                             child: CustomOutlinedButton(
                               onPressed: () {
-                                String districtElderName = overseerDistrictElderController.text.trim();
+                                String districtElderName =
+                                    overseerDistrictElderController.text.trim();
                                 if (districtElderName.isEmpty) {
-                                  Api().showMessage(context, 'Name cannot be empty', 'Error', color.primaryColorDark);
-                                } else if (districtCommunities.containsKey(districtElderName)) {
-                                  Api().showMessage(context, 'District Elder already exists', 'Error', color.primaryColorDark);
+                                  Api().showMessage(
+                                    context,
+                                    'Name cannot be empty',
+                                    'Error',
+                                    color.primaryColorDark,
+                                  );
+                                } else if (districtCommunities.containsKey(
+                                  districtElderName,
+                                )) {
+                                  Api().showMessage(
+                                    context,
+                                    'District Elder already exists',
+                                    'Error',
+                                    color.primaryColorDark,
+                                  );
                                 } else {
                                   setState(() {
-                                    districtCommunities.putIfAbsent(districtElderName, () => []);
+                                    districtCommunities.putIfAbsent(
+                                      districtElderName,
+                                      () => [],
+                                    );
                                     overseerDistrictElderController.clear();
                                   });
                                 }
@@ -331,8 +385,11 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: districtCommunities.keys.length,
                 itemBuilder: (context, index) {
-                  String districtElderName = districtCommunities.keys.elementAt(index);
-                  List<Map<String, String>> communitiesInThisDistrict = districtCommunities[districtElderName] ?? [];
+                  String districtElderName = districtCommunities.keys.elementAt(
+                    index,
+                  );
+                  List<Map<String, String>> communitiesInThisDistrict =
+                      districtCommunities[districtElderName] ?? [];
 
                   return Card(
                     elevation: 4,
@@ -347,39 +404,58 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                             children: [
                               Text(
                                 'District: $districtElderName',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.primaryColor),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: color.primaryColor,
+                                ),
                               ),
                               IconButton(
-                                icon: Icon(Icons.delete_forever, color: Colors.red),
+                                icon: Icon(
+                                  Icons.delete_forever,
+                                  color: Colors.red,
+                                ),
                                 onPressed: () {
                                   setState(() {
-                                    districtCommunities.remove(districtElderName);
+                                    districtCommunities.remove(
+                                      districtElderName,
+                                    );
                                   });
                                 },
                               ),
                             ],
                           ),
                           Divider(color: color.dividerColor),
-                          
+
                           // List of Current Communities
                           if (communitiesInThisDistrict.isNotEmpty)
                             ...communitiesInThisDistrict.map(
                               (communityMap) => Padding(
-                                padding: const EdgeInsets.only(left: 16.0, top: 4, bottom: 4),
+                                padding: const EdgeInsets.only(
+                                  left: 16.0,
+                                  top: 4,
+                                  bottom: 4,
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'Community: ${communityMap['communityName']} (Elder: ${communityMap['communityElderName']})',
+                                        'Community: ${communityMap['communityName']}',
                                         style: TextStyle(fontSize: 14),
                                       ),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                      icon: const Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: Colors.grey,
+                                      ),
                                       onPressed: () {
                                         setState(() {
-                                          districtCommunities[districtElderName]?.remove(communityMap);
+                                          districtCommunities[districtElderName]
+                                              ?.remove(communityMap);
                                         });
                                       },
                                     ),
@@ -390,11 +466,20 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                           else
                             Padding(
                               padding: EdgeInsets.only(left: 16.0, top: 8),
-                              child: Text('No communities added yet.', style: TextStyle(fontStyle: FontStyle.italic, color: color.hintColor)),
+                              child: Text(
+                                'No communities added yet.',
+                                style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: color.hintColor,
+                                ),
+                              ),
                             ),
 
                           Divider(height: 20),
-                          Text('Add Community to $districtElderName:', style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            'Add Community to $districtElderName:',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                           SizedBox(height: 10),
 
                           // Community Name Input
@@ -404,42 +489,41 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                             padding: const EdgeInsets.all(12.0),
                           ),
                           SizedBox(height: 8.0),
-                          
+
                           // Community Elder Input and Add Button
                           Row(
                             children: [
-                              Expanded(
-                                child: platformTextField(
-                                  controller: overseerCommunityElderNameController,
-                                  placeholder: 'Community Elder Name',
-                                  padding: const EdgeInsets.all(12.0),
-                                ),
-                              ),
                               const SizedBox(width: 8.0),
                               Expanded(
                                 child: CustomOutlinedButton(
                                   width: double.infinity,
                                   onPressed: () {
-                                    String communityName = overseerCommunityNameController.text.trim();
-                                    String communityElderName = overseerCommunityElderNameController.text.trim();
+                                    String communityName =
+                                        overseerCommunityNameController.text
+                                            .trim();
 
-                                    if (communityName.isEmpty || communityElderName.isEmpty) {
-                                      Api().showMessage(context, 'Name fields required', 'Error', color.primaryColorDark);
+                                    if (communityName.isEmpty) {
+                                      Api().showMessage(
+                                        context,
+                                        'Name fields required',
+                                        'Error',
+                                        color.primaryColorDark,
+                                      );
                                       return;
                                     }
 
                                     setState(() {
-                                      districtCommunities[districtElderName]?.add({
-                                        'communityName': communityName,
-                                        'communityElderName': communityElderName,
-                                      });
+                                      districtCommunities[districtElderName]
+                                          ?.add({
+                                            'communityName': communityName,
+                                          });
                                       overseerCommunityNameController.clear();
-                                      overseerCommunityElderNameController.clear();
                                     });
                                   },
                                   text: 'Add Community',
                                   backgroundColor: color.primaryColor,
-                                  foregroundColor: color.scaffoldBackgroundColor,
+                                  foregroundColor:
+                                      color.scaffoldBackgroundColor,
                                 ),
                               ),
                             ],
@@ -450,9 +534,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   );
                 },
               ),
-              
+
               const SizedBox(height: 30),
-              
+
               // --- Final Submit Button ---
               CustomOutlinedButton(
                 onPressed: addOverseer,

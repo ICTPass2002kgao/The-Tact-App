@@ -224,8 +224,7 @@ class _SignUpPageState extends State<SignUpPage> {
     'Northern Cape',
   ];
 
-  String? selectedDistrictElder;
-  String? selectedCommunityElder;
+  String? selectedDistrictElder; 
   String? selectedCommunityName;
   Map<String, dynamic>? selectedDistrictData;
   Map<String, dynamic>? currentOverseerData;
@@ -358,8 +357,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (snapshot.docs.isNotEmpty) {
         setState(() {
           currentOverseerData = snapshot.docs.first.data();
-          selectedDistrictElder = null;
-          selectedCommunityElder = null;
+          selectedDistrictElder = null; 
           selectedCommunityName = null;
           selectedDistrictData = null;
         });
@@ -436,15 +434,7 @@ class _SignUpPageState extends State<SignUpPage> {
       );
       return false;
     }
-    if (selectedCommunityElder == null) {
-      Api().showMessage(
-        context,
-        'Validation Error',
-        'Please select a community elder.',
-        Colors.red,
-      );
-      return false;
-    }
+    
     if (selectedCommunityName == null) {
       Api().showMessage(
         context,
@@ -705,8 +695,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                 selectedProvince = province;
                                 selectedMemberUid = null;
                                 currentOverseerData = null;
-                                selectedDistrictElder = null;
-                                selectedCommunityElder = null;
+                                selectedDistrictElder = null; 
                                 selectedCommunityName = null;
                                 selectedDistrictData = null;
                               });
@@ -828,71 +817,15 @@ class _SignUpPageState extends State<SignUpPage> {
                                                     elderName,
                                                 orElse: () => null,
                                               )
-                                          as Map<String, dynamic>?;
-                                  selectedCommunityElder = null;
+                                          as Map<String, dynamic>?; 
                                   selectedCommunityName = null;
                                 });
                               },
                             );
                           },
                         ),
-
-                      if (selectedDistrictElder != null)
-                        _buildListTile(
-                          context: context,
-                          title: 'Select Community Elder',
-                          trailingText:
-                              selectedCommunityElder ?? 'Not Selected',
-                          onTap: () {
-                            if (communityElderNames.isEmpty) {
-                              Api().showMessage(
-                                context,
-                                'No Communities',
-                                'No community elders found for this district.',
-                                Colors.orange,
-                              );
-                              return;
-                            }
-                            _buildActionSheet(
-                              context: context,
-                              title: 'Choose a Community Elder',
-                              actions: communityElderNames,
-                              onSelected: (elderName) {
-                                setState(() {
-                                  selectedCommunityElder = elderName;
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      if (selectedCommunityElder != null)
-                        _buildListTile(
-                          context: context,
-                          title: 'Select Community Name',
-                          trailingText: selectedCommunityName ?? 'Not Selected',
-                          onTap: () {
-                            if (communityNames.isEmpty) {
-                              Api().showMessage(
-                                context,
-                                'No Communities',
-                                'No community names found for this district.',
-                                Colors.orange,
-                              );
-                              return;
-                            }
-                            _buildActionSheet(
-                              context: context,
-                              title: 'Choose a Community Name',
-                              actions: communityNames,
-                              onSelected: (community) {
-                                setState(() {
-                                  selectedCommunityName = community;
-                                });
-                              },
-                            );
-                          },
-                        ),
-                    ],
+ 
+                     ],
                   ),
 
                   // Email and Password Fields
@@ -1081,8 +1014,7 @@ class _SignUpPageState extends State<SignUpPage> {
                             accountNumber: txtAccountNumber.text.trim(),
                             bankCode: txtBankCodeController.text.trim(),
                             selectedProvince!,
-                            selectedDistrictElder!,
-                            selectedCommunityElder!,
+                            selectedDistrictElder!, 
                             selectedCommunityName!,
                             context,
                           );
@@ -1106,8 +1038,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                   'week4': 0.00,
                                   "role": role,
                                   "province": selectedProvince,
-                                  "districtElderName": selectedDistrictElder,
-                                  "communityElderName": selectedCommunityElder,
+                                  "districtElderName": selectedDistrictElder, 
                                   if (role == 'Seller')
                                     'sellerPaystackAccount': '',
                                   "uid": FirebaseAuth.instance.currentUser!.uid,

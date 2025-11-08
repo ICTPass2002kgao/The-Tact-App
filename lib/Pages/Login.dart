@@ -258,21 +258,6 @@ class _Login_PageState extends State<Login_Page>
 
       // Fix: Conditionally show AppBar only if not on desktop/web,
       // and use the correct platform check.
-      appBar: isDesktop
-          ? null // No AppBar on web/desktop to maximize space
-          : (isIOSPlatform
-                ? CupertinoNavigationBar(
-                    backgroundColor: Colors.transparent,
-                    border: Border.all(color: Colors.transparent),
-                    automaticallyImplyLeading: false,
-                  )
-                : AppBar(
-                    // Use a regular AppBar for Android/Desktop Native
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
-                    toolbarHeight: 0, // Hide the toolbar space
-                  )),
-
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -414,12 +399,11 @@ class _Login_PageState extends State<Login_Page>
 
   Widget buildFormContent({required bool isWeb}) {
     final colorScheme = Theme.of(context);
-
-    // Determine text color based on platform.
+ 
     final textColor = isWeb
         ? colorScheme
-              .scaffoldBackgroundColor // Dark color on light web background
-        : Colors.white; // Light color on dark mobile card background
+              .scaffoldBackgroundColor  
+        : Colors.white;  
 
     return Form(
       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -449,7 +433,7 @@ class _Login_PageState extends State<Login_Page>
             onValidate: (value) => TextFieldValidation.email(value!),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(height: 10),
 
           // Password Field
           // FIXED: Uses the safe isIOSPlatform getter
@@ -459,11 +443,12 @@ class _Login_PageState extends State<Login_Page>
               placeholder: 'Password',
               obscureText: _obscureText,
               decoration: BoxDecoration(
-                color: Colors.white,
+                
+                color: Colors.transparent,
                 border: Border.all(color: CupertinoColors.systemGrey4),
-                borderRadius: BorderRadius.circular(20.0),
+                borderRadius: BorderRadius.circular(15.0),
               ),
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(16.0),
               suffixMode: OverlayVisibilityMode.editing,
               suffix: CupertinoButton(
                 padding: EdgeInsets.zero,

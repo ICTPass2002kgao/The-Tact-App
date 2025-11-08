@@ -20,7 +20,7 @@ app.use(bodyParser.json());
 // Initialize Paystack constants (assuming PAYSTACK_SECRET_KEY is defined via environment variables or another mechanism)
 // NOTE: I'm pulling the secret key from a placeholder process.env here as suggested in your file.
 // In a real Firebase setup, you should use functions.config().paystack.secret_key or set the environment variable.
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; 
+const PAYSTACK_SECRET_KEY = functions.config().paystack.secret_key; 
 const PAYSTACK_API_BASE = 'https://api.paystack.co';
 
 // --- TIERED PRICING CONSTANTS (in CENTS) ---
@@ -495,3 +495,4 @@ exports.monthlySubscriptionCharge = onSchedule(
     return null;
   }
 );
+

@@ -25,9 +25,7 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context);
-    // Determine card height based on content needed (variants added)
-    const double cardHeight = 110; 
+    final color = Theme.of(context); 
 
     // Robust Price Formatting
     final String formattedPrice = productPrice != null 

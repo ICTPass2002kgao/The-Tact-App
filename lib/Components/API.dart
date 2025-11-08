@@ -20,7 +20,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:toastification/toastification.dart'; 
+import 'package:toastification/toastification.dart';
+import 'package:ttact/Components/AdBanner.dart'; 
 
 import 'package:ttact/Components/song.dart';
  
@@ -75,8 +76,7 @@ String YOUR_BACKEND_BASE_URL =
     String selectedMemberUid,
     String role,  
 String selectedProvince,
-    String selectedDistrictElder,
-    String selectedCommunityElder,
+    String selectedDistrictElder, 
     String selectedCommunityName, 
 
     BuildContext context, {required String bankCode,required String accountNumber}
@@ -111,8 +111,7 @@ String selectedProvince,
                             if (role == 'Seller')
                             'sellerPaystackAccount':'',
           "province": selectedProvince,
-          "districtElderName": selectedDistrictElder,
-          "communityElderName": selectedCommunityElder,
+          "districtElderName": selectedDistrictElder, 
           "communityName": selectedCommunityName,
                             "uid": FirebaseAuth
                                 .instance
@@ -123,7 +122,7 @@ String selectedProvince,
 if (role == 'Seller') {
                         String? subaccountCode = await createSellerSubaccount(
                           uid: FirebaseAuth.instance.currentUser!.uid,
-                          businessName: '${name}\' s Shopping',
+                          businessName: '${name} ${surname}\' s Shopping',
                           email: email,
                           accountNumber: accountNumber,
                           bankCode:bankCode, // get this from user input
@@ -141,11 +140,11 @@ if (role == 'Seller') {
 
       Navigator.pop(context);
 
-                      // AdManager().showRewardedInterstitialAd((ad, reward) {
-                      //   print(
-                      //     'User earned reward: ${reward.amount} ${reward.type}',
-                      //   );
-                      // });
+                      AdManager().showRewardedInterstitialAd((ad, reward) {
+                        print(
+                          'User earned reward: ${reward.amount} ${reward.type}',
+                        );
+                      });
       showMessage(
         context,
 
@@ -229,35 +228,7 @@ if (role == 'Seller') {
       closeOnClick: true,
     );
   }
-
-  Future<User?> login(
-    BuildContext context,
-
-    String email,
-
-    String password,
-  ) async {
-    try {
-      showLoading(context);
-
-      UserCredential? user = await _auth.signInWithEmailAndPassword(
-        email: email,
-
-        password: password,
-      );
-
-      Navigator.pop(context);
-
-      return user.user;
-    } on FirebaseAuthException catch (e) {
-      final color = Theme.of(context);
-
-      Navigator.pop(context);
-
-      showMessage(context, e.message!, 'Error', color.primaryColorDark);
-    }
-  }
-
+ 
   void showLogoutMessage(
     BuildContext context,
 
@@ -584,8 +555,7 @@ class LocalStorageService {
         final file = File(filePath);
 
         await file.writeAsBytes(response.bodyBytes);
-
-        // Create a new Song object with the local file path
+ 
 
         final updatedSong = Song(
           id: songToDownload.id,
@@ -598,7 +568,7 @@ class LocalStorageService {
 
           createdAt: songToDownload.createdAt,
 
-          localFilePath: filePath, // Store the local path
+          localFilePath: filePath,  
         );
 
         debugPrint('Song downloaded to: $filePath');

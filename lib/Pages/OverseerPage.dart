@@ -43,19 +43,20 @@ class _OverseerPageState extends State<OverseerPage>
   String _selectedCategory = 'All';
   String _searchQuery = '';
   int _songPlayCount = 0;
-  final AdManager adManager = AdManager(); // Assuming AdManager is defined elsewhere
+  final AdManager adManager =
+      AdManager(); // Assuming AdManager is defined elsewhere
 
   // --- PAYSTACK/SUBSCRIPTION STATE & CONSTANTS ---
   // ** IMPORTANT: REPLACE WITH YOUR ACTUAL DEPLOYED CLOUD FUNCTION BASE URL **
   // This must be the URL of your 'api' Express function endpoint.
   static const String cloudFunctionBaseUrl =
       'https://us-central1-PROJECT_ID.cloudfunctions.net/api'; // <--- UPDATE THIS
-  
+
   // These tiers MUST exactly match the TIER_X_CENTS constants in index.js
   static const int tier1AmountCents = 18900; // R189.00 (50+ members)
   static const int tier2AmountCents = 25000; // R250.00 (300+ members)
   static const int tier3AmountCents = 29900; // R299.00 (500+ members)
-  
+
   // Local state to track the Paystack subscription status from Firestore
   bool _isSubscriptionActive = false;
   // ---------------------------------------------------
@@ -87,7 +88,8 @@ class _OverseerPageState extends State<OverseerPage>
       if (mounted) {
         setState(() {
           // The Cloud Function webhook sets 'subscriptionStatus' to 'active' on success
-          _isSubscriptionActive = doc.exists && doc.data()?['subscriptionStatus'] == 'active';
+          _isSubscriptionActive =
+              doc.exists && doc.data()?['subscriptionStatus'] == 'active';
         });
       }
     } catch (e) {
@@ -107,7 +109,7 @@ class _OverseerPageState extends State<OverseerPage>
         .get();
     return snapshot.docs.length;
   }
-  
+
   // --- PAYSTACK SUBSCRIPTION INITIATION LOGIC ---
 
   /// Determines the required subscription amount in cents based on member count.
@@ -123,17 +125,27 @@ class _OverseerPageState extends State<OverseerPage>
       return tier1AmountCents;
     }
   }
-  
-  Future<void> _initiatePaystackSubscription(int memberCount, BuildContext context) async {
+
+  Future<void> _initiatePaystackSubscription(
+    int memberCount,
+    BuildContext context,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.email == null) {
-      Api().showMessage(context, 'Please log in to subscribe.', 'Error', Theme.of(context).primaryColorDark);
+      Api().showMessage(
+        context,
+        'Please log in to subscribe.',
+        'Error',
+        Theme.of(context).primaryColorDark,
+      );
       return;
     }
 
     final amountCents = _determineSubscriptionAmount(memberCount);
-    final tierName = memberCount >= 500 ? 'Tier 3 (500+)' : (memberCount >= 300 ? 'Tier 2 (300-499)' : 'Tier 1 (50+)');
-    
+    final tierName = memberCount >= 500
+        ? 'Tier 3 (500+)'
+        : (memberCount >= 300 ? 'Tier 2 (300-499)' : 'Tier 1 (50+)');
+
     // 1. Call Cloud Function to initialize the Paystack subscription payment
     Api().showLoading(context);
     try {
@@ -149,7 +161,7 @@ class _OverseerPageState extends State<OverseerPage>
           'memberCount': memberCount,
         }),
       );
-      
+
       Navigator.pop(context); // Dismiss loading dialog
 
       if (response.statusCode == 200) {
@@ -162,7 +174,9 @@ class _OverseerPageState extends State<OverseerPage>
             context: context,
             builder: (ctx) => CupertinoAlertDialog(
               title: const Text('Complete Subscription'),
-              content: Text('Please proceed to the Paystack page to authorize your card for automatic monthly payments based on the $tierName plan (R${(amountCents / 100).toStringAsFixed(2)}).'),
+              content: Text(
+                'Please proceed to the Paystack page to authorize your card for automatic monthly payments based on the $tierName plan (R${(amountCents / 100).toStringAsFixed(2)}).',
+              ),
               actions: [
                 CupertinoDialogAction(
                   child: const Text('Open Payment Page'),
@@ -170,7 +184,12 @@ class _OverseerPageState extends State<OverseerPage>
                     Navigator.pop(ctx);
                     // TODO: Implement actual URL launch using a package like url_launcher
                     // For example: launchUrl(Uri.parse(authUrl));
-                    Api().showMessage(context, 'Launching Paystack for authorization...', 'Info', Theme.of(context).primaryColor);
+                    Api().showMessage(
+                      context,
+                      'Launching Paystack for authorization...',
+                      'Info',
+                      Theme.of(context).primaryColor,
+                    );
                     // Placeholder for launching URL:
                     print('Launching Paystack URL: $authUrl');
                   },
@@ -179,21 +198,34 @@ class _OverseerPageState extends State<OverseerPage>
             ),
           );
         } else {
-          Api().showMessage(context, 'Failed to get payment URL.', 'Error', Theme.of(context).primaryColorDark);
+          Api().showMessage(
+            context,
+            'Failed to get payment URL.',
+            'Error',
+            Theme.of(context).primaryColorDark,
+          );
         }
-
       } else {
         final errorData = json.decode(response.body);
-        Api().showMessage(context, errorData['error'] ?? 'Subscription initialization failed.', 'Error', Theme.of(context).primaryColorDark);
+        Api().showMessage(
+          context,
+          errorData['error'] ?? 'Subscription initialization failed.',
+          'Error',
+          Theme.of(context).primaryColorDark,
+        );
       }
     } catch (e) {
       Navigator.pop(context);
-      Api().showMessage(context, 'An error occurred during subscription setup: $e', 'Error', Theme.of(context).primaryColorDark);
+      Api().showMessage(
+        context,
+        'An error occurred during subscription setup: $e',
+        'Error',
+        Theme.of(context).primaryColorDark,
+      );
     }
   }
 
   // ----------------------------------------------
-
 
   Future<void> _loadLogoBytes() async {
     try {
@@ -222,10 +254,9 @@ class _OverseerPageState extends State<OverseerPage>
   double week3 = 0.0;
   double week4 = 0.0;
   String? selectedDistrictElder;
-  String? selectedCommunityElder;
   String? selectedCommunityName;
   String selectedProvince = '';
-  
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
@@ -652,8 +683,9 @@ class _OverseerPageState extends State<OverseerPage>
                                   ListView.builder(
                                     itemCount: filteredSongs.length,
                                     itemBuilder: (context, index) {
-                                      final song = filteredSongs[index].data()
-                                          as Map<String, dynamic>;
+                                      final song =
+                                          filteredSongs[index].data()
+                                              as Map<String, dynamic>;
 
                                       return Padding(
                                         padding: const EdgeInsets.all(8.0),
@@ -678,10 +710,12 @@ class _OverseerPageState extends State<OverseerPage>
                                                     return PlaySong(
                                                       songs: filteredSongs
                                                           .map(
-                                                            (doc) => doc.data()
-                                                                as Map<
-                                                                    String,
-                                                                    dynamic>,
+                                                            (doc) =>
+                                                                doc.data()
+                                                                    as Map<
+                                                                      String,
+                                                                      dynamic
+                                                                    >,
                                                           )
                                                           .toList(),
                                                       initialIndex: index,
@@ -691,23 +725,24 @@ class _OverseerPageState extends State<OverseerPage>
                                               }
 
                                               if (_songPlayCount >= 4) {
-                                                adManager.showRewardedInterstitialAd((
-                                                  ad,
-                                                  reward,
-                                                ) {
-                                                  print(
-                                                    'User earned reward: ${reward.amount} ${reward.type}',
-                                                  );
-                                                  playSong();
-                                                  _songPlayCount = 0;
-                                                });
-                                                AdManager().loadRewardedInterstitialAd(
-                                                  onAdFailed: () {
-                                                    playSong();
-                                                    _songPlayCount =
-                                                        0;
-                                                  },
-                                                );
+                                                adManager
+                                                    .showRewardedInterstitialAd((
+                                                      ad,
+                                                      reward,
+                                                    ) {
+                                                      print(
+                                                        'User earned reward: ${reward.amount} ${reward.type}',
+                                                      );
+                                                      playSong();
+                                                      _songPlayCount = 0;
+                                                    });
+                                                AdManager()
+                                                    .loadRewardedInterstitialAd(
+                                                      onAdFailed: () {
+                                                        playSong();
+                                                        _songPlayCount = 0;
+                                                      },
+                                                    );
                                               } else {
                                                 playSong();
                                               }
@@ -768,8 +803,7 @@ class _OverseerPageState extends State<OverseerPage>
                                           color.splashColor,
                                         ),
                                       ),
-                                      icon:
-                                          Icon(Icons.download_done, size: 40),
+                                      icon: Icon(Icons.download_done, size: 40),
                                     ),
                                   ),
                                 ],
@@ -860,8 +894,9 @@ class _OverseerPageState extends State<OverseerPage>
                               child: Text('No overseer data found.'),
                             );
                           }
-                          var overseerData = snapshot.data!.docs.first.data()
-                              as Map<String, dynamic>;
+                          var overseerData =
+                              snapshot.data!.docs.first.data()
+                                  as Map<String, dynamic>;
 
                           selectedProvince = overseerData['province'];
 
@@ -889,31 +924,18 @@ class _OverseerPageState extends State<OverseerPage>
                               .toList();
 
                           // Get unique community elder names and community names for selected district
-                          List<String> communityElderNames =
-                              selectedDistrict != null
-                                  ? (selectedDistrict['communities']
-                                          as List<dynamic>?)
-                                      ?.map(
-                                        (c) => c['communityElderName']
-                                            as String?,
-                                      )
-                                      .where((name) => name != null)
-                                      .cast<String>()
-                                      .toSet()
-                                      .toList() ??
-                                      []
-                                  : [];
+                         
                           List<String> communityNames = selectedDistrict != null
                               ? (selectedDistrict['communities']
-                                      as List<dynamic>?)
-                                  ?.map(
-                                    (c) => c['communityName'] as String?,
-                                  )
-                                  .where((name) => name != null)
-                                  .cast<String>()
-                                  .toSet()
-                                  .toList() ??
-                                  []
+                                            as List<dynamic>?)
+                                        ?.map(
+                                          (c) => c['communityName'] as String?,
+                                        )
+                                        .where((name) => name != null)
+                                        .cast<String>()
+                                        .toSet()
+                                        .toList() ??
+                                    []
                               : [];
 
                           return Column(
@@ -938,37 +960,16 @@ class _OverseerPageState extends State<OverseerPage>
                                     // Update selectedDistrict and reset community selections
                                     try {
                                       selectedDistrict = districts.firstWhere(
-                                        (d) =>
-                                            d['districtElderName'] == value,
+                                        (d) => d['districtElderName'] == value,
                                       );
                                     } catch (_) {
                                       selectedDistrict = null;
                                     }
-                                    selectedCommunityElder = null;
                                     selectedCommunityName = null;
                                   });
                                 },
                               ),
                               if (selectedDistrictElder != null) ...[
-                                DropdownButton<String>(
-                                  menuWidth: double.infinity,
-                                  value: selectedCommunityElder,
-                                  hint: Text('Choose a Community Elder'),
-                                  items: communityElderNames
-                                      .map(
-                                        (e) => DropdownMenuItem(
-                                          alignment: Alignment.center,
-                                          value: e,
-                                          child: Text(e),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedCommunityElder = value;
-                                    });
-                                  },
-                                ),
                                 DropdownButton<String>(
                                   menuWidth: double.infinity,
                                   value: selectedCommunityName,
@@ -1027,7 +1028,6 @@ class _OverseerPageState extends State<OverseerPage>
                               'week4': 0.00,
                               "province": selectedProvince,
                               "districtElderName": selectedDistrictElder,
-                              "communityElderName": selectedCommunityElder,
                               "communityName": selectedCommunityName,
                             });
                             Navigator.of(context);
@@ -1197,39 +1197,35 @@ class _OverseerPageState extends State<OverseerPage>
                                                     Api().showLoading(context);
                                                     week1 =
                                                         double.tryParse(
-                                                              week1Controller
-                                                                  .text,
-                                                            ) ??
-                                                            0.0;
+                                                          week1Controller.text,
+                                                        ) ??
+                                                        0.0;
                                                     week2 =
                                                         double.tryParse(
-                                                              week2Controller
-                                                                  .text,
-                                                            ) ??
-                                                            0.0;
+                                                          week2Controller.text,
+                                                        ) ??
+                                                        0.0;
                                                     week3 =
                                                         double.tryParse(
-                                                              week3Controller
-                                                                  .text,
-                                                            ) ??
-                                                            0.0;
+                                                          week3Controller.text,
+                                                        ) ??
+                                                        0.0;
                                                     week4 =
                                                         double.tryParse(
-                                                              week4Controller
-                                                                  .text,
-                                                            ) ??
-                                                            0.0;
+                                                          week4Controller.text,
+                                                        ) ??
+                                                        0.0;
 
                                                     await FirebaseFirestore
                                                         .instance
                                                         .collection('users')
                                                         .doc(member.id)
                                                         .update({
-                                                      'week1': week1,
-                                                      'week2': week2,
-                                                      'week3': week3,
-                                                      'week4': week4,
-                                                    });
+                                                          'week1': week1,
+                                                          'week2': week2,
+                                                          'week3': week3,
+                                                          'week4': week4,
+                                                        });
                                                     Navigator.pop(context);
                                                     Navigator.pop(context);
 
@@ -1290,9 +1286,7 @@ class _OverseerPageState extends State<OverseerPage>
                       }
                       if (overseerData.isEmpty) {
                         return Center(child: Text('No overseers found.'));
-                      }
-                      var overseer =
-                          overseerData.first.data() as Map<String, dynamic>?; 
+                      } 
                       return Center(
                         child: GestureDetector(
                           onTap: () async {
@@ -1304,26 +1298,31 @@ class _OverseerPageState extends State<OverseerPage>
                             int memberLimit = 999999; // Default: No limit
 
                             // --- TIER CHECK & SUBSCRIPTION PROMPT LOGIC ---
-                            if (totalOverseerMembers > 50 &&
+                            if (totalOverseerMembers > 99 &&
                                 !_isSubscriptionActive) {
-                              
-                              final currentTierAmount = _determineSubscriptionAmount(totalOverseerMembers);
+                              final currentTierAmount =
+                                  _determineSubscriptionAmount(
+                                    totalOverseerMembers,
+                                  );
 
                               Api().showMessage(
                                 context,
-                                'You have $totalOverseerMembers members. To view all members on reports, please subscribe (R${(currentTierAmount / 100).toStringAsFixed(2)}/month). The report will be **limited to 50 members**.',
+                                'You have $totalOverseerMembers members. To view all members on reports, please subscribe (R${(currentTierAmount / 100).toStringAsFixed(2)}/month). The report will be **limited to 99 members**.',
                                 'Subscription Required',
                                 color.primaryColor,
                               );
-                              memberLimit = 50; // Enforce 50-member limit
+                              memberLimit = 99; // Enforce 99-member limit
 
                               // Show a dialog to prompt for subscription
                               showCupertinoDialog(
                                 context: context,
                                 builder: (ctx) => CupertinoAlertDialog(
-                                  title: const Text('Unlock Unlimited Reporting'),
+                                  title: const Text(
+                                    'Unlock Unlimited Reporting',
+                                  ),
                                   content: Text(
-                                      'Your member count is $totalOverseerMembers. Subscribing will unlock unlimited reporting and authorize your card for monthly billing at the current tier price (R${(currentTierAmount / 100).toStringAsFixed(2)}).'),
+                                    'Your member count is $totalOverseerMembers. Subscribing will unlock unlimited reporting and authorize your card for monthly billing at the current tier price (R${(currentTierAmount / 100).toStringAsFixed(2)}).',
+                                  ),
                                   actions: [
                                     CupertinoDialogAction(
                                       child: const Text('Cancel'),
@@ -1334,7 +1333,9 @@ class _OverseerPageState extends State<OverseerPage>
                                       onPressed: () {
                                         Navigator.pop(ctx);
                                         _initiatePaystackSubscription(
-                                            totalOverseerMembers, context);
+                                          totalOverseerMembers,
+                                          context,
+                                        );
                                       },
                                     ),
                                   ],
@@ -1351,25 +1352,24 @@ class _OverseerPageState extends State<OverseerPage>
                                     .where(
                                       'uid',
                                       isEqualTo: FirebaseAuth
-                                          .instance.currentUser?.uid,
+                                          .instance
+                                          .currentUser
+                                          ?.uid,
                                     )
                                     .get();
 
                             var overseerData = snapshot.docs.isNotEmpty
                                 ? snapshot.docs.first.data()
-                                : null;
-                            String overseerName =
-                                overseerData?['name'] ?? 'N/A';
-                            String overseerSurname =
-                                overseerData?['surname'] ?? 'N/A';
+                                : null; 
+                            String overseerInitialsAndSurname =
+                                overseerData?['overseerInitialsAndSurname'] ?? 'N/A';
 
                             String? currentSelectedDistrictElder =
                                 selectedDistrictElder;
-                            String? currentSelectedCommunityElder =
-                                selectedCommunityElder;
                             String? currentSelectedCommunityName =
                                 selectedCommunityName;
-
+                            String? code = overseerData?['code'] ?? '';
+                            String? region = overseerData?['region'] ?? '';
                             // Function to get distinct district elder names
                             List<String> getDistrictElderNames(
                               Map<String, dynamic>? data,
@@ -1381,8 +1381,9 @@ class _OverseerPageState extends State<OverseerPage>
                               }
                               return (data['districts'] as List<dynamic>)
                                   .map(
-                                    (district) => district['districtElderName']
-                                        as String?,
+                                    (district) =>
+                                        district['districtElderName']
+                                            as String?,
                                   )
                                   .where((name) => name != null)
                                   .cast<String>()
@@ -1444,108 +1445,59 @@ class _OverseerPageState extends State<OverseerPage>
                                   builder: (context, setState) {
                                     Map<String, dynamic>? selectedDistrict;
 
-                                    if (overseerData?.containsKey('districts') ==
+                                    if (overseerData?.containsKey(
+                                          'districts',
+                                        ) ==
                                         true) {
                                       try {
-                                        selectedDistrict = (overseerData![
-                                                    'districts']
-                                                as List<dynamic>?)
-                                            ?.firstWhere(
-                                              (district) =>
-                                                  district[
-                                                      'districtElderName'] ==
-                                                  currentSelectedDistrictElder,
-                                            ) as Map<String, dynamic>?;
+                                        selectedDistrict =
+                                            (overseerData!['districts']
+                                                        as List<dynamic>?)
+                                                    ?.firstWhere(
+                                                      (district) =>
+                                                          district['districtElderName'] ==
+                                                          currentSelectedDistrictElder,
+                                                    )
+                                                as Map<String, dynamic>?;
                                       } catch (_) {
                                         selectedDistrict = null;
                                       }
                                     }
 
-                                    // Prepare lists for dropdowns
-                                    final List<String> districtElderNames =
-                                        getDistrictElderNames(overseerData);
-                                    final List<String> communityElderNames =
-                                        getCommunityElderNamesForDistrict(
-                                            selectedDistrict);
+                                    
                                     final List<String> communityNames =
                                         getCommunityNamesForDistrict(
-                                            selectedDistrict);
+                                          selectedDistrict,
+                                        );
 
                                     return Center(
                                       child: Container(
                                         width: double.infinity,
                                         margin: const EdgeInsets.all(16.0),
                                         decoration: BoxDecoration(
-                                          color:
-                                              color.scaffoldBackgroundColor,
-                                          borderRadius:
-                                              BorderRadius.circular(20),
+                                          color: color.scaffoldBackgroundColor,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color:
-                                                  Colors.black.withOpacity(0.1),
+                                              color: Colors.black.withOpacity(
+                                                0.1,
+                                              ),
                                               blurRadius: 10,
                                               spreadRadius: 5,
                                             ),
                                           ],
                                         ),
                                         child: Padding(
-                                          padding:
-                                              const EdgeInsets.all(16.0),
+                                          padding: const EdgeInsets.all(16.0),
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
                                             mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                             children: [
-                                              DropdownButton<String>(
-                                                value:
-                                                    currentSelectedDistrictElder,
-                                                hint: Text(
-                                                  'Choose a District Elder',
-                                                ),
-                                                items: districtElderNames
-                                                    .map(
-                                                      (e) => DropdownMenuItem(
-                                                        value: e,
-                                                        child: Text(e),
-                                                      ),
-                                                    )
-                                                    .toList(),
-                                                onChanged: (value) {
-                                                  setState(() {
-                                                    currentSelectedDistrictElder =
-                                                        value;
-                                                    // Reset community selections if district changes
-                                                    currentSelectedCommunityElder =
-                                                        null;
-                                                    currentSelectedCommunityName =
-                                                        null;
-                                                  });
-                                                },
-                                              ),
                                               if (currentSelectedDistrictElder !=
                                                   null) ...[
-                                                DropdownButton<String>(
-                                                  value:
-                                                      currentSelectedCommunityElder,
-                                                  hint: Text(
-                                                    'Choose a Community Elder',
-                                                  ),
-                                                  items: communityElderNames
-                                                      .map(
-                                                        (e) => DropdownMenuItem(
-                                                          value: e,
-                                                          child: Text(e),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                                  onChanged: (value) {
-                                                    setState(() {
-                                                      currentSelectedCommunityElder =
-                                                          value;
-                                                    });
-                                                  },
-                                                ),
                                                 DropdownButton<String>(
                                                   value:
                                                       currentSelectedCommunityName,
@@ -1574,20 +1526,18 @@ class _OverseerPageState extends State<OverseerPage>
                                                   // Check if all selection fields are filled
                                                   if (currentSelectedDistrictElder !=
                                                           null &&
-                                                      currentSelectedCommunityElder !=
-                                                          null &&
                                                       currentSelectedCommunityName !=
                                                           null) {
                                                     Navigator.pop(context);
                                                     await _generatePdfAndDownload(
-                                                      currentSelectedDistrictElder!,
-                                                      currentSelectedCommunityElder!,
+                                                      currentSelectedDistrictElder,
                                                       currentSelectedCommunityName!,
-                                                      selectedProvince,
-                                                      overseerName,
-                                                      overseerSurname,
+                                                      selectedProvince, 
+                                                      overseerInitialsAndSurname,
                                                       overseerData!,
                                                       memberLimit, // Pass the determined limit
+                                                      code!,
+                                                      region!,
                                                     );
                                                   } else {
                                                     // Show a snackbar or alert to inform the user to select all fields
@@ -1674,13 +1624,13 @@ class _OverseerPageState extends State<OverseerPage>
   // Updated signature with memberLimit
   Future<void> _generatePdfAndDownload(
     String selectedDistrictElder,
-    String selectedCommunityElder,
     String selectedCommunityName,
-    String selectedProvince,
-    String overseerName,
-    String overseerSurname,
+    String selectedProvince, 
+    String overseerInitialsAndSurname,
     Map<String, dynamic> overseerData,
     int memberLimit, // NEW ARGUMENT
+    String code,
+    String region,
   ) async {
     Api().showLoading(context); // Show loading indicator
     try {
@@ -1688,7 +1638,6 @@ class _OverseerPageState extends State<OverseerPage>
         context,
         selectedDistrictElder,
         selectedCommunityName,
-        selectedCommunityElder,
         memberLimit, // Pass the limit
       );
 
@@ -1755,18 +1704,18 @@ class _OverseerPageState extends State<OverseerPage>
               ),
               _buildPdfTextRow(
                 'Overseer:',
-                '$overseerName $overseerSurname',
+                '$overseerInitialsAndSurname',
                 'Code No:',
-                '________',
+                '$code',
               ),
               _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
-              _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+              _buildPdfTextRow('Community Elder:', '_____________'),
               _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
               _buildPdfTextRow(
                 'Province: ${overseerData['province']}',
                 '',
                 'Region:',
-                '__________',
+                '$region',
               ),
               pw.SizedBox(height: 20),
               pw.Divider(),
@@ -1838,9 +1787,9 @@ class _OverseerPageState extends State<OverseerPage>
                 'Year:',
                 '${DateTime.now().year}',
               ),
-              _buildPdfTextRow('Overseer:', '$overseerName $overseerSurname'),
+              _buildPdfTextRow('Overseer:', '$overseerInitialsAndSurname'),
               _buildPdfTextRow('District Elder:', '$selectedDistrictElder'),
-              _buildPdfTextRow('Community Elder:', '$selectedCommunityElder'),
+              _buildPdfTextRow('Community Elder:', '________________'),
               _buildPdfTextRow('Community Name:', '$selectedCommunityName'),
               pw.SizedBox(height: 20),
               pw.Text(
@@ -1870,9 +1819,9 @@ class _OverseerPageState extends State<OverseerPage>
               pw.SizedBox(height: 10),
               _buildPdfSignatureRow(
                 'Overseer',
-                overseerName + ' ' + overseerSurname,
+                overseerInitialsAndSurname,
               ),
-              _buildPdfSignatureRow('Community Elder', selectedCommunityElder),
+              _buildPdfSignatureRow('Community Elder', '_____________'),
               _buildPdfSignatureRow('Secretary', '_____________'),
               _buildPdfSignatureRow('District Elder', selectedDistrictElder),
               _buildPdfSignatureRow('Treasurer', '_____________'),
@@ -1918,7 +1867,6 @@ class _OverseerPageState extends State<OverseerPage>
     BuildContext context,
     String selectedDistrictElder,
     String selectedCommunityName,
-    String selectedCommunityElder,
     int memberLimit, // NEW ARGUMENT
   ) async {
     FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -1928,8 +1876,10 @@ class _OverseerPageState extends State<OverseerPage>
         .collection('users')
         .where('districtElderName', isEqualTo: selectedDistrictElder)
         .where('communityName', isEqualTo: selectedCommunityName)
-        .where('communityElderName', isEqualTo: selectedCommunityElder)
-        .where('overseerUid', isEqualTo: FirebaseAuth.instance.currentUser?.uid);
+        .where(
+          'overseerUid',
+          isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+        );
 
     // Apply limit if enforced by subscription check
     if (memberLimit < 999999) {
@@ -1977,10 +1927,10 @@ class _OverseerPageState extends State<OverseerPage>
 
       var total =
           (double.parse(memberWeek1) +
-                      double.parse(memberWeek2) +
-                      double.parse(memberWeek3) +
-                      double.parse(memberWeek4))
-                  .toStringAsFixed(2);
+                  double.parse(memberWeek2) +
+                  double.parse(memberWeek3) +
+                  double.parse(memberWeek4))
+              .toStringAsFixed(2);
 
       tableData.add(<String>[
         '${memberName} ${memberSurname}',
