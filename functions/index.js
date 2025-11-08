@@ -1,4 +1,6 @@
-// The updated way to get environment variables
+// =========================================================================
+// IMPORTS AND INITIALIZATION
+// =========================================================================
 const functions = require('firebase-functions');
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -6,8 +8,9 @@ const axios = require('axios');
 const fetch = require('node-fetch');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
-const { onSchedule } = require("firebase-functions/v2/scheduler");
-
+// 2ND GEN IMPORTS for HTTP and Scheduled functions
+const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler"); 
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -17,9 +20,7 @@ const db = admin.firestore();
 const app = express();
 app.use(bodyParser.json());
 
-// Initialize Paystack constants (assuming PAYSTACK_SECRET_KEY is defined via environment variables or another mechanism)
-// NOTE: I'm pulling the secret key from a placeholder process.env here as suggested in your file.
-// In a real Firebase setup, you should use functions.config().paystack.secret_key or set the environment variable.
+// **SECURE:** Retrieve the secret key from environment configuration
 const PAYSTACK_SECRET_KEY = functions.config().paystack.secret_key; 
 const PAYSTACK_API_BASE = 'https://api.paystack.co';
 
@@ -48,8 +49,7 @@ function determineSubscriptionAmount(memberCount) {
 }
 
 // =========================================================================
-// 1. HTTP ENDPOINT: /initialize-subscription (Client calls this to start subscription)
-//    This initiates the transaction and returns the authorization URL to the client.
+// 1. HTTP ENDPOINT: /initialize-subscription 
 // =========================================================================
 app.post('/initialize-subscription', async (req, res) => {
     try {
@@ -62,8 +62,6 @@ app.post('/initialize-subscription', async (req, res) => {
         // Double check the incoming amount against server-side logic for security
         if (determineSubscriptionAmount(memberCount) !== amount) {
             console.warn(`Amount mismatch for UID ${uid}. Client sent ${amount}, server calculated ${determineSubscriptionAmount(memberCount)}.`);
-            // Proceed with client amount or reject/correct as per your policy. Rejecting is safer:
-            // return res.status(400).json({ error: 'Subscription amount mismatch.' });
         }
         
         // Generate a unique reference for the authorization transaction
@@ -127,9 +125,7 @@ app.post('/initialize-subscription', async (req, res) => {
 });
  
 // =========================================================================
-// 2. PAYSTACK WEBHOOK HANDLER (Subscription Flow - NEWLY ADDED)
-//    This handles the confirmation after the initial charge, saves the Auth Code, 
-//    and marks the subscription as 'active'.
+// 2. PAYSTACK WEBHOOK HANDLER (Subscription Flow)
 // =========================================================================
 app.post('/paystack-subscription-webhook', async (req, res) => {
     // 1. Security Check: Verify Paystack Signature (Crucial)
@@ -217,7 +213,6 @@ app.post('/paystack-subscription-webhook', async (req, res) => {
 
 // =========================================================================
 // 3. EXISTING MARKETPLACE/ORDER LOGIC
-//    (Your original /create_seller_subaccount and /create-payment-link remain unchanged)
 // =========================================================================
 
 const ADMIN_SHARE_PERCENT = 8;
@@ -380,13 +375,16 @@ app.post('/paystack-webhook', async (req, res) => {
 
   res.status(200).send('Webhook received.');
 });
-// The key line: Export the Express app as an HTTP function
-exports.api = functions.https.onRequest(app);
 
 // =========================================================================
-// 4. SCHEDULED SUBSCRIPTION CRON JOB (Your original code)
-//    This runs monthly to charge active overseers using the stored Auth Code.
+// 4. FUNCTION EXPORTS (2ND GEN)
 // =========================================================================
+
+// EXPORT 1: HTTP Express App (2nd Gen)
+// This runs the Express app 'app' for all the routes defined above.
+exports.api = onRequest(app);
+
+// EXPORT 2: SCHEDULED SUBSCRIPTION CRON JOB (2nd Gen)
 exports.monthlySubscriptionCharge = onSchedule(
   {
     schedule: '0 0 1 * *',
@@ -495,4 +493,3 @@ exports.monthlySubscriptionCharge = onSchedule(
     return null;
   }
 );
-
