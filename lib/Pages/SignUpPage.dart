@@ -11,10 +11,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:ttact/Components/AdBanner.dart';
+import 'package:ttact/Pages/Email_Verification_Page.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; 
 
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
@@ -248,36 +251,57 @@ class _SignUpPageState extends State<SignUpPage> {
     txtConfirmPassword.dispose();
     super.dispose();
   }
+// Add this import if you don't have it
 
-  Future<void> _getAddress() async {
-    // Skip Geolocation on Web as it requires permissions that crash the app in some environments,
-    // and is generally handled differently.
-    if (kIsWeb) {
-      txtAddress.text = "Enter Address Manually (Web)";
-      return;
+Future<void> _getAddress() async {
+  // We no longer skip the web at the start.
+  // The permission flow is handled by the geolocator package.
+
+  try {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      
+      // Request permission
+      permission = await Geolocator.requestPermission();
+      
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        
+        // Show message if user still denies
+        Api().showMessage(
+          context,
+          'Location Permission Denied',
+          'Please grant location permission to auto-fill address.',
+          Colors.orange,
+        );
+        return;
+      }
     }
 
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        permission = await Geolocator.requestPermission();
-        if (permission != LocationPermission.always &&
-            permission != LocationPermission.whileInUse) {
-          Api().showMessage(
-            context,
-            'Location Permission Denied',
-            'Please grant location permission to auto-fill address.',
-            Colors.orange,
-          );
-          return;
-        }
-      }
+    // This will now work on all platforms
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
 
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+    // --- PLATFORM-SPECIFIC LOGIC ---
+    if (kIsWeb) {
+      // ON WEB:
+      // We got the position, but placemarkFromCoordinates requires a
+      // Google Maps API key in index.html. We'll just show the coordinates.
+      txtAddress.text =
+          "Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}";
+      
+      Api().showMessage(
+        context,
+        'Location Found (Web)',
+        'Full address lookup is only supported on the mobile app.',
+        Theme.of(context).primaryColor, // Use your theme's color
       );
 
+    } else {
+      // ON MOBILE:
+      // We can use geocoding to get the full address.
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
@@ -291,17 +315,18 @@ class _SignUpPageState extends State<SignUpPage> {
       } else {
         txtAddress.text = "Address not found";
       }
-    } catch (e) {
-      Api().showMessage(
-        context,
-        'Location Error',
-        'Could not get address: ${e.toString()}',
-        Colors.red,
-      );
-      txtAddress.text = "Error getting address";
     }
+  } catch (e) {
+    // This will catch any errors, including permission errors on web
+    Api().showMessage(
+      context,
+      'Location Error',
+      'Could not get address: ${e.toString()}',
+      Colors.red,
+    );
+    txtAddress.text = "Error getting address";
   }
-
+}
   List<String> getDistrictElderNames(Map<String, dynamic>? data) {
     if (data == null ||
         !data.containsKey('districts') ||
@@ -824,6 +849,33 @@ class _SignUpPageState extends State<SignUpPage> {
                             );
                           },
                         ),
+                      if (selectedDistrictData != null)
+                        _buildListTile(
+                          context: context,
+                          title: 'Select Community Name',
+                          trailingText: selectedCommunityName ?? 'Not Selected',
+                          onTap: () {
+                            if (communityNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Communities',
+                                'No communities found for the selected district elder.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+                            _buildActionSheet(
+                              context: context,
+                              title: 'Choose a Community Name',
+                              actions: communityNames,
+                              onSelected: (communityName) {
+                                setState(() {
+                                  selectedCommunityName = communityName;
+                                });
+                              },
+                            );
+                          },
+                        ),
                     ],
                   ),
 
@@ -998,115 +1050,75 @@ class _SignUpPageState extends State<SignUpPage> {
                           Navigator.pop(context); // Dismiss loading
                         return;
                       }
-
+                      // 1. Generate the code
+                      String code = Api().generateVerificationCode();
+                      print('here is the code $code');
+                      // 2. Send the email
                       try {
-                        if (emailFromArgs.isEmpty) {
-                          await backendService.signUp(
-                            txtName.text.trim(),
-                            txtSurname.text.trim(),
-                            txtEmail.text.trim(),
-                            txtPassword.text,
-                            txtAddress.text.trim(),
-                            txtContactNumber.text.trim(),
-                            selectedMemberUid!,
-                            role!,
-                            accountNumber: txtAccountNumber.text.trim(),
-                            bankCode: txtBankCodeController.text.trim(),
-                            selectedProvince!,
-                            selectedDistrictElder!,
-                            selectedCommunityName!,
+                        bool emailSent = await Api().sendEmail(
+                          txtEmail.text,
+                          'Your Account Verification code',
+
+                          """
+Hello,
+
+Thank you for signing up! 
+Your 6-digit verification code is: $code
+
+This code expires soon.
+If you didn't request this, you can safely ignore this email.
+          """,
+                          context,
+                        );
+                        if (emailSent) {
+                          Navigator.push(
                             context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  VerificationScreen(
+                                    expectedCode: code, 
+                                    name: txtName.text.trim(),
+                        surname:txtSurname.text.trim(),
+                        email: txtEmail.text.trim(),
+                       password: txtPassword.text,
+                        address:txtAddress.text.trim(),
+                        contacts:txtContactNumber.text.trim(),
+                       selectedOverseerUid:  selectedMemberUid!,
+                      role:   role!,
+                        accountNumber: txtAccountNumber.text.trim(),
+                        bankCode: txtBankCodeController.text.trim(),
+                       province:  selectedProvince!,
+                      districtElder:   selectedDistrictElder!,
+                       communityName:  selectedCommunityName!,
+                                  ))
                           );
-                        } else {
-                          // This branch is for users signing in via social auth (already signed up with Firebase)
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(FirebaseAuth.instance.currentUser!.uid)
-                              .set(
-                                {
-                                  "name": txtName.text.trim(),
-                                  "surname": txtSurname.text.trim(),
-                                  "email": emailFromArgs,
-                                  "profileUrl": "",
-                                  "address": txtAddress.text.trim(),
-                                  "phone": txtContactNumber.text.trim(),
-                                  "overseerUid": selectedMemberUid,
-                                  'week1': 0.00,
-                                  'week2': 0.00,
-                                  'week3': 0.00,
-                                  'week4': 0.00,
-                                  "role": role,
-                                  "province": selectedProvince,
-                                  "districtElderName": selectedDistrictElder,
-                                  if (role == 'Seller')
-                                    'sellerPaystackAccount': '',
-                                  "uid": FirebaseAuth.instance.currentUser!.uid,
-                                  "communityName":
-                                      selectedCommunityName, // Added missing communityName
-                                },
-                                SetOptions(merge: true),
-                              ); // Use merge true for social users
 
-                          if (role == 'Seller') {
-                            String?
-                            subaccountCode = await createSellerSubaccount(
-                              uid: FirebaseAuth.instance.currentUser!.uid,
-                              businessName:
-                                  "${txtName.text.trim()} ${txtSurname.text.trim()}",
-                              email: emailFromArgs,
-                              accountNumber: txtAccountNumber.text.trim(),
-                              bankCode: txtBankCodeController.text.trim(),
-                            );
-
-                            if (subaccountCode != null && context.mounted) {
-                              await FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                                  .update({
-                                    'sellerPaystackAccount': subaccountCode,
-                                  });
-                            } else if (context.mounted) {
-                              print('Failed to create Paystack subaccount');
-                            }
-                          }
-
-                          if (context.mounted) {
-                            Navigator.pop(context); // Dismiss loading
-                            backendService.showMessage(
-                              context,
-                              'Success',
-                              'Account details updated successfully!',
-                              colorScheme.splashColor,
-                            );
-                            // Only show ad on Android, handled safely in AdBanner.dart
-                            if (isAndroidPlatform) {
-                              adManager.showRewardedInterstitialAd((
-                                ad,
-                                reward,
-                              ) {
-                                print(
-                                  'User earned reward: ${reward.amount} ${reward.type}',
-                                );
-                              });
-                            }
-                            Navigator.pushNamed(context, '/main-menu');
-                          }
                         }
                       } catch (e) {
-                        if (context.mounted)
-                          Navigator.pop(context); // Dismiss loading
-                        backendService.showMessage(
-                          context,
-                          'Sign Up/Update Failed',
-                          e.toString(),
-                          colorScheme.primaryColorDark,
-                        );
+                        print("Here is the error${e.toString()}");
                       }
+
+                      // 3. If it worked, go to the next screen
+
+                      // await backendService.signUp(
+                      //   txtName.text.trim(),
+                      //   txtSurname.text.trim(),
+                      //   txtEmail.text.trim(),
+                      //   txtPassword.text,
+                      //   txtAddress.text.trim(),
+                      //   txtContactNumber.text.trim(),
+                      //   selectedMemberUid!,
+                      //   role!,
+                      //   accountNumber: txtAccountNumber.text.trim(),
+                      //   bankCode: txtBankCodeController.text.trim(),
+                      //   selectedProvince!,
+                      //   selectedDistrictElder!,
+                      //   selectedCommunityName!,
+                      //   context,
+                      // );
                     },
                   ),
                   const SizedBox(height: 40),
-
-                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

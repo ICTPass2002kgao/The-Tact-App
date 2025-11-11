@@ -14,7 +14,7 @@ bool get _useCupertinoStyle =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS);
-const double _desktopContentMaxWidth = 700.0;
+const double _desktopContentMaxWidth = 1000.0; // Increased max width for two columns
 // --------------------------
 
 class AdminAddOverseer extends StatefulWidget {
@@ -129,6 +129,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         'subscriptionStatus': 'inactive',
         'paystackAuthCode': null,
         'paystackEmail': null,
+        'code':overseerCodeController.text,
+        'region':overseerRegionController.text, 
+        
         
         // --- USING THE CORRECTLY STRUCTURED LIST ---
         'districts': structuredDistricts,
@@ -166,402 +169,503 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData color = Theme.of(context);
-
-    // Helper widget to conditionally render a text field based on platform
-    Widget platformTextField({
-      required TextEditingController controller,
-      required String placeholder,
-      bool obscureText = false,
-      Widget? suffix,
-      TextStyle? style,
-      EdgeInsets padding = const EdgeInsets.all(16.0),
-    }) {
-      // FIX: Use platform check _useCupertinoStyle
-      if (_useCupertinoStyle) {
-        return CupertinoTextField(
-          controller: controller,
-          placeholder: placeholder,
-          obscureText: obscureText,
-          decoration: BoxDecoration(
+  // Helper widget to conditionally render a text field based on platform
+  Widget platformTextField({
+    required TextEditingController controller,
+    required String placeholder,
+    bool obscureText = false,
+    Widget? suffix,
+    TextStyle? style,
+    EdgeInsets padding = const EdgeInsets.all(16.0),
+  }) {
+    final ThemeData color = Theme.of(context); // Get theme inside the build method if needed, or pass it
+    // FIX: Use platform check _useCupertinoStyle
+    if (_useCupertinoStyle) {
+      return CupertinoTextField(
+        controller: controller,
+        placeholder: placeholder,
+        obscureText: obscureText,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(
+            10.0,
+          ), // Smaller radius for form
+          border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+        ),
+        padding: padding,
+        style: style,
+        suffix: suffix,
+      );
+    } else {
+      return TextField(
+        controller: controller,
+        obscureText: obscureText,
+        decoration: InputDecoration(
+          labelStyle: TextStyle(fontSize: 12),
+          labelText: placeholder,
+          border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(
               10.0,
             ), // Smaller radius for form
-            border: Border.all(color: color.primaryColor.withOpacity(0.5)),
           ),
-          padding: padding,
-          style: style,
-          suffix: suffix,
-        );
-      } else {
-        return TextField(
-          controller: controller,
-          obscureText: obscureText,
-          decoration: InputDecoration(
-            labelStyle: TextStyle(fontSize: 12),
-            labelText: placeholder,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(
-                10.0,
-              ), // Smaller radius for form
-            ),
-            suffixIcon: suffix,
-          ),
-          style: style,
-        );
-      }
+          suffixIcon: suffix,
+        ),
+        style: style,
+      );
     }
+  }
 
-    return Center(
-      // FIX 2: Constrain form width for desktop/web
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ListView(
-            children: [
-              Text(
-                'Add New Overseer',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color.primaryColor,
+  // Helper function to build the District/Community Card (reused logic)
+  Widget _buildDistrictCard(String districtElderName, List<Map<String, String>> communitiesInThisDistrict, ThemeData color) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'District: $districtElderName',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color.primaryColor,
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_forever,
+                    color: Colors.red,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      districtCommunities.remove(
+                        districtElderName,
+                      );
+                    });
+                  },
+                ),
+              ],
+            ),
+            Divider(color: color.dividerColor),
 
-              // --- Personal Details ---
-              Card(
-                elevation: 4,
-                margin: EdgeInsets.only(bottom: 16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
+            // List of Current Communities
+            if (communitiesInThisDistrict.isNotEmpty)
+              ...communitiesInThisDistrict.map(
+                (communityMap) => Padding(
+                  padding: const EdgeInsets.only(
+                    left: 16.0,
+                    top: 4,
+                    bottom: 4,
+                  ),
+                  child: Row(
+                    mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
                     children: [
-                      const SizedBox(height: 10),
-                      platformTextField(
-                        controller: overseerInitialsAndSurname,
-                        placeholder: 'Initials and Surname',
-                      ),
-                      const SizedBox(height: 10),
-                      platformTextField(
-                        controller: overseerRegionController,
-                        placeholder: 'Region',
-                      ),
-                      const SizedBox(height: 10),
-                      platformTextField(
-                        controller: overseerCodeController,
-                        placeholder: 'Code',
-                      ),
-                      const SizedBox(height: 10),
-                      platformTextField(
-                        controller: overseerEmailController,
-                        placeholder: 'Email Address',
-                      ),
-                      const SizedBox(height: 10),
-                      platformTextField(
-                        controller: overseerPasswordController,
-                        placeholder: 'Password (min 6 chars)',
-                        obscureText: !isPasswordVisible,
-                        suffix: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              isPasswordVisible = !isPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: color.primaryColor,
-                          ),
+                      Expanded(
+                        child: Text(
+                          'Community: ${communityMap['communityName']}',
+                          style: TextStyle(fontSize: 14),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      // Province Dropdown
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: DropdownButtonFormField<String>(
-                          decoration: InputDecoration(
-                            labelText: 'Select Overseer Province',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                          ),
-                          value: selectedProvince,
-                          items: provinces.map((String province) {
-                            return DropdownMenuItem<String>(
-                              value: province,
-                              child: Text(province),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              selectedProvince = newValue;
-                            });
-                          },
+                      IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Colors.grey,
                         ),
+                        onPressed: () {
+                          setState(() {
+                            districtCommunities[districtElderName]
+                                ?.remove(communityMap);
+                          });
+                        },
                       ),
                     ],
                   ),
                 ),
-              ),
-
-              // --- Dynamic District and Community Structure ---
-              Text(
-                'Organization Structure',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color.primaryColor,
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // 1. Add District Input
-              Card(
-                elevation: 4,
-                margin: EdgeInsets.only(bottom: 16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Add New District Elder',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: platformTextField(
-                              controller: overseerDistrictElderController,
-                              placeholder: 'District Elder Name (e.g., Mkhize)',
-                              padding: const EdgeInsets.all(12.0),
-                              style: const TextStyle(fontSize: 15),
-                            ),
-                          ),
-                          const SizedBox(width: 8.0),
-                          Expanded(
-                            child: CustomOutlinedButton(
-                              onPressed: () {
-                                String districtElderName =
-                                    overseerDistrictElderController.text.trim();
-                                if (districtElderName.isEmpty) {
-                                  Api().showMessage(
-                                    context,
-                                    'Name cannot be empty',
-                                    'Error',
-                                    color.primaryColorDark,
-                                  );
-                                } else if (districtCommunities.containsKey(
-                                  districtElderName,
-                                )) {
-                                  Api().showMessage(
-                                    context,
-                                    'District Elder already exists',
-                                    'Error',
-                                    color.primaryColorDark,
-                                  );
-                                } else {
-                                  setState(() {
-                                    districtCommunities.putIfAbsent(
-                                      districtElderName,
-                                      () => [],
-                                    );
-                                    overseerDistrictElderController.clear();
-                                  });
-                                }
-                              },
-                              text: 'Add District',
-                              backgroundColor: color.primaryColor,
-                              foregroundColor: color.scaffoldBackgroundColor,
-                              width: double.infinity,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+              )
+            else
+              Padding(
+                padding: EdgeInsets.only(left: 16.0, top: 8),
+                child: Text(
+                  'No communities added yet.',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: color.hintColor,
                   ),
                 ),
               ),
 
-              // 2. Display and Add Communities to Existing Districts
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: districtCommunities.keys.length,
-                itemBuilder: (context, index) {
-                  String districtElderName = districtCommunities.keys.elementAt(
-                    index,
-                  );
-                  List<Map<String, String>> communitiesInThisDistrict =
-                      districtCommunities[districtElderName] ?? [];
+            Divider(height: 20),
+            Text(
+              'Add Community to $districtElderName:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 10),
 
-                  return Card(
-                    elevation: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'District: $districtElderName',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: color.primaryColor,
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.delete_forever,
-                                  color: Colors.red,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    districtCommunities.remove(
-                                      districtElderName,
-                                    );
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                          Divider(color: color.dividerColor),
+            // Community Name Input
+            platformTextField(
+              controller: overseerCommunityNameController,
+              placeholder: 'Community Name (e.g., Durban North)',
+              padding: const EdgeInsets.all(12.0),
+            ),
+            SizedBox(height: 8.0),
 
-                          // List of Current Communities
-                          if (communitiesInThisDistrict.isNotEmpty)
-                            ...communitiesInThisDistrict.map(
-                              (communityMap) => Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 16.0,
-                                  top: 4,
-                                  bottom: 4,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Community: ${communityMap['communityName']}',
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.close,
-                                        size: 18,
-                                        color: Colors.grey,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          districtCommunities[districtElderName]
-                                              ?.remove(communityMap);
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          else
-                            Padding(
-                              padding: EdgeInsets.only(left: 16.0, top: 8),
-                              child: Text(
-                                'No communities added yet.',
-                                style: TextStyle(
-                                  fontStyle: FontStyle.italic,
-                                  color: color.hintColor,
-                                ),
-                              ),
-                            ),
+            // Community Elder Input and Add Button
+            Row(
+              children: [
+                const SizedBox(width: 8.0),
+                Expanded(
+                  child: CustomOutlinedButton(
+                    width: double.infinity,
+                    onPressed: () {
+                      String communityName =
+                          overseerCommunityNameController.text
+                              .trim();
 
-                          Divider(height: 20),
-                          Text(
-                            'Add Community to $districtElderName:',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          SizedBox(height: 10),
+                      if (communityName.isEmpty) {
+                        Api().showMessage(
+                          context,
+                          'Name fields required',
+                          'Error',
+                          color.primaryColorDark,
+                        );
+                        return;
+                      }
 
-                          // Community Name Input
-                          platformTextField(
-                            controller: overseerCommunityNameController,
-                            placeholder: 'Community Name (e.g., Durban North)',
-                            padding: const EdgeInsets.all(12.0),
-                          ),
-                          SizedBox(height: 8.0),
+                      // Check if the community name is already used in this district
+                      bool communityExists = communitiesInThisDistrict.any(
+                        (map) => map['communityName'] == communityName,
+                      );
 
-                          // Community Elder Input and Add Button
-                          Row(
-                            children: [
-                              const SizedBox(width: 8.0),
-                              Expanded(
-                                child: CustomOutlinedButton(
-                                  width: double.infinity,
-                                  onPressed: () {
-                                    String communityName =
-                                        overseerCommunityNameController.text
-                                            .trim();
+                      if (communityExists) {
+                          Api().showMessage(
+                            context,
+                            'Community already exists in this district.',
+                            'Error',
+                            color.primaryColorDark,
+                          );
+                          return;
+                      }
 
-                                    if (communityName.isEmpty) {
-                                      Api().showMessage(
-                                        context,
-                                        'Name fields required',
-                                        'Error',
-                                        color.primaryColorDark,
-                                      );
-                                      return;
-                                    }
 
-                                    setState(() {
-                                      districtCommunities[districtElderName]
-                                          ?.add({
-                                            'communityName': communityName,
-                                          });
-                                      overseerCommunityNameController.clear();
-                                    });
-                                  },
-                                  text: 'Add Community',
-                                  backgroundColor: color.primaryColor,
-                                  foregroundColor:
-                                      color.scaffoldBackgroundColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 30),
-
-              // --- Final Submit Button ---
-              CustomOutlinedButton(
-                onPressed: addOverseer,
-                text: 'Add Overseer',
-                backgroundColor: color.primaryColor,
-                foregroundColor: color.scaffoldBackgroundColor,
-                width: double.infinity,
-              ),
-              SizedBox(height: 40),
-            ],
-          ),
+                      setState(() {
+                        districtCommunities[districtElderName]
+                            ?.add({
+                              'communityName': communityName,
+                            });
+                        overseerCommunityNameController.clear();
+                      });
+                    },
+                    text: 'Add Community',
+                    backgroundColor: color.primaryColor,
+                    foregroundColor:
+                        color.scaffoldBackgroundColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData color = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 600; // Simple check for desktop/wider view
+
+    // --- Main Content Area ---
+    Widget mainContent = Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Text(
+            'Add New Overseer',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color.primaryColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+
+          // Use Row for split-screen on wider views, otherwise use a Column
+          isDesktop
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- LEFT COLUMN: Overseer Form and District Input ---
+                    Expanded(
+                      flex: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: _buildOverseerForm(color),
+                      ),
+                    ),
+
+                    // --- RIGHT COLUMN: List of Added Districts/Communities ---
+                    Expanded(
+                      flex: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 16.0),
+                        child: _buildDistrictList(color),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  // Single Column for Mobile/Narrow Views
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildOverseerForm(color),
+                    const SizedBox(height: 30), // Spacing between sections
+                    _buildDistrictList(color),
+                  ],
+                ),
+          
+          const SizedBox(height: 30),
+
+          // --- Final Submit Button (Bottom of screen, full width) ---
+          CustomOutlinedButton(
+            onPressed: addOverseer,
+            text: 'Add Overseer',
+            backgroundColor: color.primaryColor,
+            foregroundColor: color.scaffoldBackgroundColor,
+            width: double.infinity,
+          ),
+          SizedBox(height: 40),
+        ],
+      ),
+    );
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+        child: SingleChildScrollView( // Wrap the whole content in a scroll view
+          child: mainContent,
+        ),
+      ),
+    );
+  }
+
+  // --- Extracted Widget Methods for Clarity ---
+
+  // Builds the main Overseer Form and the District Elder Input section
+  Widget _buildOverseerForm(ThemeData color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // --- Personal Details Card ---
+        Card(
+          elevation: 4,
+          margin: EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                platformTextField(
+                  controller: overseerInitialsAndSurname,
+                  placeholder: 'Initials and Surname',
+                ),
+                const SizedBox(height: 10),
+                platformTextField(
+                  controller: overseerRegionController,
+                  placeholder: 'Region',
+                ),
+                const SizedBox(height: 10),
+                platformTextField(
+                  controller: overseerCodeController,
+                  placeholder: 'Code',
+                ),
+                const SizedBox(height: 10),
+                platformTextField(
+                  controller: overseerEmailController,
+                  placeholder: 'Email Address',
+                ),
+                const SizedBox(height: 10),
+                platformTextField(
+                  controller: overseerPasswordController,
+                  placeholder: 'Password (min 6 chars)',
+                  obscureText: !isPasswordVisible,
+                  suffix: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        isPasswordVisible = !isPasswordVisible;
+                      });
+                    },
+                    icon: Icon(
+                      isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: color.primaryColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Province Dropdown
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Select Overseer Province',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                    ),
+                    value: selectedProvince,
+                    items: provinces.map((String province) {
+                      return DropdownMenuItem<String>(
+                        value: province,
+                        child: Text(province),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        selectedProvince = newValue;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // --- District Elder Input Card (Stays on the Left Column) ---
+        Text(
+          'Organization Structure',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color.primaryColor,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          elevation: 4,
+          margin: EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add New District Elder',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: platformTextField(
+                        controller: overseerDistrictElderController,
+                        placeholder: 'District Elder Name (e.g., Mkhize)',
+                        padding: const EdgeInsets.all(12.0),
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Expanded(
+                      child: CustomOutlinedButton(
+                        onPressed: () {
+                          String districtElderName =
+                              overseerDistrictElderController.text.trim();
+                          if (districtElderName.isEmpty) {
+                            Api().showMessage(
+                              context,
+                              'Name cannot be empty',
+                              'Error',
+                              color.primaryColorDark,
+                            );
+                          } else if (districtCommunities.containsKey(
+                            districtElderName,
+                          )) {
+                            Api().showMessage(
+                              context,
+                              'District Elder already exists',
+                              'Error',
+                              color.primaryColorDark,
+                            );
+                          } else {
+                            setState(() {
+                              districtCommunities.putIfAbsent(
+                                districtElderName,
+                                () => [],
+                              );
+                              overseerDistrictElderController.clear();
+                            });
+                          }
+                        },
+                        text: 'Add District',
+                        backgroundColor: color.primaryColor,
+                        foregroundColor: color.scaffoldBackgroundColor,
+                        width: double.infinity,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Builds the list of currently added Districts/Communities
+  Widget _buildDistrictList(ThemeData color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Added Districts and Communities',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color.primaryColor,
+          ),
+        ),
+        const SizedBox(height: 10),
+        // 2. Display and Add Communities to Existing Districts
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: districtCommunities.keys.length,
+          itemBuilder: (context, index) {
+            String districtElderName = districtCommunities.keys.elementAt(
+              index,
+            );
+            List<Map<String, String>> communitiesInThisDistrict =
+                districtCommunities[districtElderName] ?? [];
+
+            // Reuse the extracted helper function
+            return _buildDistrictCard(districtElderName, communitiesInThisDistrict, color);
+          },
+        ),
+        if (districtCommunities.isEmpty)
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Center(
+                child: Text(
+                  'No districts added yet. Use the "Add New District Elder" section on the left to begin.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontStyle: FontStyle.italic, color: color.hintColor),
+                ),
+              ),
+            ),
+          )
+      ],
     );
   }
 }

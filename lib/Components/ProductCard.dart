@@ -14,6 +14,9 @@ class Product_Card extends StatefulWidget {
   final bool
   isSellerProduct; // NEW: Flag to indicate if product belongs to seller
 
+  // NEW: Added optional cardBorder for visual selection highlight in ShoppingPage
+  final Border? cardBorder;
+
   const Product_Card({
     super.key,
     this.imageUrl,
@@ -26,6 +29,7 @@ class Product_Card extends StatefulWidget {
     this.discountPercentage,
     required this.availableColors,
     required this.isSellerProduct, // NEW
+    this.cardBorder, // NEW
   });
 
   @override
@@ -98,207 +102,219 @@ class _Product_CardState extends State<Product_Card> {
       color: theme.scaffoldBackgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              AspectRatio(
-                aspectRatio: 1.0,
-                child: Image.network(
-                  widget.imageUrl != null && widget.imageUrl!.isNotEmpty
-                      ? widget.imageUrl!
-                      : 'https://via.placeholder.com/150',
-                  fit: BoxFit.fill,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[200],
-                      child: const Icon(
-                        Icons.broken_image,
-                        color: Colors.grey,
-                        size: 50,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: IconButton.filledTonal(
-                  icon: Icon(
-                    _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite ? Colors.red : theme.primaryColorDark,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _isFavorite = !_isFavorite;
-                      if (_isFavorite) {
-                        print('${widget.productName ?? 'Product'} liked!');
-                      } else {
-                        print('${widget.productName ?? 'Product'} unliked!');
-                      }
-                    });
-                  },
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStatePropertyAll(
-                      theme.scaffoldBackgroundColor.withOpacity(0.2),
-                    ),
-                    shape: const WidgetStatePropertyAll(CircleBorder()),
-                    padding: WidgetStateProperty.all(EdgeInsets.zero),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: theme.primaryColor, width: 2.0),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.productName ?? 'Product Name',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                AspectRatio(
+                  aspectRatio: 1.0,
+                  child: Image.network(
+                    widget.imageUrl != null && widget.imageUrl!.isNotEmpty
+                        ? widget.imageUrl!
+                        : 'https://via.placeholder.com/150',
+                    fit: BoxFit.fill,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        // Using theme colors
+                        color: theme.hintColor.withOpacity(0.1),
+                        child: Icon(
+                          Icons.broken_image,
+                          color: theme.hintColor,
+                          size: 50,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'From:${widget.location}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: theme.primaryColor,
-                    fontStyle: FontStyle.normal,
-                    fontWeight: FontWeight.w900,
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.isAvailable ? 'Available' : 'Unavailable',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: widget.isAvailable
-                                  ? const Color.fromARGB(255, 41, 143, 45)
-                                  : Colors.red,
-                            ),
-                          ),
-                          if (widget.availableColors != null &&
-                              widget.availableColors!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              // Changed from Wrap back to Row, and wrapped it in a SingleChildScrollView
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: widget.availableColors!
-                                      .map(
-                                        (colorName) => Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 4.0,
-                                          ),
-                                          child: Container(
-                                            width: 16,
-                                            height: 16,
-                                            decoration: BoxDecoration(
-                                              color: _getColorFromName(
-                                                colorName,
-                                              ),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color:
-                                                    colorName.toLowerCase() ==
-                                                        'white'
-                                                    ? Colors.grey.shade400
-                                                    : Colors.transparent,
-                                                width: 1,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: IconButton.filledTonal(
+                    icon: Icon(
+                      _isFavorite ? Icons.favorite : Icons.favorite_border,
+                      // FIX: Using theme.primaryColor for contrast instead of primaryColorDark
+                      color: _isFavorite ? Colors.red : theme.primaryColor,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (_calculatedOriginalPrice >
-                                  (widget.price ?? 0.0) &&
-                              (widget.discountPercentage ?? 0.0) > 0)
-                            Text(
-                              'R${_calculatedOriginalPrice.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.normal,
-                                color: theme.hintColor,
-                                decoration: TextDecoration.lineThrough,
-                                decorationColor: theme.hintColor,
-                              ),
-                            ),
-                          if (widget.discountPercentage != null &&
-                              widget.discountPercentage! > 0)
-                            Text(
-                              '${widget.discountPercentage!.toInt()}% OFF',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          const Row(children: [SizedBox(width: 4)]),
-                          Text(
-                            widget.price != null
-                                ? 'R${widget.price!.toStringAsFixed(2)}'
-                                : 'Price N/A',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: theme.primaryColor,
-                            ),
-                          ),
-                        ],
+                    onPressed: () {
+                      setState(() {
+                        _isFavorite = !_isFavorite;
+                        if (_isFavorite) {
+                          print('${widget.productName ?? 'Product'} liked!');
+                        } else {
+                          print('${widget.productName ?? 'Product'} unliked!');
+                        }
+                      });
+                    },
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStatePropertyAll(
+                        theme.scaffoldBackgroundColor.withOpacity(0.2),
                       ),
+                      shape: const WidgetStatePropertyAll(CircleBorder()),
+                      padding: WidgetStateProperty.all(EdgeInsets.zero),
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 4.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.productName ?? 'Product Name',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'From:${widget.location}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: theme.primaryColor,
+                      fontStyle: FontStyle.normal,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.isAvailable ? 'Available' : 'Unavailable',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: widget.isAvailable
+                                    // Use green color that fits with the theme's intent
+                                    ? theme.splashColor.withOpacity(0.8)
+                                    : Colors.red,
+                              ),
+                            ),
+                            if (widget.availableColors != null &&
+                                widget.availableColors!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: widget.availableColors!
+                                        .map(
+                                          (colorName) => Padding(
+                                            padding: const EdgeInsets.only(
+                                              right: 4.0,
+                                            ),
+                                            child: Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                color: _getColorFromName(
+                                                  colorName,
+                                                ),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color:
+                                                      colorName.toLowerCase() ==
+                                                          'white'
+                                                      ? Colors.grey.shade400
+                                                      : Colors.transparent,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (_calculatedOriginalPrice >
+                                    (widget.price ?? 0.0) &&
+                                (widget.discountPercentage ?? 0.0) > 0)
+                              Text(
+                                'R${_calculatedOriginalPrice.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.normal,
+                                  color: theme.hintColor,
+                                  decoration: TextDecoration.lineThrough,
+                                  decorationColor: theme.hintColor,
+                                ),
+                              ),
+                            if (widget.discountPercentage != null &&
+                                widget.discountPercentage! > 0)
+                              Text(
+                                // Keep red for discount highlight
+                                '${widget.discountPercentage!}% OFF',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            const Row(children: [SizedBox(width: 4)]),
+                            Text(
+                              widget.price != null
+                                  ? 'R${widget.price!.toStringAsFixed(2)}'
+                                  : 'Price N/A',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: theme.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

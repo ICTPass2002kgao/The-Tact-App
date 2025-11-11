@@ -66,7 +66,7 @@ dependencies:
   http: ^1.4.0
   audioplayers: ^6.5.0 
   shimmer: ^3.0.0
-  fl_chart: ^1.0.0
+  fl_chart: ^1.1.1
   printing: ^5.14.2
   in_app_review: ^2.0.10
   uuid: ^4.5.1
@@ -143,10 +143,10 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
+  fonts:
+    - family: CloisterBlack
+      fonts:
+        - asset: assets/CloisterBlack.ttf
   #       - asset: fonts/Schyler-Italic.ttf
   #         style: italic
   #   - family: Trajan Pro

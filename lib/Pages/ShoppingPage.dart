@@ -1,4 +1,4 @@
-// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace
+// ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, prefer_const_literals_to_create_immutables
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -9,7 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/ProductCard.dart';
 import 'package:ttact/Components/Product_Details.dart';
-import 'package:ttact/Pages/CartPage.dart' ;
+import 'package:ttact/Pages/CartPage.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -142,6 +142,14 @@ class _ShoppingPageState extends State<ShoppingPage> {
   String _selectedCategory = 'All';
   bool _isLoading = true;
   String? _currentUserId;
+
+  // NEW STATE: Search query string
+  String _searchQuery = '';
+
+  // NEW STATE FOR DESKTOP SPLIT VIEW
+  Map<String, dynamic>? _selectedProductDetails;
+  bool _isDetailsPanelVisible = false;
+
   final List<String> _productCategories = const [
     'All',
     'Shirts & Polos',
@@ -186,6 +194,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
     final sellerProductsSnap = await FirebaseFirestore.instance
         .collection('seller_products')
+        .where('sellerId', isNotEqualTo: _currentUserId)
         .get();
 
     List<Map<String, dynamic>> loadedProducts = [];
@@ -218,6 +227,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
           'availableColors': sellerData['availableColors'] ?? [],
           'availableSizes': sellerData['availableSizes'] ?? [],
           'subAccountCode': sellerData['subAccountCode'] ?? '',
+          'sellerEmail': sellerData['sellerEmail'] ?? '',
+          'sellerName': sellerData['sellerName'] ?? '',
+          'sellerSurname': sellerData['sellerSurname'] ?? '',
+          'profileUrl': sellerData['profileUrl'] ?? '',
         });
       }
     }
@@ -230,15 +243,33 @@ class _ShoppingPageState extends State<ShoppingPage> {
   }
 
   void _applyFilter() {
-    if (_selectedCategory == 'All') {
-      _filteredProducts = products;
-    } else {
-      _filteredProducts = products
-          .where((product) => product['category'] == _selectedCategory)
-          .toList();
+    String query = _searchQuery.toLowerCase();
+
+    // 1. Start with products
+    Iterable<Map<String, dynamic>> tempProducts = products;
+
+    // 2. Apply Category filter
+    if (_selectedCategory != 'All') {
+      tempProducts = tempProducts.where(
+        (product) => product['category'] == _selectedCategory,
+      );
     }
+
+    // 3. Apply Search query filter
+    if (query.isNotEmpty) {
+      tempProducts = tempProducts.where((product) {
+        final productName =
+            (product['productName'] as String?)?.toLowerCase() ?? '';
+        final category = (product['category'] as String?)?.toLowerCase() ?? '';
+
+        return productName.contains(query) || category.contains(query);
+      });
+    }
+
+    _filteredProducts = tempProducts.toList();
+
     // Re-trigger rebuild after filtering
-    setState(() {}); 
+    setState(() {});
   }
 
   void addToCartFromProductDetails(
@@ -259,92 +290,383 @@ class _ShoppingPageState extends State<ShoppingPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  // --- NEW: Function to handle product click ---
+  void _handleProductClick(Map<String, dynamic> product) {
     final isDesktop = isLargeScreen(context);
-    
-    // Determine the number of columns for the grid based on screen size
-    final int crossAxisCount = isDesktop ? 4 : 2;
-    
-    // Calculate the width for individual product cards in the grid/wrap
-    final double horizontalPadding = isDesktop ? 20.0 : 10.0;
-    final double spacing = isDesktop ? 20.0 : 10.0;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    
-    final double availableWidth = screenWidth > 1200 ? 1200 - (horizontalPadding * 2) : screenWidth - (horizontalPadding * 2);
-    final double cardWidth = (availableWidth - ((crossAxisCount - 1) * spacing)) / crossAxisCount;
 
-    Widget content;
+    if (isDesktop) {
+      // Desktop: Update state to show details in the side panel
+      setState(() {
+        _selectedProductDetails = product;
+        _isDetailsPanelVisible = true;
+      });
+    } else {
+      // Mobile: Use bottom sheet
+      showModalBottomSheet(
+        scrollControlDisabledMaxHeightRatio: 0.8,
+        context: context,
+        builder: (context) {
+          return ProductDetails(
+            productDetails: product,
+            sellerProductId: product['sellerId'],
+            onAddToCart: (selectedColor, selectedSize) {
+              addToCartFromProductDetails(product, selectedColor, selectedSize);
+            },
+          );
+        },
+      );
+    }
+  }
 
-    if (_isLoading) {
-      // Responsive Shimmer Loading
-      content = Shimmer.fromColors(
-        baseColor: theme.colorScheme.onSurface.withOpacity(0.1),
-        highlightColor: theme.colorScheme.onSurface.withOpacity(0.05),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(horizontalPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Shimmer for Tabs/Filter
-              Container(
-                height: 40,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
+  // --- Widget for the Main Product Grid ---
+  // [THIS IS THE FIXED VERSION]
+  Widget _buildProductGrid(
+    ThemeData theme,
+    double horizontalPadding,
+    double spacing,
+    double cardWidth,
+  ) {
+    final isDesktop = isLargeScreen(context);
+
+    // The main content area where products are listed
+    Widget productContent = SingleChildScrollView(
+      padding: EdgeInsets.all(horizontalPadding),
+      child: DefaultTabController(
+        length: _productCategories.length,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // NEW: Search Bar
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20.0),
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                    _applyFilter();
+                    // Hide details panel on search change
+                    _isDetailsPanelVisible = false;
+                    _selectedProductDetails = null;
+                  });
+                },
+                decoration: InputDecoration(
+                  contentPadding: EdgeInsets.all(15),
+                  hintText: 'Search product by name or category...',
+                  prefixIcon: Icon(Icons.search, color: theme.primaryColor),
+                  fillColor: theme.hintColor.withOpacity(0.2),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
-                margin: const EdgeInsets.only(bottom: 20),
               ),
+            ),
+
+            // Product Category Tabs
+            TabBar(
+              isScrollable: !isDesktop, // Scrollable only on smaller screens
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: theme.scaffoldBackgroundColor.withOpacity(
+                0.7,
+              ), // Label color changes when selected
+              dividerColor: Colors.transparent,
+              indicatorColor: theme.primaryColor,
+              unselectedLabelColor: theme.hintColor,
+              overlayColor: WidgetStatePropertyAll(theme.primaryColor),
+              indicator: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: theme.primaryColor,
+              ),
+              onTap: (index) {
+                setState(() {
+                  _selectedCategory = _productCategories[index];
+                  _applyFilter();
+                  // Hide details panel on category change
+                  _isDetailsPanelVisible = false;
+                  _selectedProductDetails = null;
+                });
+              },
+              tabs: _productCategories
+                  .map((category) => Tab(text: category))
+                  .toList(),
+            ),
+            SizedBox(height: 20),
+
+            // Product Grid/Wrap
+            if (_filteredProducts.isEmpty && _isLoading == false)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 50.0),
+                  child: Column(
+                    children: [
+                      Icon(Icons.search_off, size: 60, color: theme.hintColor),
+                      SizedBox(height: 10),
+                      Text(
+                        'No products found matching your search and filter.',
+                        style: TextStyle(fontSize: 18, color: theme.hintColor),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
               Wrap(
                 spacing: spacing,
                 runSpacing: spacing,
                 alignment: WrapAlignment.start,
-                children: List.generate(
-                  8,
-                  (index) => SizedBox(
+                children: _filteredProducts.map((product) {
+                  final bool isSellerProduct =
+                      _currentUserId == product['sellerId'];
+
+                  // Highlight selected product on desktop
+                  final bool isSelected = isDesktop &&
+                      _selectedProductDetails?['productId'] ==
+                          product['productId'] &&
+                      _selectedProductDetails?['sellerId'] ==
+                          product['sellerId'];
+
+                  return SizedBox(
                     width: cardWidth, // Use responsive card width
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                    child: GestureDetector(
+                      onTap: () => _handleProductClick(product),
+                      child: Product_Card(
+                        onCartPressed: () => _handleProductClick(product),
+                        imageUrl: product['imageUrl'],
+                        categoryName: product['category'],
+                        productName: product['productName'],
+                        price: product['price'],
+                        discountPercentage: product['discountPercentage'],
+                        location: product['location'] ?? '',
+                        isAvailable: product['isAvailable'] ?? true,
+                        availableColors: product['availableColors'] as dynamic,
+                        isSellerProduct: isSellerProduct,
+                        // Optional: Add visual highlight for selected card on desktop
+                        cardBorder: isSelected
+                            ? Border.all(color: theme.primaryColor, width: 2.5)
+                            : null,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            height: 200,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(10),
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    // Apply max width constraint and top alignment
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Container(
+        constraints: BoxConstraints(
+          // [THIS WAS THE FIX]
+          // Changed from 400 to 1200.0 to match your 'maxWidth' constant
+          maxWidth: 1200.0,
+        ),
+        child: productContent,
+      ),
+    );
+  }
+
+  // --- Widget for the Details Panel (Desktop) ---
+  Widget _buildDetailsPanel(ThemeData theme) {
+    if (!_isDetailsPanelVisible || _selectedProductDetails == null) {
+      return Center(
+        child: Text(
+          'Select a product to view details.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: theme.hintColor.withOpacity(0.5)),
+        ),
+      );
+    }
+
+    return Container(
+      padding: EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(color: theme.hintColor.withOpacity(0.5)),
+        ),
+        color: theme.scaffoldBackgroundColor.withOpacity(
+          0.7,
+        ), // Use scaffoldBackgroundColor.withOpacity(0.7) for the panel background
+      ),
+      child: ProductDetails(
+        productDetails: _selectedProductDetails!,
+        sellerProductId: _selectedProductDetails!['sellerId'],
+        onAddToCart: (selectedColor, selectedSize) {
+          addToCartFromProductDetails(
+            _selectedProductDetails!,
+            selectedColor,
+            selectedSize,
+          );
+        },
+        // Callback to hide the panel
+        onClose: () {
+          setState(() {
+            _isDetailsPanelVisible = false;
+            _selectedProductDetails = null;
+          });
+        },
+        isStandalone: true,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDesktop = isLargeScreen(context);
+
+    // Determine the number of columns for the grid based on screen size
+    final int baseCrossAxisCount = 2; // Mobile default
+    final int desktopCrossAxisCount = _isDetailsPanelVisible
+        ? 3
+        : 4; // Grid shrinks when panel is visible
+    final int crossAxisCount =
+        isDesktop ? desktopCrossAxisCount : baseCrossAxisCount;
+
+    // Calculate widths
+    final double horizontalPadding = isDesktop ? 20.0 : 10.0;
+    final double spacing = isDesktop ? 20.0 : 10.0;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    const double maxWidth = 1200.0;
+
+    // Adjust calculation for when the panel is visible on desktop
+    double availableWidth;
+    if (isDesktop) {
+      // Max width of the entire row container is maxWidth (1200) or screenWidth
+      double containerWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
+
+      if (_isDetailsPanelVisible) {
+        // Left pane (Flex 2) is 2/3 of the total width
+        availableWidth = (containerWidth * (2 / 3)) - (horizontalPadding * 2);
+      } else {
+        // Full width when not split
+        availableWidth = containerWidth - (horizontalPadding * 2);
+      }
+    } else {
+      availableWidth = screenWidth - (horizontalPadding * 2);
+    }
+
+    // Ensure we don't divide by zero or negative number
+    final double calculatedCardWidth =
+        (availableWidth - ((crossAxisCount - 1) * spacing));
+    final double cardWidth =
+        calculatedCardWidth.isFinite && calculatedCardWidth > 0
+            ? calculatedCardWidth / crossAxisCount
+            : (screenWidth / crossAxisCount) - spacing;
+
+    Widget content;
+
+    if (_isLoading) {
+      // Shimmer Loading (Always top-aligned)
+      content = Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: Shimmer.fromColors(
+            baseColor: theme.scaffoldBackgroundColor
+                .withOpacity(0.7)
+                .withOpacity(
+                  0.3,
+                ), // Using scaffoldBackgroundColor.withOpacity(0.7) for shimmer
+            highlightColor: theme.scaffoldBackgroundColor
+                .withOpacity(0.7)
+                .withOpacity(0.1),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(horizontalPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Shimmer for Search/Tabs/Filter
+                  Container(
+                    height: 40,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: theme.scaffoldBackgroundColor.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    margin: const EdgeInsets.only(bottom: 10),
+                  ),
+                  Container(
+                    height: 40,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: theme.scaffoldBackgroundColor.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    margin: const EdgeInsets.only(bottom: 20),
+                  ),
+                  Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    alignment: WrapAlignment.start,
+                    children: List.generate(
+                      8,
+                      (index) => SizedBox(
+                        width: cardWidth,
+                        child: Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  color: theme.scaffoldBackgroundColor
+                                      .withOpacity(0.7),
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(10),
+                                  ),
+                                ),
                               ),
-                            ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      height: 14,
+                                      width: double.infinity,
+                                      color: theme.scaffoldBackgroundColor
+                                          .withOpacity(0.7),
+                                      margin: const EdgeInsets.only(bottom: 5),
+                                    ),
+                                    Container(
+                                      height: 12,
+                                      width: 80,
+                                      color: theme.scaffoldBackgroundColor
+                                          .withOpacity(0.7),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      height: 16,
+                                      width: 100,
+                                      color: theme.scaffoldBackgroundColor
+                                          .withOpacity(0.7),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(height: 14, width: double.infinity, color: Colors.white, margin: const EdgeInsets.only(bottom: 5)),
-                                Container(height: 12, width: 80, color: Colors.white),
-                                const SizedBox(height: 10),
-                                Container(height: 16, width: 100, color: Colors.white),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       );
     } else if (products.isEmpty) {
+      // Empty state (centered for full-screen impact)
       content = Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
@@ -375,114 +697,37 @@ class _ShoppingPageState extends State<ShoppingPage> {
           ),
         ),
       );
-    } else {
-      content = Center(
-        child: Container(
-          constraints: BoxConstraints(maxWidth: 1200), // Max width constraint
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(horizontalPadding),
-            child: DefaultTabController(
-              length: _productCategories.length,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Product Category Tabs
-                  TabBar(
-                    isScrollable: !isLargeScreen(context), // Scrollable only on smaller screens
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    labelColor: theme.scaffoldBackgroundColor, // Label color changes when selected
-                    dividerColor: Colors.transparent,
-                    indicatorColor: theme.primaryColor,
-                    unselectedLabelColor: theme.hintColor,
-                    overlayColor: WidgetStatePropertyAll(theme.primaryColor),
-                    indicator: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: theme.primaryColor,
-                    ),
-                    onTap: (index) {
-                      setState(() {
-                        _selectedCategory = _productCategories[index];
-                        _applyFilter();
-                      });
-                    },
-                    tabs: _productCategories.map((category) => Tab(text: category)).toList(),
-                  ),
-                  SizedBox(height: 20),
-                  
-                  // Product Grid/Wrap
-                  Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    alignment: WrapAlignment.start,
-                    children: _filteredProducts.map((product) {
-                      final bool isSellerProduct =
-                          _currentUserId == product['sellerId'];
-                      
-                      return SizedBox(
-                        width: cardWidth, // Use responsive card width
-                        child: GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              scrollControlDisabledMaxHeightRatio: 0.8,
-                              context: context,
-                              builder: (context) {
-                                return ProductDetails(
-                                  productDetails: product,
-                                  sellerProductId: product['sellerId'],
-                                  onAddToCart: (selectedColor, selectedSize) {
-                                    addToCartFromProductDetails(
-                                      product,
-                                      selectedColor,
-                                      selectedSize,
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
-                          child: Product_Card(
-                            onCartPressed: () {
-                              showModalBottomSheet(
-                                scrollControlDisabledMaxHeightRatio: 0.8,
-                                context: context,
-                                builder: (context) {
-                                  return ProductDetails(
-                                    productDetails: product,
-                                    sellerProductId: product['sellerId'],
-                                    onAddToCart: (selectedColor, selectedSize) {
-                                      addToCartFromProductDetails(
-                                        product,
-                                        selectedColor,
-                                        selectedSize,
-                                      );
-                                    },
-                                  );
-                                },
-                              );
-                            },
-                            imageUrl: product['imageUrl'],
-                            categoryName: product['category'],
-                            productName: product['productName'],
-                            price: product['price'],
-                            discountPercentage: product['discountPercentage'],
-                            location: product['location'] ?? '',
-                            isAvailable: product['isAvailable'] ?? true,
-                            availableColors: product['availableColors'] as dynamic,
-                            isSellerProduct: isSellerProduct,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
+    } else if (isDesktop) {
+      // DESKTOP SPLIT VIEW: Products (2) | Details (1)
+      content = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Column 1 (Products - Flex 2)
+          Expanded(
+            flex: 2,
+            child: _buildProductGrid(
+              theme,
+              horizontalPadding,
+              spacing,
+              cardWidth,
             ),
           ),
-        ),
+
+          // Column 2 (Details - Flex 1, Visible if selected)
+          if (_isDetailsPanelVisible)
+            Expanded(flex: 1, child: _buildDetailsPanel(theme))
+          else
+            // If panel is hidden, show a placeholder in the remaining space
+            Expanded(flex: 1, child: _buildDetailsPanel(theme)),
+        ],
       );
+    } else {
+      // MOBILE/TABLET VIEW (Single Column, always top-aligned)
+      content = _buildProductGrid(theme, horizontalPadding, spacing, cardWidth);
     }
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       floatingActionButton: cartCount == 0
           ? FloatingActionButton(
               onPressed: () async {
@@ -495,7 +740,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
               backgroundColor: theme.primaryColor,
               child: Icon(
                 Icons.shopping_cart_outlined,
-                color: theme.scaffoldBackgroundColor,
+                color: theme.scaffoldBackgroundColor.withOpacity(0.7),
               ),
             )
           : badges.Badge(
@@ -514,7 +759,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
                 backgroundColor: theme.primaryColor,
                 child: Icon(
                   Icons.shopping_cart_outlined,
-                  color: theme.scaffoldBackgroundColor,
+                  color: theme.scaffoldBackgroundColor.withOpacity(0.5),
                 ),
               ),
             ),

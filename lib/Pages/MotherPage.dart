@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Pages/MyProfile.dart';
 import 'package:ttact/Pages/Rate.dart';
@@ -65,10 +66,6 @@ class _MotherPageState extends State<MotherPage>
           if (_currentIndex > 4) {
             _currentIndex = 4; // Default to My Shop if index is out of bounds
           }
-          // Optional: Set default to My Shop page for sellers
-          // else if (_currentIndex == 0) {
-          //     _currentIndex = 4;
-          // }
         } else {
           // Standard user has 4 pages (index 0-3)
           if (_currentIndex > 3) {
@@ -195,10 +192,17 @@ class _MotherPageState extends State<MotherPage>
     ];
   }
 
+  // Helper to determine if we are in a 'mobile web' scenario
+  // This is TRUE if it's the web platform AND the screen size is NOT large/desktop.
+  bool _isMobileWeb(BuildContext context) {
+    return kIsWeb && !isLargeScreen(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
     final isDesktop = isLargeScreen(context); // Check screen size
+    final isMobileWeb = _isMobileWeb(context); // Check for mobile web
 
     // Page list is defined here, based on role
     List<Widget> pages = [
@@ -243,11 +247,14 @@ class _MotherPageState extends State<MotherPage>
       );
     } else {
       return Scaffold(
-        // Mobile Layout: AppBar, Drawer, BottomBar
+        // Mobile Layout (App or Mobile Web): AppBar, Drawer
         appBar: _buildAppBar(color),
-        drawer: _buildDrawer(color),
+        // Pass the flag to the drawer so it can show navigation items if needed
+        drawer: _buildDrawer(color, isMobileWeb: isMobileWeb),
         body: pages[_currentIndex],
-        bottomNavigationBar: _buildSalomonBottomBar(color),
+
+        // **CRITICAL CHANGE**: Only show Bottom Bar if NOT Mobile Web
+        bottomNavigationBar: isMobileWeb ? null : _buildSalomonBottomBar(color),
       );
     }
   }
@@ -258,7 +265,7 @@ class _MotherPageState extends State<MotherPage>
     return AppBar(
       centerTitle: true,
       automaticallyImplyLeading:
-          kIsWeb && MediaQuery.of(context).size.width <350 ? false : true,
+          kIsWeb && MediaQuery.of(context).size.width > 1000 ? false : true,
       backgroundColor: color.primaryColor,
       foregroundColor: color.scaffoldBackgroundColor,
       title: Text('W E L C O M E'),
@@ -285,7 +292,8 @@ class _MotherPageState extends State<MotherPage>
     );
   }
 
-  Widget _buildDrawer(ThemeData color) {
+  // Modified to accept a flag to determine if navigation items should be added
+  Widget _buildDrawer(ThemeData color, {bool isMobileWeb = false}) {
     return Drawer(
       // Constrain drawer width for tablets/smaller desktops
       width: MediaQuery.of(context).size.width > 350 ? 350 : null,
@@ -310,15 +318,51 @@ class _MotherPageState extends State<MotherPage>
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  // Navigation Items
+                  // **NEW: Navigation Items for Mobile Web**
+                  if (isMobileWeb) ...[
+                    ..._buildBottomBarItems(color).asMap().entries.map((entry) {
+                      int index = entry.key;
+                      SalomonBottomBarItem item = entry.value;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDrawerListTile(
+                            color,
+                            item.title is Text
+                                ? (item.title as Text).data ?? ''
+                                : 'Item',
+                            item.icon is Icon
+                                ? (item.icon as Icon).icon!
+                                : Icons.circle_outlined,
+                            () {
+                              setState(() {
+                                _currentIndex = index;
+                              });
+                              Navigator.pop(
+                                context,
+                              ); // Close drawer after selection
+                            },
+                            // Highlight the selected item
+                            isSelected: _currentIndex == index,
+                          ),
+                          Divider(color: color.scaffoldBackgroundColor),
+                        ],
+                      );
+                    }).toList(),
+                  ],
+
+                  // Existing Drawer Items (Profile, About, etc.)
                   _buildDrawerListTile(
                     color,
                     'Profile',
                     Ionicons.person_outline,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => MyProfile()),
-                    ),
+                    () {
+                      Navigator.pop(context); // Close drawer before navigating
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => MyProfile()),
+                      );
+                    },
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
 
@@ -340,30 +384,38 @@ class _MotherPageState extends State<MotherPage>
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  _buildDrawerListTile(
-                    color,
-                    'About',
-                    Icons.info_outline,
-                    () {},
-                  ),
+                  // _buildDrawerListTile(
+                  //   color,
+                  //   'About',
+                  //   Icons.info_outline,
+                  //   () {},
+                  // ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  _buildDrawerListTile(
-                    color,
-                    'Rate the App',
-                    Icons.star_rate_outlined,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => RateUsDialog()),
-                    ),
-                  ),
+                  // _buildDrawerListTile(
+                  //   color,
+                  //   'Rate the App',
+                  //   Icons.star_rate_outlined,
+                  //   () {
+                  //     Navigator.pop(context); // Close drawer before navigating
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(builder: (context) => RateUsDialog()),
+                  //     );
+                  //   },
+                  // ),
                   Divider(color: color.scaffoldBackgroundColor),
 
                   _buildDrawerListTile(
                     color,
                     'Help / Report Issue',
                     Icons.help_outline,
-                    _showHelpDialog,
+                    () {
+                      Navigator.pop(
+                        context,
+                      ); // Close drawer before showing dialog
+                      _showHelpDialog();
+                    },
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
                 ],
@@ -379,13 +431,15 @@ class _MotherPageState extends State<MotherPage>
               Padding(
                 padding: const EdgeInsets.all(18.0),
                 child: ListTile(
-                  onTap: () {
+                  onTap: () async {
                     final isGuest =
                         FirebaseAuth.instance.currentUser?.uid == null;
                     if (isGuest) {
                       Navigator.pushNamed(context, '/login');
                     } else {
                       FirebaseAuth.instance.signOut();
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('authToken');
                       Navigator.pushNamedAndRemoveUntil(
                         context,
                         '/login',
@@ -406,17 +460,28 @@ class _MotherPageState extends State<MotherPage>
     );
   }
 
+  // Modified to handle selection state
   Widget _buildDrawerListTile(
     ThemeData color,
     String title,
     IconData icon,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    bool isSelected = false, // New parameter for highlighting
+  }) {
+    final itemColor = isSelected
+        ? color.colorScheme.secondary
+        : color.scaffoldBackgroundColor;
     return ListTile(
       onTap: onTap,
-      textColor: color.scaffoldBackgroundColor,
-      iconColor: color.scaffoldBackgroundColor,
-      title: Text(title),
+      // Use the calculated itemColor for text and icon
+      textColor: itemColor,
+      iconColor: itemColor,
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
       leading: Icon(icon),
     );
   }

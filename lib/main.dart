@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:audio_service/audio_service.dart'; 
+import 'package:audio_service/audio_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Pages/InitialRoadWrapper.dart'; 
 import 'package:ttact/firebase_options.dart';
 
 import 'package:ttact/Components/AdBanner.dart';
@@ -78,6 +80,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: ThemeData(
+        
         cardColor: Colors.black,
         brightness: Brightness.light,
         appBarTheme: const AppBarTheme(
@@ -102,7 +105,7 @@ class _MyAppState extends State<MyApp> {
         scaffoldBackgroundColor: const Color.fromARGB(255, 4, 36, 77),
         splashColor: const Color.fromARGB(255, 60, 130, 62),
       ),
-      home: const SafeInitializer(),
+      home: const InitialRouteWrapper(),
       routes: {
         '/tact_seller': (context) => SellerProductPage(),
         '/main-menu': (context) => MotherPage(onToggleTheme: toggleTheme),
@@ -113,16 +116,13 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => Login_Page(),
         '/overseer': (context) => OverseerPage(),
         '/tactso-branches': (context) => TactsoBranchesApplications(),
+        '/introduction': (context) => Introductionpage(onGetStarted: () async {
+      // This is a minimal implementation of the callback for named routes
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasSeenIntro', true);
+  }),
       },
     );
   }
 }
-
-class SafeInitializer extends StatelessWidget {
-  const SafeInitializer({super.key});
-
-  @override
-  Widget build(BuildContext context) { 
-    return Introductionpage();
-  }
-}
+ 

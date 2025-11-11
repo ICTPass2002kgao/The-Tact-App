@@ -1,4 +1,4 @@
-// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, use_build_context_synchronously
+// ignore_for_file: prefer_const_constructs, prefer_const_literals_to_create_immutables, use_build_context_synchronously
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
@@ -38,6 +38,10 @@ class _HomePageState extends State<HomePage>
   // Music Tab State
   String _searchQuery = '';
   String _selectedCategory = 'All'; // Default selected category
+  // Tracks the index of the song selected for the player column
+  int? _selectedSongIndex;
+  // Stores the current list of songs being displayed/played
+  List<QueryDocumentSnapshot<Object?>> _currentFilteredSongs = [];
 
   @override
   void initState() {
@@ -49,16 +53,17 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    // Use 'color' for ThemeData object, which holds all theme properties
     final color = Theme.of(context);
     final isDesktop = isLargeScreen(context);
-    final tabHeight = isDesktop ? 60.0 : 48.0;
+    final tabHeight = isDesktop ? 70.0 : 48.0;
 
     // Use a fixed max width for web content
     Widget contentWrapper({required Widget child}) {
       return Center(
         child: Container(
           constraints: BoxConstraints(maxWidth: 1200),
-          padding: EdgeInsets.symmetric(horizontal: isDesktop ? 20.0 : 0),
+          padding: EdgeInsets.symmetric(horizontal: isDesktop ? 30.0 : 0),
           child: child,
         ),
       );
@@ -75,18 +80,18 @@ class _HomePageState extends State<HomePage>
             ),
             elevation: isDesktop ? 8 : 15,
             margin: EdgeInsets.zero,
-            color: color.primaryColor,
+            color: color.primaryColor, // Use primaryColor
             child: SizedBox(
               height: tabHeight,
               child: contentWrapper(
                 child: TabBar(
                   controller: _tabController,
-                  isScrollable: isDesktop
-                      ? false
-                      : true, // Full width on desktop
-                  indicatorColor: color.scaffoldBackgroundColor,
-                  labelColor: color.scaffoldBackgroundColor,
-                  unselectedLabelColor: color.hintColor,
+                  isScrollable: false,
+                  indicatorColor: color
+                      .scaffoldBackgroundColor, // Use scaffoldBackgroundColor
+                  labelColor: color
+                      .scaffoldBackgroundColor, // Use scaffoldBackgroundColor
+                  unselectedLabelColor: color.hintColor, // Use hintColor
                   tabs: [
                     Tab(
                       text: 'RECENT EVENTS',
@@ -139,13 +144,10 @@ class _HomePageState extends State<HomePage>
 
   // --- TAB 1: EVENTS ---
   Widget _buildEventsTab(ThemeData color) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.all(18.0),
+      child: ListView(
         children: [
-          SizedBox(height: 20),
-          // Daily Verse Card
           _buildDailyVerseCard(color),
           SizedBox(height: 20),
           Text(
@@ -171,6 +173,7 @@ class _HomePageState extends State<HomePage>
                 .get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
+                // Use a generic color from the theme for shimmer loading
                 return _buildShimmerLoading(color, 3, 100);
               }
               if (snapshot.hasError) {
@@ -197,24 +200,23 @@ class _HomePageState extends State<HomePage>
                     child: GestureDetector(
                       onTap: () {
                         showModalBottomSheet(
+                          scrollControlDisabledMaxHeightRatio: double.infinity,
                           context: context,
                           builder: (context) {
-                            return FractionallySizedBox(
-                              heightFactor: 0.9,
-                              child: EventDetailBottomSheet(
-                                date: date,
-                                eventMonth: eventMonth,
-                                title: eventTitle,
-                                description: eventDescription,
-                                posterUrl: posterUrl.isNotEmpty
-                                    ? posterUrl
-                                    : null,
-                              ),
+                            return EventDetailBottomSheet(
+                              date: date,
+                              eventMonth: eventMonth,
+                              title: eventTitle,
+                              description: eventDescription,
+                              posterUrl: posterUrl.isNotEmpty
+                                  ? posterUrl
+                                  : null,
                             );
                           },
                         );
                       },
                       child: UpcomingEventsCard(
+                        posterUrl: posterUrl.isNotEmpty ? posterUrl : null,
                         date: date,
                         eventMonth: eventMonth,
                         eventTitle: eventTitle,
@@ -236,6 +238,7 @@ class _HomePageState extends State<HomePage>
       elevation: 8,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      // Card uses transparent color, Container handles the styling
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
@@ -334,123 +337,162 @@ class _HomePageState extends State<HomePage>
         }
 
         // Render List/Grid based on platform
-        return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: isDesktop ? 0.0 : 8.0,
-            vertical: 16.0,
-          ),
-          child: Wrap(
-            alignment: WrapAlignment.start,
-            spacing: isDesktop ? 20.0 : 6.0, // Increased spacing for web
-            runSpacing: isDesktop
-                ? 20.0
-                : 12.0, // Increased run spacing for web
-            children: groupedUniversities.entries.map((entry) {
-              final String universityName = entry.key;
-              final List<Map<String, dynamic>> campuses = entry.value;
-              final Map<String, dynamic> representativeCampusData =
-                  campuses.first;
-              final bool anyCampusApplicationOpen = campuses.any(
-                (campus) => campus['isApplicationOpen'] == true,
-              );
+        return ListView(
+          children: [
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 0 : 8.0,
+                vertical: isDesktop ? 20.0 : 10.0,
+              ),
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {});
+                },
+                decoration: InputDecoration(
+                  contentPadding: EdgeInsets.all(15),
+                  hintText: 'Search song by name or artist... 🎶',
+                  // Use hintColor for text/fill
+                  fillColor: color.hintColor.withOpacity(0.2),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            Wrap(
+              alignment: WrapAlignment.start,
+              spacing: isDesktop ? 20.0 : 6.0, // Increased spacing for web
+              runSpacing: isDesktop
+                  ? 20.0
+                  : 12.0, // Increased run spacing for web
+              children: groupedUniversities.entries.map((entry) {
+                final String universityName = entry.key;
+                final List<Map<String, dynamic>> campuses = entry.value;
+                final Map<String, dynamic> representativeCampusData =
+                    campuses.first;
+                final bool anyCampusApplicationOpen = campuses.any(
+                  (campus) => campus['isApplicationOpen'] == true,
+                );
 
-              // Responsive Card Width
-              final cardWidth = isDesktop
-                  ? (MediaQuery.of(context).size.width * 0.8) / 3 -
-                        40 // ~3 columns on desktop
-                  : MediaQuery.of(context).size.width / 2 -
-                        12; // 2 columns on mobile
+                // Responsive Card Width
+                final cardWidth = isDesktop
+                    ? (MediaQuery.of(context).size.width * 0.8) / 3 -
+                          40 // ~3 columns on desktop
+                    : MediaQuery.of(context).size.width / 2 -
+                          12; // 2 columns on mobile
 
-              return SizedBox(
-                width: cardWidth,
-                child: GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      scrollControlDisabledMaxHeightRatio: 0.8,
-                      context: context,
-                      builder: (context) {
-                        return TactsoBranchDetails(
-                          universityDetails: representativeCampusData,
-                          campusListForUniversity:
-                              representativeCampusData['campuses'],
-                        );
-                      },
-                    );
-                  },
-                  child: UniversityCard(
-                    imageUrl:
-                        representativeCampusData['imageUrl'] != null &&
-                            representativeCampusData['imageUrl'].isNotEmpty
-                        ? representativeCampusData['imageUrl'][0]
-                        : null,
-                    UniName: universityName,
-                    uniAddress: representativeCampusData['address'] ?? '',
-                    applicationLink:
-                        representativeCampusData['applicationLink'] ?? '',
-                    onPressed: () {
+                return SizedBox(
+                  width: cardWidth,
+                  child: GestureDetector(
+                    onTap: () {
                       showModalBottomSheet(
                         scrollControlDisabledMaxHeightRatio: 0.8,
                         context: context,
                         builder: (context) {
-                          // NOTE: You are passing the ENTIRE campuses list as 'universityDetails' here
-                          // The `TactsoBranchDetails` component will need to be prepared to handle this.
                           return TactsoBranchDetails(
-                            universityDetails: campuses as dynamic,
+                            universityDetails: representativeCampusData,
                             campusListForUniversity:
                                 representativeCampusData['campuses'],
                           );
                         },
                       );
                     },
-                    applicationIsOpen: anyCampusApplicationOpen,
+                    child: UniversityCard(
+                      imageUrl:
+                          representativeCampusData['imageUrl'] != null &&
+                              representativeCampusData['imageUrl'].isNotEmpty
+                          ? representativeCampusData['imageUrl'][0]
+                          : null,
+                      UniName: universityName,
+                      uniAddress: representativeCampusData['address'] ?? '',
+                      applicationLink:
+                          representativeCampusData['applicationLink'] ?? '',
+                      onPressed: () {
+                        showModalBottomSheet(
+                          scrollControlDisabledMaxHeightRatio: 0.8,
+                          context: context,
+                          builder: (context) {
+                            // NOTE: You are passing the ENTIRE campuses list as 'universityDetails' here
+                            return TactsoBranchDetails(
+                              universityDetails: campuses as dynamic,
+                              campusListForUniversity:
+                                  representativeCampusData['campuses'],
+                            );
+                          },
+                        );
+                      },
+                      applicationIsOpen: anyCampusApplicationOpen,
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
+                );
+              }).toList(),
+            ),
+          ],
         );
       },
     );
   }
 
-  // --- TAB 3: MUSIC ---
+  // --- TAB 3: MUSIC --- (FIXED VERSION)
   Widget _buildMusicTab(ThemeData color, bool isDesktop) {
     if (isDesktop) {
+      // DESKTOP: 3-Column Layout
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
-          // Left Sidebar: Search and Categories (Fixed Width)
+          // Column 1: Controls
           Container(
             width: 300,
             padding: const EdgeInsets.all(20.0),
             decoration: BoxDecoration(
               border: Border(
-                right: BorderSide(color: color.dividerColor.withOpacity(0.5)),
+                right: BorderSide(color: color.hintColor.withOpacity(0.5)),
               ),
-              color: color.cardColor,
             ),
             child: _buildMusicControls(color, isDesktop),
           ),
-          // Right Main Content: Song List (Expanded)
+
+          // Column 2: Song List
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
-              child: _buildSongList(color),
+              child: _buildSongList(color, isDesktop),
             ),
           ),
+
+          // Column 3: Player (Conditional)
+          if (_selectedSongIndex != null)
+            Container(
+              alignment: Alignment.centerRight,
+              width: 300, // Fixed width for player
+              padding: const EdgeInsets.all(20.0),
+              decoration: BoxDecoration(
+                border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+              ),
+              child: _buildDesktopPlayer(color),
+            ),
         ],
       );
     } else {
-      // Mobile/Tablet Layout (Original stacked design)
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            _buildMusicControls(color, isDesktop),
-            SizedBox(height: 10),
-            Expanded(child: _buildSongList(color)),
-          ],
-        ),
+      // MOBILE: Stacked Layout
+      return Column(
+        children: [
+          SizedBox(height: 20),
+
+          // Controls section
+          _buildMusicControls(color, isDesktop),
+          SizedBox(height: 10),
+          // Song List section - Expanded to take remaining space
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: _buildSongList(color, isDesktop),
+            ),
+          ),
+        ],
       );
     }
   }
@@ -459,15 +501,17 @@ class _HomePageState extends State<HomePage>
   Widget _buildMusicControls(ThemeData color, bool isDesktop) {
     final categories = [
       'All',
-      'Choreography',
+      'choreography',
       'Apostle choir',
       'Slow Jam',
       'Instrumental songs',
     ];
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: isDesktop ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: isDesktop
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.start,
       children: [
         // Search Field
         Padding(
@@ -476,11 +520,15 @@ class _HomePageState extends State<HomePage>
             onChanged: (value) {
               setState(() {
                 _searchQuery = value;
+                // Reset selected song when search changes
+                _selectedSongIndex = null;
+                // Trigger local filtering immediately
               });
             },
             decoration: InputDecoration(
               contentPadding: EdgeInsets.all(15),
-              hintText: 'Search song by name... 🎶',
+              hintText: 'Search song by name or artist... 🎶',
+              // Use hintColor for text/fill
               fillColor: color.hintColor.withOpacity(0.2),
               filled: true,
               border: OutlineInputBorder(
@@ -496,6 +544,7 @@ class _HomePageState extends State<HomePage>
         isDesktop
             ? Expanded(
                 child: ListView.builder(
+                  padding: EdgeInsets.zero,
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     final category = categories[index];
@@ -531,6 +580,9 @@ class _HomePageState extends State<HomePage>
                         onTap: () {
                           setState(() {
                             _selectedCategory = category;
+                            // Reset selected song when category changes
+                            _selectedSongIndex = null;
+                            // Trigger local filtering immediately
                           });
                         },
                       ),
@@ -556,130 +608,161 @@ class _HomePageState extends State<HomePage>
                     onTap: (index) {
                       setState(() {
                         _selectedCategory = categories[index];
+                        // Reset selected song when category changes
+                        _selectedSongIndex = null;
                       });
                     },
                     tabs: categories.map((c) => Tab(text: c)).toList(),
                   ),
                 ),
               ),
-
-        // Downloaded Songs Button (Only on Mobile/Bottom of Desktop Sidebar)
-        if (isDesktop) Spacer(),
-        Padding(
-          padding: const EdgeInsets.only(top: 20.0),
-          child: IconButton.filled(
-            onPressed: () {
-              showCupertinoSheet(
-                enableDrag: true,
-                context: context,
-                pageBuilder: (context) {
-                  return DownloadedSongs();
-                },
-              );
-            },
-            style: ButtonStyle(
-              backgroundColor: WidgetStatePropertyAll(color.splashColor),
-            ),
-            icon: Icon(
-              Icons.download_done,
-              size: 40,
-              color: color.scaffoldBackgroundColor,
-            ),
-            tooltip: 'Downloaded Songs',
-          ),
-        ),
       ],
     );
   }
 
-  // Song List Content
-  Widget _buildSongList(ThemeData color) {
+  // Song List Content (FIXED VERSION)
+  Widget _buildSongList(ThemeData color, bool isDesktop) {
     return FutureBuilder<QuerySnapshot>(
       future: FirebaseFirestore.instance
           .collection('tact_music')
-          // Firestore optimization for search
-          .where('songName', isGreaterThanOrEqualTo: _searchQuery)
-          .where('songName', isLessThanOrEqualTo: _searchQuery + '\uf8ff')
+          .orderBy('released', descending: true)
           .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildShimmerLoading(color, 8, 70);
+          return _buildShimmerLoading(color, 8, 70, shrinkWrap: !isDesktop);
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(child: Text('No songs available'));
         }
 
         final allSongs = snapshot.data!.docs;
+        final String query = _searchQuery.toLowerCase().trim();
 
-        final filteredSongs = _selectedCategory == 'All'
-            ? allSongs
-            : allSongs.where((doc) {
-                final songData = doc.data() as Map<String, dynamic>;
-                return songData['category'] == _selectedCategory;
-              }).toList();
+        // Perform local filtering
+        final filteredSongs = allSongs.where((doc) {
+          final songData = doc.data() as Map<String, dynamic>;
+          final String songName = (songData['songName'] as String? ?? '')
+              .toLowerCase();
+          final String artist = (songData['artist'] as String? ?? '')
+              .toLowerCase();
+          final String category = (songData['category'] as String? ?? '')
+              .toLowerCase();
+
+          // Category filter
+          final bool categoryMatches =
+              _selectedCategory == 'All' ||
+              category == _selectedCategory.toLowerCase();
+
+          // Search filter
+          final bool searchMatches =
+              query.isEmpty ||
+              songName.contains(query) ||
+              artist.contains(query);
+
+          return categoryMatches && searchMatches;
+        }).toList();
+
+        // Update current filtered songs
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_currentFilteredSongs.map((e) => e.id).join() !=
+              filteredSongs.map((e) => e.id).join()) {
+            setState(() {
+              _currentFilteredSongs = filteredSongs;
+              if (_selectedSongIndex != null &&
+                  _selectedSongIndex! >= filteredSongs.length) {
+                _selectedSongIndex = null;
+              }
+            });
+          }
+        });
 
         if (filteredSongs.isEmpty) {
-          return Center(child: Text('No songs found in this category.'));
+          return Center(child: Text('No songs found matching your criteria.'));
         }
 
+        // Use ListView for both desktop and mobile with proper constraints
         return ListView.builder(
           itemCount: filteredSongs.length,
           itemBuilder: (context, index) {
-            final song = filteredSongs[index].data() as Map<String, dynamic>;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    width: 1.5,
-                    color: color.dividerColor.withOpacity(0.5),
-                  ),
-                ),
-                child: ListTile(
-                  onTap: () {
-                    _handleSongPlay(index, filteredSongs, color);
-                  },
-                  minVerticalPadding:
-                      15, // Increased padding for web readability
-                  trailing: Icon(
-                    Icons.more_vert_outlined,
-                    color: color.hintColor,
-                  ),
-                  subtitle: Text(
-                    'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w200,
-                      fontStyle: FontStyle.italic,
-                      fontSize: 13,
-                      color: color.hintColor,
-                    ),
-                  ),
-                  title: Text(
-                    song['songName']?.toString() ?? 'Untitled song',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  leading: Container(
-                    height: 50,
-                    width: 50,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(width: 1.5, color: color.primaryColor),
-                    ),
-                    child: Icon(
-                      Icons.music_note_outlined,
-                      color: color.primaryColor,
-                    ),
-                  ),
-                ),
-              ),
-            );
+            return _buildSongListItem(color, filteredSongs, index, isDesktop);
           },
         );
       },
+    );
+  }
+
+  // Helper method to build song list items
+  Widget _buildSongListItem(
+    ThemeData color,
+    List<QueryDocumentSnapshot<Object?>> filteredSongs,
+    int index,
+    bool isDesktop,
+  ) {
+    final song = filteredSongs[index].data() as Map<String, dynamic>;
+    final isSelected = isDesktop && index == _selectedSongIndex;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5.0),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            width: isSelected ? 2.5 : 1.5,
+            color: isSelected
+                ? color.primaryColor
+                : color.hintColor.withOpacity(0.5),
+          ),
+          color: isSelected ? color.primaryColor.withOpacity(0.05) : null,
+        ),
+        child: ListTile(
+          onTap: () {
+            _handleSongPlay(index, filteredSongs, color);
+          },
+          minVerticalPadding: 15,
+          trailing: Icon(Icons.more_vert_outlined, color: color.hintColor),
+          subtitle: Text(
+            'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w200,
+              fontStyle: FontStyle.italic,
+              fontSize: 13,
+              color: color.hintColor,
+            ),
+          ),
+          title: Text(
+            song['songName']?.toString() ?? 'Untitled song',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          leading: Container(
+            height: 50,
+            width: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(width: 1.5, color: color.primaryColor),
+            ),
+            child: Icon(Icons.music_note_outlined, color: color.primaryColor),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget for the Desktop Player Column
+  Widget _buildDesktopPlayer(ThemeData color) {
+    if (_selectedSongIndex == null || _currentFilteredSongs.isEmpty) {
+      return Center(child: Text('Select a song to play!'));
+    }
+
+    final songsData = _currentFilteredSongs
+        .map((doc) => doc.data() as Map<String, dynamic>)
+        .toList();
+
+    return PlaySong(
+      songs: songsData,
+      initialIndex: _selectedSongIndex!,
+      isStandalone: true,
     );
   }
 
@@ -689,6 +772,17 @@ class _HomePageState extends State<HomePage>
     List<QueryDocumentSnapshot<Object?>> filteredSongs,
     ThemeData color,
   ) {
+    final isDesktop = isLargeScreen(context);
+
+    // On Desktop, update the state immediately to display the player
+    if (isDesktop) {
+      setState(() {
+        _selectedSongIndex = index;
+      });
+      return;
+    }
+
+    // Mobile/Non-Desktop Ad Logic
     _songPlayCount++;
     debugPrint('Song play count: $_songPlayCount');
 
@@ -710,24 +804,19 @@ class _HomePageState extends State<HomePage>
     // Determine if we should show the ad
     if (_songPlayCount >= 4) {
       if (!kIsWeb) {
-        // Only attempt to show rewarded ad on non-web platforms
         adManager.showRewardedInterstitialAd(
           (ad, reward) {
-            // Ad success: play the song and reset count
             debugPrint('User earned reward: ${reward.amount} ${reward.type}');
             playSong();
             setState(() => _songPlayCount = 0);
           },
           onAdFailed: () {
-            // Ad failure: still play the song, and reset count to try again later
             playSong();
-            // Resetting count here is optional, but helps ensure the ad prompt is less frequent
             setState(() => _songPlayCount = 0);
           },
         );
       } else {
-        // On Web/Desktop, skip the rewarded ad, just play the song, but still reset the counter
-        // to match mobile logic flow (or implement a different monetization model).
+        // On Web/Desktop, skip the rewarded ad on mobile layout
         playSong();
         setState(() => _songPlayCount = 0);
       }
@@ -743,8 +832,35 @@ class _HomePageState extends State<HomePage>
     int itemCount,
     double itemHeight, {
     bool isGrid = false,
+    bool shrinkWrap = false,
   }) {
+    // If the shimmer loading is for a section where shrinkWrap is needed, apply it here too.
+    if (shrinkWrap) {
+      return ListView.builder(
+        shrinkWrap: true,
+        itemCount: itemCount,
+        padding: EdgeInsets.zero,
+        itemBuilder: (context, index) {
+          return Shimmer.fromColors(
+            baseColor: color.hintColor.withOpacity(0.3),
+            highlightColor: color.hintColor.withOpacity(0.1),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                height: itemHeight,
+                decoration: BoxDecoration(
+                  color: color.scaffoldBackgroundColor,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return Shimmer.fromColors(
+      // Using hintColor and a slightly lighter version for shimmer effect
       baseColor: color.hintColor.withOpacity(0.3),
       highlightColor: color.hintColor.withOpacity(0.1),
       child: isGrid
@@ -762,7 +878,8 @@ class _HomePageState extends State<HomePage>
                   height: itemHeight,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      // Using scaffoldBackgroundColor for the shined area
+                      color: color.scaffoldBackgroundColor,
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -771,13 +888,15 @@ class _HomePageState extends State<HomePage>
             )
           : ListView.builder(
               itemCount: itemCount,
+              padding: EdgeInsets.zero,
               itemBuilder: (context, index) {
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Container(
                     height: itemHeight,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: color
+                          .scaffoldBackgroundColor, // Using scaffoldBackgroundColor
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),

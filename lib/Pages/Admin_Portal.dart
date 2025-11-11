@@ -1,3 +1,6 @@
+// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, use_build_context_synchronously
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +10,7 @@ import 'package:ttact/Pages/AddMusic.dart';
 import 'package:ttact/Pages/Admin_Add_Overseer.dart';
 import 'package:ttact/Pages/Admin_Home_Page.dart';
 import 'package:ttact/Pages/Admin_Add_Product.dart';
+import 'package:ttact/Pages/Admin_Verify_Seller.dart';
 import 'package:ttact/Pages/Portal_Add_Feed.dart';
 import 'package:flutter/foundation.dart';
 
@@ -38,6 +42,11 @@ final List<Map<String, dynamic>> _adminNavItems = [
     'icon': Icons.person_add_alt_1_outlined,
     'page': AdminAddOverseer(),
   },
+  {
+    'label': 'Sellers',
+    'icon': Icons.person_3_sharp,
+    'page': AdminVerifySeller(),
+  },
   {'label': 'Feeds', 'icon': Icons.add_card_outlined, 'page': PortalAddFeed()},
 ];
 // --------------------------
@@ -55,6 +64,8 @@ class _AdminPortalState extends State<AdminPortal> {
 
   // Shared Logout Functionality
   Future<void> _handleLogout() async {
+    // Assuming Api().showLoading exists and handles the context correctly
+    // If not, you might need to use a local loading indicator.
     Api().showLoading(context);
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
@@ -63,8 +74,70 @@ class _AdminPortalState extends State<AdminPortal> {
     }
   }
 
+  // Helper to determine if we are in a 'mobile web' scenario
+  bool _isMobileWeb(BuildContext context) {
+    // It's web AND the screen is NOT considered large/desktop
+    return kIsWeb && !isLargeScreen(context);
+  }
+
+  bool _isAuthorized = false;
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    Future.delayed(Duration.zero, _checkAuthorization);
+  }
+
+  Future<void> _checkAuthorization() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    // --- 1. Authentication Check (Is the user logged in?) ---
+    if (user == null) {
+      if (mounted) {
+        // Not logged in: Redirect to login
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+      return;
+    }
+
+    // --- 2. Role Check (Does the user have the 'Admin' role?) ---
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final String role = userDoc.data()?['role'] ?? '';
+
+      if (role == 'Admin') {
+        // Access granted!
+        setState(() {
+          _isAuthorized = true;
+        });
+      } else if (role == 'Seller' || role == 'Member') {
+        if (mounted) {
+          // Logged in, but NOT an Admin: Redirect to their main menu
+          Navigator.of(context).pushReplacementNamed('/main-menu');
+        }
+      }
+    } catch (e) {
+      // Error fetching role (e.g., Firestore issue): Log out and redirect
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    //Please wait screen while checking auth/role
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    } else if (!_isAuthorized) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final color = Theme.of(context);
     final isDesktop = isLargeScreen(context);
 
@@ -75,6 +148,8 @@ class _AdminPortalState extends State<AdminPortal> {
 
   // --- MOBILE / SMALL SCREEN LAYOUT (Uses BottomNavigationBar) ---
   Widget _buildMobileLayout(BuildContext context, ThemeData color) {
+    final isMobileWeb = _isMobileWeb(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text("Admin Portal"),
@@ -85,30 +160,32 @@ class _AdminPortalState extends State<AdminPortal> {
       backgroundColor: color.scaffoldBackgroundColor,
 
       body: _currentPage, // Displays the selected page
+      // **CONDITIONAL CHANGE**: Hide BottomNavigationBar on mobile web
+      bottomNavigationBar: isMobileWeb
+          ? null
+          : BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (value) {
+                setState(() {
+                  _currentIndex = value;
+                });
+              },
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: color.scaffoldBackgroundColor,
+              unselectedItemColor: color.hintColor,
+              backgroundColor: color.primaryColor,
+              items: _adminNavItems
+                  .map(
+                    (item) => BottomNavigationBarItem(
+                      icon: Icon(item['icon']),
+                      label: item['label'],
+                    ),
+                  )
+                  .toList(),
+            ),
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (value) {
-          setState(() {
-            _currentIndex = value;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: color.scaffoldBackgroundColor,
-        unselectedItemColor: color.hintColor,
-        backgroundColor: color.primaryColor,
-        items: _adminNavItems
-            .map(
-              (item) => BottomNavigationBarItem(
-                icon: Icon(item['icon']),
-                label: item['label'],
-              ),
-            )
-            .toList(),
-      ),
-
-      // Drawer remains for logout/extra menu on mobile
-      drawer: _buildDrawer(context, color),
+      // Pass the flag to the Drawer so it knows when to show navigation items
+      drawer: _buildDrawer(context, color, isMobileWeb: isMobileWeb),
     );
   }
 
@@ -122,7 +199,7 @@ class _AdminPortalState extends State<AdminPortal> {
         foregroundColor: color.scaffoldBackgroundColor,
         automaticallyImplyLeading: false,
         actions: [
-          // FIX: Add Logout Icon for Desktop AppBar
+          // Logout Icon for Desktop AppBar
           IconButton(
             icon: Icon(Icons.logout, color: color.scaffoldBackgroundColor),
             onPressed: _handleLogout,
@@ -181,44 +258,71 @@ class _AdminPortalState extends State<AdminPortal> {
     );
   }
 
-  // --- Shared Drawer Content ---
-  Widget _buildDrawer(BuildContext context, ThemeData color) {
+  // --- Shared Drawer Content (Modified to accept isMobileWeb) ---
+  Widget _buildDrawer(
+    BuildContext context,
+    ThemeData color, {
+    required bool isMobileWeb,
+  }) {
     return Drawer(
       backgroundColor: color.primaryColor,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            children: [
-              DrawerHeader(
-                child: Image.asset(
-                  'assets/tact_logo.PNG',
-                  height: 100,
-                  width: 100,
-                ),
-              ),
-              // Use the defined list for menu items
-              ..._adminNavItems
-                  .map(
-                    (item) => ListTile(
-                      onTap: () {
-                        setState(() {
-                          _currentIndex = _adminNavItems.indexOf(item);
-                        });
-                        Navigator.pop(context);
-                      },
-                      textColor: color.scaffoldBackgroundColor,
-                      title: Text(item['label']),
-                      leading: Icon(
-                        item['icon'],
-                        color: color.scaffoldBackgroundColor,
-                      ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  DrawerHeader(
+                    child: Image.asset(
+                      'assets/tact_logo.PNG',
+                      height: 100,
+                      width: 100,
                     ),
-                  )
-                  .toList(),
-            ],
+                  ),
+
+                  // **CONDITIONAL CHANGE**: Show navigation items in Drawer on mobile web
+                  // If it's a mobile web, we rely on the drawer for navigation
+                  if (isMobileWeb) ...[
+                    ..._adminNavItems.asMap().entries.map((entry) {
+                      final item = entry.value;
+                      final index = entry.key;
+                      final isSelected = _currentIndex == index;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDrawerListTile(
+                            color: color,
+                            title: item['label'],
+                            icon: item['icon'],
+                            onTap: () {
+                              setState(() {
+                                _currentIndex = index;
+                              });
+                              Navigator.pop(context); // Close drawer
+                            },
+                            isSelected: isSelected,
+                          ),
+                          Divider(
+                            color: color.scaffoldBackgroundColor.withOpacity(
+                              0.5,
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                    Divider(color: color.scaffoldBackgroundColor),
+                  ],
+                  // If not mobile web, the drawer typically contains secondary items
+                  // or the mobile layout uses BottomNavigationBar, so the items are optional here
+                  // (Your original code was listing ALL items here, which is fine for redundancy, but I've kept
+                  // the condition to only show them when the bottom bar is removed.)
+                ],
+              ),
+            ),
           ),
 
+          // Logout Button
           Padding(
             padding: const EdgeInsets.only(bottom: 16.0),
             child: ListTile(
@@ -230,6 +334,31 @@ class _AdminPortalState extends State<AdminPortal> {
           ),
         ],
       ),
+    );
+  }
+
+  // Helper to build list tiles with a selection state
+  Widget _buildDrawerListTile({
+    required ThemeData color,
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isSelected = false,
+  }) {
+    final itemColor = isSelected
+        ? color.colorScheme.secondary
+        : color.scaffoldBackgroundColor;
+    return ListTile(
+      onTap: onTap,
+      textColor: itemColor,
+      iconColor: itemColor,
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      leading: Icon(icon),
     );
   }
 }

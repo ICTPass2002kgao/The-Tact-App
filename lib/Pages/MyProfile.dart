@@ -550,7 +550,7 @@ class _MyProfileState extends State<MyProfile> {
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName, communityElderName, districtElderName)),
+                            Expanded(child: _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName, districtElderName)),
                             SizedBox(width: 16),
                             Expanded(
                               child: Column(
@@ -564,7 +564,7 @@ class _MyProfileState extends State<MyProfile> {
                         )
                       : Column(
                           children: [
-                            _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName, communityElderName, districtElderName),
+                            _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName , districtElderName),
                             _buildUserApplicationsCard(theme, userId),
                             _buildWeeklyProgressCard(theme, week1, week2, week3, week4),
                           ],
@@ -609,7 +609,7 @@ class _MyProfileState extends State<MyProfile> {
     );
   }
 
-  Widget _buildPersonalAndOrgDetails(ThemeData theme, String contactNumber, String address, String province, String communityName, String communityElderName, String districtElderName) {
+  Widget _buildPersonalAndOrgDetails(ThemeData theme, String contactNumber, String address, String province, String communityName,String districtElderName) {
     return Column(
       children: [
         // Personal Information Card
@@ -644,12 +644,7 @@ class _MyProfileState extends State<MyProfile> {
               leading: Icon(Icons.group, color: theme.primaryColor),
               title: const Text('Community Name'),
               subtitle: Text(communityName),
-            ),
-            ListTile(
-              leading: Icon(Icons.person_outline, color: theme.primaryColor),
-              title: const Text('Community Elder'),
-              subtitle: Text(communityElderName),
-            ),
+            ), 
             ListTile(
               leading: Icon(Icons.supervisor_account, color: theme.primaryColor),
               title: const Text('District Elder'),

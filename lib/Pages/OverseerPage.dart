@@ -1,31 +1,43 @@
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print, unnecessary_null_comparison, unused_import, unused_field, avoid_returning_null_for_void
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-// Assuming these are local files you already have
-import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/AdBanner.dart';
-import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:flutter/foundation.dart';
+
+// --- Chart Package Import ---
+import 'package:fl_chart/fl_chart.dart';
+// ----------------------------
+
 // PDF Generation Imports
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-// Music Imports
-import 'package:ttact/Components/Play_Song.dart';
-import 'package:ttact/Pages/Downloaded_Songs.dart';
+import 'package:path_provider/path_provider.dart'; // Used only for non-web environments
+import 'dart:io'; // Standard dart:io, will fail on web unless excluded, but we use kIsWeb for logic branch
+
+// Assuming these are local files you already have
+import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/CustomOutlinedButton.dart';
 
 // --- Paystack API Imports ---
-import 'package:http/http.dart' as http; // For making HTTP requests
-import 'dart:convert'; // For encoding/decoding JSON
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 // ----------------------------
 
-// NOTE: You will need a package like 'url_launcher' in your pubspec.yaml
-// and import 'package:url_launcher/url_launcher.dart'; to make the
-// `launchUrl(Uri.parse(authUrl))` call functional.
+// --- PLATFORM AND LAYOUT UTILITIES ---
+bool get _useCupertinoStyle =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS);
+const double _tabletBreakpoint = 768.0;
+const double _desktopContentMaxWidth = 1200.0;
+// ------------------------------------
 
 class OverseerPage extends StatefulWidget {
   const OverseerPage({super.key});
@@ -36,40 +48,199 @@ class OverseerPage extends StatefulWidget {
 
 class _OverseerPageState extends State<OverseerPage>
     with SingleTickerProviderStateMixin {
+  // Tabs: Dashboard, Add Member, All Members, Reports (Length: 4)
   late TabController _tabController;
 
   Uint8List? _logoBytes;
 
-  String _selectedCategory = 'All';
-  String _searchQuery = '';
-  int _songPlayCount = 0;
-  final AdManager adManager =
-      AdManager(); // Assuming AdManager is defined elsewhere
-
   // --- PAYSTACK/SUBSCRIPTION STATE & CONSTANTS ---
-  // ** IMPORTANT: REPLACE WITH YOUR ACTUAL DEPLOYED CLOUD FUNCTION BASE URL **
-  // This must be the URL of your 'api' Express function endpoint.
   static const String cloudFunctionBaseUrl =
       'https://us-central1-PROJECT_ID.cloudfunctions.net/api'; // <--- UPDATE THIS
 
-  // These tiers MUST exactly match the TIER_X_CENTS constants in index.js
   static const int tier1AmountCents = 18900; // R189.00 (50+ members)
   static const int tier2AmountCents = 25000; // R250.00 (300+ members)
   static const int tier3AmountCents = 29900; // R299.00 (500+ members)
 
-  // Local state to track the Paystack subscription status from Firestore
   bool _isSubscriptionActive = false;
   // ---------------------------------------------------
+
+  // --- TEXT CONTROLLERS & STATE FOR MEMBER/REPORTS ---
+  final TextEditingController _searchController = TextEditingController();
+
+  final TextEditingController memberNameController = TextEditingController();
+  final TextEditingController memberEmailController = TextEditingController();
+  final TextEditingController memberAddressController = TextEditingController();
+  final TextEditingController memberContactController = TextEditingController();
+  final TextEditingController memberSurnameController = TextEditingController();
+  final TextEditingController week1Controller = TextEditingController();
+  final TextEditingController week2Controller = TextEditingController();
+  final TextEditingController week3Controller = TextEditingController();
+  final TextEditingController week4Controller = TextEditingController();
+  final TextEditingController officerNameController = TextEditingController();
+  final TextEditingController communityOfficerController =
+      TextEditingController();
+  double week1 = 0.0;
+  double week2 = 0.0;
+  double week3 = 0.0;
+  double week4 = 0.0;
+  String? selectedDistrictElder;
+  String? selectedCommunityName;
+  String selectedProvince = '';
+  // --------------------------------------------------
+
+  // --- CHART DATA STATE ---
+  // Bar Chart (Existing)
+  List<BarChartGroupData> _monthlyOfferingsData = [];
+  Map<String, double> _districtTotals = {};
+  double _maxOfferingAmount = 0.0;
+
+  // Pie Chart (NEW)
+  Map<String, int> _districtMemberCounts = {};
+  int _totalMemberCountForChart = 0;
+
+  // Line Chart (NEW)
+  Map<int, double> _weeklyTotals = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0};
+  double _maxWeeklyTithe = 0.0;
+  // -------------------------
+
+  // Define chart colors
+  final List<Color> _pieColors = [
+    Colors.blue,
+    Colors.red,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+  ];
 
   @override
   void initState() {
     super.initState();
+    // Updated length to 4 (Dashboard, Add Member, All Members, Reports)
     _tabController = TabController(length: 5, vsync: this);
     _loadLogoBytes();
-    _checkSubscriptionStatusFromFirestore(); // Check Paystack subscription status
+    _checkSubscriptionStatusFromFirestore();
+    _loadDashboardData(); // Renamed function
+
+    _searchController.addListener(() {
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild for search filter on 'All Members' tab
+        });
+      }
+    });
   }
 
-  // --- PAYSTACK SUBSCRIPTION STATUS CHECK ---
+  // --- NEW: Chart Data Fetching Logic ---
+  Future<void> _loadDashboardData() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('overseerUid', isEqualTo: uid)
+          .get();
+
+      // --- Initialize temporary aggregates ---
+      Map<String, double> districtTitheTotals = {};
+      Map<String, int> districtMemberCounts = {};
+      Map<int, double> weeklyTitheTotals = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0};
+      double maxTitheTotal = 0.0;
+      double maxWeekly = 0.0;
+      int totalMembers = 0;
+
+      // --- Loop through all members once ---
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        totalMembers++;
+
+        final districtName =
+            data['districtElderName'] as String? ?? 'Unassigned District';
+
+        final w1 = (data['week1'] as num? ?? 0.0).toDouble();
+        final w2 = (data['week2'] as num? ?? 0.0).toDouble();
+        final w3 = (data['week3'] as num? ?? 0.0).toDouble();
+        final w4 = (data['week4'] as num? ?? 0.0).toDouble();
+        final monthlyTotal = w1 + w2 + w3 + w4;
+
+        // 1. Aggregate for Bar Chart (Tithe by District)
+        districtTitheTotals.update(
+          districtName,
+          (value) => value + monthlyTotal,
+          ifAbsent: () => monthlyTotal,
+        );
+
+        // 2. Aggregate for Pie Chart (Members by District)
+        districtMemberCounts.update(
+          districtName,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+
+        // 3. Aggregate for Line Chart (Tithe by Week - All Districts)
+        weeklyTitheTotals[1] = (weeklyTitheTotals[1] ?? 0) + w1;
+        weeklyTitheTotals[2] = (weeklyTitheTotals[2] ?? 0) + w2;
+        weeklyTitheTotals[3] = (weeklyTitheTotals[3] ?? 0) + w3;
+        weeklyTitheTotals[4] = (weeklyTitheTotals[4] ?? 0) + w4;
+      }
+
+      // --- Prepare Bar Chart Data ---
+      List<BarChartGroupData> chartGroups = [];
+      int index = 0;
+      districtTitheTotals.forEach((district, total) {
+        chartGroups.add(
+          BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(
+                toY: total,
+                color: Theme.of(context).primaryColor,
+                width: 15,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(6),
+                ),
+              ),
+            ],
+            showingTooltipIndicators: [0],
+          ),
+        );
+        maxTitheTotal = maxTitheTotal > total ? maxTitheTotal : total;
+        index++;
+      });
+
+      // --- Find max for Line Chart Y-axis ---
+      maxWeekly = weeklyTitheTotals.values.reduce(
+        (max, v) => max > v ? max : v,
+      );
+
+      // --- Set state for all charts ---
+      if (mounted) {
+        setState(() {
+          // Bar Chart
+          _monthlyOfferingsData = chartGroups;
+          _districtTotals = districtTitheTotals;
+          _maxOfferingAmount = maxTitheTotal > 0
+              ? maxTitheTotal * 1.2
+              : 100.0; // Ensure min value if data is 0
+
+          // Pie Chart
+          _districtMemberCounts = districtMemberCounts;
+          _totalMemberCountForChart = totalMembers;
+
+          // Line Chart
+          _weeklyTotals = weeklyTitheTotals;
+          _maxWeeklyTithe = maxWeekly > 0 ? maxWeekly * 1.2 : 100.0;
+        });
+      }
+    } catch (e) {
+      print("Error loading dashboard data: $e");
+    }
+  }
+
+  // --- PAYSTACK/SUBSCRIPTION LOGIC (Kept as is) ---
 
   Future<void> _checkSubscriptionStatusFromFirestore() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -79,7 +250,6 @@ class _OverseerPageState extends State<OverseerPage>
     }
 
     try {
-      // Fetch the overseer's document to check the Paystack subscription status field
       final doc = await FirebaseFirestore.instance
           .collection('overseers')
           .doc(uid)
@@ -87,7 +257,6 @@ class _OverseerPageState extends State<OverseerPage>
 
       if (mounted) {
         setState(() {
-          // The Cloud Function webhook sets 'subscriptionStatus' to 'active' on success
           _isSubscriptionActive =
               doc.exists && doc.data()?['subscriptionStatus'] == 'active';
         });
@@ -98,7 +267,6 @@ class _OverseerPageState extends State<OverseerPage>
     }
   }
 
-  // Helper to get the total member count for the current Overseer
   Future<int> _getTotalOverseerMemberCount() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
@@ -110,18 +278,14 @@ class _OverseerPageState extends State<OverseerPage>
     return snapshot.docs.length;
   }
 
-  // --- PAYSTACK SUBSCRIPTION INITIATION LOGIC ---
-
-  /// Determines the required subscription amount in cents based on member count.
   int _determineSubscriptionAmount(int memberCount) {
     if (memberCount >= 500) {
-      return tier3AmountCents; // R299.00
+      return tier3AmountCents;
     } else if (memberCount >= 300) {
-      return tier2AmountCents; // R250.00
+      return tier2AmountCents;
     } else if (memberCount >= 50) {
-      return tier1AmountCents; // R189.00 (Minimum tier)
+      return tier1AmountCents;
     } else {
-      // If the user attempts to subscribe but is below 50, use the base rate.
       return tier1AmountCents;
     }
   }
@@ -146,10 +310,8 @@ class _OverseerPageState extends State<OverseerPage>
         ? 'Tier 3 (500+)'
         : (memberCount >= 300 ? 'Tier 2 (300-499)' : 'Tier 1 (50+)');
 
-    // 1. Call Cloud Function to initialize the Paystack subscription payment
     Api().showLoading(context);
     try {
-      // The endpoint MUST match the Express route: /api/initialize-subscription
       final response = await http.post(
         Uri.parse('$cloudFunctionBaseUrl/initialize-subscription'),
         headers: {'Content-Type': 'application/json'},
@@ -162,14 +324,13 @@ class _OverseerPageState extends State<OverseerPage>
         }),
       );
 
-      Navigator.pop(context); // Dismiss loading dialog
+      Navigator.pop(context);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final authUrl = data['authorization_url'] as String?;
 
         if (authUrl != null) {
-          // 2. Launch Paystack Checkout (Authorization URL)
           showCupertinoDialog(
             context: context,
             builder: (ctx) => CupertinoAlertDialog(
@@ -180,17 +341,15 @@ class _OverseerPageState extends State<OverseerPage>
               actions: [
                 CupertinoDialogAction(
                   child: const Text('Open Payment Page'),
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(ctx);
-                    // TODO: Implement actual URL launch using a package like url_launcher
-                    // For example: launchUrl(Uri.parse(authUrl));
+                    await launchUrl(Uri.parse(authUrl));
                     Api().showMessage(
                       context,
                       'Launching Paystack for authorization...',
                       'Info',
                       Theme.of(context).primaryColor,
                     );
-                    // Placeholder for launching URL:
                     print('Launching Paystack URL: $authUrl');
                   },
                 ),
@@ -225,8 +384,6 @@ class _OverseerPageState extends State<OverseerPage>
     }
   }
 
-  // ----------------------------------------------
-
   Future<void> _loadLogoBytes() async {
     try {
       final ByteData bytes = await rootBundle.load('assets/tact_logo.PNG');
@@ -238,871 +395,1164 @@ class _OverseerPageState extends State<OverseerPage>
     }
   }
 
-  TextEditingController _searchController = TextEditingController();
+  // --- Custom Platform/Web-Friendly Widgets ---
 
-  final TextEditingController memberNameController = TextEditingController();
-  final TextEditingController memberEmailController = TextEditingController();
-  final TextEditingController memberAddressController = TextEditingController();
-  final TextEditingController memberContactController = TextEditingController();
-  final TextEditingController memberSurnameController = TextEditingController();
-  final TextEditingController week1Controller = TextEditingController();
-  final TextEditingController week2Controller = TextEditingController();
-  final TextEditingController week3Controller = TextEditingController();
-  final TextEditingController week4Controller = TextEditingController();
-  double week1 = 0.0;
-  double week2 = 0.0;
-  double week3 = 0.0;
-  double week4 = 0.0;
-  String? selectedDistrictElder;
-  String? selectedCommunityName;
-  String selectedProvince = '';
+  Widget _platformTextField({
+    required TextEditingController controller,
+    required String placeholder,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+  }) {
+    final ThemeData color = Theme.of(context);
+    if (_useCupertinoStyle) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: CupertinoTextField(
+          controller: controller,
+          placeholder: placeholder,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10.0),
+            border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+            color: color.scaffoldBackgroundColor,
+          ),
+          padding: const EdgeInsets.all(12.0),
+        ),
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: TextField(
+          controller: controller,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            labelText: placeholder,
+            labelStyle: TextStyle(fontSize: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            fillColor: color.scaffoldBackgroundColor,
+            filled: true,
+            contentPadding: EdgeInsets.all(12.0),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildDashboardCard({
+    required BuildContext context,
+    required String title,
+    required Future<int> Function() countFuture,
+    required IconData icon,
+    Color? backgroundColor,
+  }) {
+    final color = Theme.of(context);
+    final cardColor = backgroundColor ?? color.primaryColor.withOpacity(0.8);
+
+    return FutureBuilder<int>(
+      future: countFuture(),
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Card(
+            elevation: 4,
+            child: Shimmer.fromColors(
+              baseColor: color.hintColor.withOpacity(0.3),
+              highlightColor: color.hintColor.withOpacity(0.1),
+              child: Container(
+                height: 150,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: color.scaffoldBackgroundColor,
+                ),
+              ),
+            ),
+          );
+        }
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(18.0),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: color.scaffoldBackgroundColor,
+                        ),
+                      ),
+                    ),
+                    Icon(icon, color: color.scaffoldBackgroundColor, size: 40),
+                  ],
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '${count}',
+                  style: TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.bold,
+                    color: color.scaffoldBackgroundColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- Bar Chart Widget for Dashboard (Existing) ---
+  Widget _buildTitheBarChart(BuildContext context) {
+    final color = Theme.of(context);
+    final isWeb = kIsWeb;
+
+    // Get list of district names in the order they appear in the data
+    final districtNames = _districtTotals.keys.toList();
+
+    if (_monthlyOfferingsData.isEmpty) {
+      return _buildChartPlaceholder(context, 'Tithe Offerings by District');
+    }
+
+    return Card(
+      elevation: 4,
+
+      color: color.scaffoldBackgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        height: isWeb ? 350 : 300,
+        padding: const EdgeInsets.all(18.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Total Monthly Tithe Offerings by District Elder (R)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color.primaryColor,
+              ),
+            ),
+            SizedBox(height: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: _maxOfferingAmount,
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          String districtName = districtNames[group.x.toInt()];
+                          return BarTooltipItem(
+                            '$districtName\n',
+                            TextStyle(
+                              color: color.scaffoldBackgroundColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            children: <TextSpan>[
+                              TextSpan(
+                                text: 'R${rod.toY.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  color: color.scaffoldBackgroundColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30, // Increased size for initials
+                          getTitlesWidget: (value, meta) {
+                            final index = value.toInt();
+                            if (index >= 0 && index < districtNames.length) {
+                              // Display initials
+                              String name = districtNames[index];
+                              return SideTitleWidget(
+                                meta: meta,
+                                space: 4.0,
+                                child: Text(
+                                  name
+                                      .split(' ')
+                                      .map(
+                                        (e) => e.isNotEmpty
+                                            ? e.substring(0, 1)
+                                            : '',
+                                      )
+                                      .join(), // Initials
+                                  style: TextStyle(
+                                    color: color.primaryColorDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox();
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: _maxOfferingAmount / 5,
+                          reservedSize: 40,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              'R${value.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 10),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border.all(
+                        color: color.hintColor.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    barGroups: _monthlyOfferingsData,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(
+                          color: color.hintColor.withOpacity(0.1),
+                          strokeWidth: 1,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (districtNames.isNotEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    'District Elder Initials: ${districtNames.asMap().entries.map((e) => '${e.value.split(' ').map((s) => s.isNotEmpty ? s.substring(0, 1) : '').join()}=${e.value}').join(', ')}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 10, color: color.hintColor),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- NEW: Pie Chart for Member Distribution ---
+  Widget _buildMemberPieChart(BuildContext context) {
+    final color = Theme.of(context);
+    final isWeb = kIsWeb;
+
+    if (_districtMemberCounts.isEmpty) {
+      return _buildChartPlaceholder(context, 'Member Distribution by District');
+    }
+
+    List<PieChartSectionData> sections = [];
+    int colorIndex = 0;
+    _districtMemberCounts.forEach((district, count) {
+      final isTouched = false; // You can add touch logic here later if needed
+      final fontSize = isTouched ? 16.0 : 12.0;
+      final radius = isTouched ? 110.0 : 100.0;
+      final double percentage = _totalMemberCountForChart > 0
+          ? (count / _totalMemberCountForChart) * 100
+          : 0;
+
+      sections.add(
+        PieChartSectionData(
+          color: _pieColors[colorIndex % _pieColors.length],
+          value: count.toDouble(),
+          title: '${percentage.toStringAsFixed(1)}%',
+          radius: radius,
+          titleStyle: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.bold,
+            color: color.scaffoldBackgroundColor,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 2)],
+          ),
+        ),
+      );
+      colorIndex++;
+    });
+    return Card(
+      elevation: 4,
+      color: color.scaffoldBackgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        height: isWeb ? 350 : 300,
+        padding: const EdgeInsets.all(18.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Member Distribution by District',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color.primaryColor,
+              ),
+            ),
+            SizedBox(height: 10),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: PieChart(
+                      PieChartData(
+                        pieTouchData: PieTouchData(
+                          touchCallback:
+                              (FlTouchEvent event, pieTouchResponse) {
+                                // Add touch logic if needed
+                              },
+                        ),
+                        borderData: FlBorderData(show: false),
+                        sectionsSpace: 1,
+                        centerSpaceRadius: 20,
+                        sections: sections,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 18),
+                  Expanded(
+                    flex: 1,
+                    child: ListView(
+                      children: _districtMemberCounts.keys
+                          .toList()
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                            int index = entry.key;
+                            String district = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 2.0,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    color:
+                                        _pieColors[index % _pieColors.length],
+                                  ),
+                                  SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      '$district (${_districtMemberCounts[district]})',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          })
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- NEW: Line Chart for Weekly Tithe Trend ---
+  Widget _buildWeeklyTitheLineChart(BuildContext context) {
+    final color = Theme.of(context);
+    final isWeb = kIsWeb;
+
+    if (_weeklyTotals.values.every((v) => v == 0.0)) {
+      return _buildChartPlaceholder(context, 'Weekly Tithe Trend');
+    }
+
+    final List<FlSpot> spots = [
+      FlSpot(1, _weeklyTotals[1] ?? 0.0),
+      FlSpot(2, _weeklyTotals[2] ?? 0.0),
+      FlSpot(3, _weeklyTotals[3] ?? 0.0),
+      FlSpot(4, _weeklyTotals[4] ?? 0.0),
+    ];
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        height: isWeb ? 350 : 300,
+        padding: const EdgeInsets.all(18.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Total Weekly Tithe Trend (All Districts)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color.primaryColor,
+              ),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 18.0, top: 10.0),
+                child: LineChart(
+                  LineChartData(
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      horizontalInterval: _maxWeeklyTithe / 4,
+                      verticalInterval: 1,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(
+                          color: color.hintColor.withOpacity(0.1),
+                          strokeWidth: 1,
+                        );
+                      },
+                      getDrawingVerticalLine: (value) {
+                        return FlLine(
+                          color: color.hintColor.withOpacity(0.1),
+                          strokeWidth: 1,
+                        );
+                      },
+                    ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          interval: 1,
+                          getTitlesWidget: (value, meta) {
+                            String text = '';
+                            switch (value.toInt()) {
+                              case 1:
+                                text = 'Week 1';
+                                break;
+                              case 2:
+                                text = 'Week 2';
+                                break;
+                              case 3:
+                                text = 'Week 3';
+                                break;
+                              case 4:
+                                text = 'Week 4';
+                                break;
+                              default:
+                                return const SizedBox();
+                            }
+                            return SideTitleWidget(
+                              meta: meta,
+                              space: 8.0,
+                              child: Text(
+                                text,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: _maxWeeklyTithe / 4,
+                          reservedSize: 42,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              'R${value.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 10),
+                              textAlign: TextAlign.left,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border.all(
+                        color: color.hintColor.withOpacity(0.3),
+                      ),
+                    ),
+                    minX: 1,
+                    maxX: 4,
+                    minY: 0,
+                    maxY: _maxWeeklyTithe,
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: true,
+                        gradient: LinearGradient(
+                          colors: [color.primaryColor, color.splashColor],
+                        ),
+                        barWidth: 5,
+                        isStrokeCapRound: true,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          gradient: LinearGradient(
+                            colors: [
+                              color.primaryColor.withOpacity(0.3),
+                              color.splashColor.withOpacity(0.3),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- Reusable Chart Placeholder ---
+  Widget _buildChartPlaceholder(BuildContext context, String title) {
+    final color = Theme.of(context);
+    final isWeb = kIsWeb;
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        height: isWeb ? 350 : 250,
+        width: double.infinity,
+        padding: const EdgeInsets.all(18.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.primaryColor.withOpacity(0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color.primaryColor,
+              ),
+            ),
+            SizedBox(height: 10),
+            Expanded(
+              child: Center(
+                child: Container(
+                  color: color.primaryColor.withOpacity(0.1),
+                  child: Center(
+                    child: Text(
+                      'Loading Data Visualization or No Data Available.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: color.hintColor),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<int> _getTotalOverseerDistrictCount() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('overseers')
+          .where('uid', isEqualTo: uid)
+          .get();
+      final data = snapshot.docs.isNotEmpty ? snapshot.docs.first.data() : null;
+      final districts = data?['districts'] as List<dynamic>?;
+      print("Fetched districts: $districts");
+      return districts?.length ?? 0;
+    } catch (e) {
+      print("Error fetching district count: $e");
+      return 0;
+    }
+  }
+
+  Future<int> _getTotalOverseerBranchCount() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('overseers')
+          .where('uid', isEqualTo: uid)
+          .get();
+      final data = snapshot.docs.isNotEmpty ? snapshot.docs.first.data() : null;
+      final districts = data?['districts'] as List<dynamic>?;
+      int totalBranches = 0;
+      for (var district in districts ?? []) {
+        final branches = district['communities'] as List<dynamic>?;
+
+        totalBranches += branches?.length ?? 0;
+      }
+      print("Fetched branches: $totalBranches");
+      return totalBranches;
+    } catch (e) {
+      print("Error fetching branch count: $e");
+      return 0;
+    }
+  }
+
+  // --- Main Build Method ---
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    final isWiderScreen =
+        MediaQuery.of(context).size.width >= _tabletBreakpoint;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Overseer Page'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Overseer Dashboard'),
+        centerTitle: true,
+        foregroundColor: color.scaffoldBackgroundColor,
+        backgroundColor: color.primaryColor,
+      ),
       backgroundColor: color.scaffoldBackgroundColor,
       drawer: Drawer(
+        backgroundColor: color.primaryColor,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
               decoration: BoxDecoration(color: color.primaryColor),
               child: Text(
-                'Overseer Dashboard',
+                'Overseer Menu',
                 style: TextStyle(
                   color: color.scaffoldBackgroundColor,
                   fontSize: 24,
                 ),
               ),
             ),
+            // Navigation items corresponding to the 4 tabs
             ListTile(
-              leading: Icon(Icons.home),
-              title: Text('Home'),
+              leading: Icon(Icons.dashboard),
+              title: Text('Dashboard'),
               onTap: () {
+                _tabController.index = 0;
                 Navigator.pop(context);
               },
             ),
             ListTile(
-              leading: Icon(Icons.person),
-              title: Text('Help'),
+              leading: Icon(Icons.person_add),
+              title: Text('Add Member'),
               onTap: () {
-                showCupertinoDialog(
-                  context: context,
-                  builder: (context) {
-                    return CupertinoAlertDialog(
-                      title: Text('Help'),
-                      content: Text('This is the help dialog.'),
-                      actions: [
-                        CupertinoDialogAction(
-                          child: Text('OK'),
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                );
+                _tabController.index = 1;
+                Navigator.pop(context);
               },
             ),
+            ListTile(
+              leading: Icon(Icons.people),
+              title: Text('All Members'),
+              onTap: () {
+                _tabController.index = 2;
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.receipt),
+              title: Text('Reports'),
+              onTap: () {
+                _tabController.index = 3;
+                Navigator.pop(context);
+              },
+            ),
+            Divider(),
             ListTile(
               leading: Icon(Icons.logout),
               title: Text('Logout'),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('authToken');
                 Navigator.pushReplacementNamed(context, '/login');
               },
             ),
           ],
         ),
       ),
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(text: 'Dashboard'),
-              Tab(text: 'Music'),
-              Tab(text: 'Add Member'),
-              Tab(text: 'All Members'),
-              Tab(text: 'Reports'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Dashboard Tab with Graphs
-                SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tithe Offerings (Last 4 Weeks)',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
+          child: Column(
+            children: [
+              TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Dashboard'),
+                  Tab(text: 'Add Member'),
+                  Tab(text: 'All Members'),
+                  Tab(text: 'Add Officer'),
+                  Tab(text: 'Reports'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // 1. Dashboard Tab
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Overseer Summary',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: color.primaryColorDark,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 10),
-                        FutureBuilder(
-                          future: FirebaseFirestore.instance
-                              .collection('users')
-                              .where(
-                                'overseerUid',
-                                isEqualTo:
-                                    FirebaseAuth.instance.currentUser?.uid,
-                              )
-                              .get(),
-                          builder: (context, asyncSnapshot) {
-                            if (asyncSnapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return Center(child: CircularProgressIndicator());
-                            }
-                            if (asyncSnapshot.hasError) {
-                              return Center(
-                                child: Text('Error: ${asyncSnapshot.error}'),
-                              );
-                            }
-                            if (!asyncSnapshot.hasData ||
-                                asyncSnapshot.data!.docs.isEmpty) {
-                              return Center(child: Text('No members found.'));
-                            }
-                            var totalMembers = asyncSnapshot.data!.docs.length;
-                            return Column(
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: color.primaryColor.withOpacity(0.8),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(18.0),
-                                    child: Column(
+                          SizedBox(height: 20),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isTwoColumn = constraints.maxWidth > 500;
+                              return isTwoColumn
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                'Total Overseer Members',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 23,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: color
-                                                      .scaffoldBackgroundColor,
-                                                ),
-                                              ),
-                                            ),
-                                            Icon(
-                                              Icons.person,
-                                              color:
-                                                  color.scaffoldBackgroundColor,
-                                              size: 60,
-                                            ),
-                                          ],
+                                        Expanded(
+                                          child: _buildDashboardCard(
+                                            context: context,
+                                            title: 'Total Members',
+                                            countFuture:
+                                                _getTotalOverseerMemberCount,
+                                            icon: Icons.group,
+                                          ),
                                         ),
-                                        Center(
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                '$totalMembers',
-                                                style: TextStyle(
-                                                  fontSize: 50,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: color
-                                                      .scaffoldBackgroundColor,
-                                                ),
-                                              ),
-                                              SizedBox(width: 20),
-                                              Icon(
-                                                Icons.group,
-                                                color: color
-                                                    .scaffoldBackgroundColor,
-                                                size: 60,
-                                              ),
-                                            ],
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: _buildDashboardCard(
+                                            context: context,
+                                            title: 'Total Districts',
+                                            countFuture:
+                                                _getTotalOverseerDistrictCount,
+                                            icon: Icons.location_city,
+                                            backgroundColor: color.splashColor,
+                                          ),
+                                        ),
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: _buildDashboardCard(
+                                            context: context,
+                                            title: 'Total Branches',
+                                            countFuture:
+                                                _getTotalOverseerBranchCount,
+                                            icon: Icons.location_city,
+                                            backgroundColor: Colors.redAccent,
                                           ),
                                         ),
                                       ],
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 15),
-                                FutureBuilder(
-                                  future: FirebaseFirestore.instance
-                                      .collection('overseers')
-                                      .where(
-                                        'uid',
-                                        isEqualTo: FirebaseAuth
-                                            .instance
-                                            .currentUser
-                                            ?.uid,
-                                      )
-                                      .get(),
-                                  builder: (context, asyncSnapshot) {
-                                    if (asyncSnapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    }
-                                    var oveerData = asyncSnapshot.data!.docs;
-                                    return Container(
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        color: color.primaryColor.withBlue(130),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(18.0),
-                                        child: Column(
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                Flexible(
-                                                  child: Text(
-                                                    'Total Overseer Districts:',
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontSize: 23,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: color
-                                                          .scaffoldBackgroundColor,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Icon(
-                                                  Icons.person,
-                                                  color: color
-                                                      .scaffoldBackgroundColor,
-                                                  size: 60,
-                                                ),
-                                              ],
-                                            ),
-                                            Center(
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  for (var info in oveerData)
-                                                    Text(
-                                                      '${info['districts']?.length ?? 0}',
-                                                      style: TextStyle(
-                                                        fontSize: 50,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: color
-                                                            .scaffoldBackgroundColor,
-                                                      ),
-                                                    ),
-                                                  SizedBox(width: 20),
-                                                  Icon(
-                                                    Icons.group,
-                                                    color: color
-                                                        .scaffoldBackgroundColor,
-                                                    size: 60,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
+                                    )
+                                  : Column(
+                                      children: [
+                                        _buildDashboardCard(
+                                          context: context,
+                                          title: 'Total Members',
+                                          countFuture:
+                                              _getTotalOverseerMemberCount,
+                                          icon: Icons.group,
+                                        ),
+                                        SizedBox(height: 16),
+                                        _buildDashboardCard(
+                                          context: context,
+                                          title: 'Total Districts',
+                                          countFuture:
+                                              _getTotalOverseerDistrictCount,
+                                          icon: Icons.location_city,
+                                          backgroundColor: color.splashColor,
+                                        ),
+                                        SizedBox(height: 16),
+                                        _buildDashboardCard(
+                                          context: context,
+                                          title: 'Total Branches',
+                                          countFuture:
+                                              _getTotalOverseerBranchCount,
+                                          icon: Icons.location_city,
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      ],
+                                    );
+                            },
+                          ),
+                          SizedBox(height: 30),
+                          _buildTitheBarChart(context), // The bar chart
+                          SizedBox(height: 20),
+                          _buildMemberPieChart(context), // <-- NEW PIE CHART
+                          SizedBox(height: 20),
+                          _buildWeeklyTitheLineChart(
+                            context,
+                          ), // <-- NEW LINE CHART
+                          SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+
+                    // 2. Add Member Tab
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Container(
+                        width: !isWiderScreen ? 300 : double.infinity,
+                        child: ListView(
+                          children: [
+                            _platformTextField(
+                              controller: memberNameController,
+                              placeholder: 'Enter Member Name',
+                            ),
+                            _platformTextField(
+                              controller: memberSurnameController,
+                              placeholder: 'Enter Member Surname',
+                            ),
+                            _platformTextField(
+                              controller: memberEmailController,
+                              placeholder: 'Enter Member Email (Optional)',
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            _platformTextField(
+                              controller: memberAddressController,
+                              placeholder: 'Enter Member Address',
+                            ),
+                            _platformTextField(
+                              controller: memberContactController,
+                              placeholder: 'Enter Contact Number',
+                              keyboardType: TextInputType.phone,
+                            ),
+                            SizedBox(height: 10),
+
+                            // Dropdown selection for District Elder and Community Name
+                            FutureBuilder<QuerySnapshot>(
+                              future: FirebaseFirestore.instance
+                                  .collection('overseers')
+                                  .where(
+                                    'uid',
+                                    isEqualTo:
+                                        FirebaseAuth.instance.currentUser!.uid,
+                                  )
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return Center(
+                                    child: CupertinoActivityIndicator(),
+                                  );
+                                }
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.docs.isEmpty) {
+                                  return Center(
+                                    child: Text('No overseer data found.'),
+                                  );
+                                }
+                                var overseerData =
+                                    snapshot.data!.docs.first.data()
+                                        as Map<String, dynamic>;
+                                selectedProvince = overseerData['province'];
+                                List<dynamic> districts =
+                                    overseerData['districts'] ?? [];
+
+                                Map<String, dynamic>? selectedDistrict;
+                                try {
+                                  selectedDistrict = districts.firstWhere(
+                                    (d) =>
+                                        d['districtElderName'] ==
+                                        selectedDistrictElder,
+                                  );
+                                } catch (_) {
+                                  selectedDistrict = null;
+                                }
+
+                                List<String> districtElderNames = districts
+                                    .map(
+                                      (d) => d['districtElderName'] as String?,
+                                    )
+                                    .where((name) => name != null)
+                                    .cast<String>()
+                                    .toSet()
+                                    .toList();
+
+                                List<String> communityNames =
+                                    selectedDistrict != null
+                                    ? (selectedDistrict['communities']
+                                                  as List<dynamic>?)
+                                              ?.map(
+                                                (c) =>
+                                                    c['communityName']
+                                                        as String?,
+                                              )
+                                              .where((name) => name != null)
+                                              .cast<String>()
+                                              .toSet()
+                                              .toList() ??
+                                          []
+                                    : [];
+
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      decoration: InputDecoration(
+                                        labelText: 'Choose a District Elder',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10.0,
+                                          ),
+                                        ),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 12.0,
+                                          vertical: 12.0,
                                         ),
                                       ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Mussic Tab
-                DefaultTabController(
-                  length:
-                      5, // Number of tabs: All, Choreography, Apostle Choir, Slow Jam
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: TextField(
-                            onChanged: (value) {
-                              setState(() {
-                                _searchQuery = value;
-                              });
-                            },
-                            decoration: InputDecoration(
-                              contentPadding: EdgeInsets.all(15),
-                              hintText: 'Search song by name... 🎶',
-                              fillColor: color.hintColor,
-                              focusColor: color.primaryColor,
-                              hoverColor: color.primaryColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
+                                      menuMaxHeight: 300,
+                                      value: selectedDistrictElder,
+                                      hint: Text('Choose a District Elder'),
+                                      items: districtElderNames
+                                          .map(
+                                            (e) => DropdownMenuItem(
+                                              value: e,
+                                              child: Text(e),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          selectedDistrictElder = value;
+                                          selectedCommunityName = null;
+                                        });
+                                      },
+                                    ),
+                                    SizedBox(height: 10),
+                                    if (selectedDistrictElder != null)
+                                      DropdownButtonFormField<String>(
+                                        decoration: InputDecoration(
+                                          labelText: 'Choose a Community Name',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10.0,
+                                            ),
+                                          ),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12.0,
+                                            vertical: 12.0,
+                                          ),
+                                        ),
+                                        menuMaxHeight: 300,
+                                        value: selectedCommunityName,
+                                        hint: Text('Choose a Community Name'),
+                                        items: communityNames
+                                            .map(
+                                              (e) => DropdownMenuItem(
+                                                value: e,
+                                                child: Text(e),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            selectedCommunityName = value;
+                                          });
+                                        },
+                                      ),
+                                    SizedBox(height: 20),
+                                  ],
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        TabBar(
-                          isScrollable: true,
-                          indicatorSize: TabBarIndicatorSize.tab,
-                          labelColor: color.scaffoldBackgroundColor,
-                          dividerColor: Colors.transparent,
-                          indicatorColor: color.primaryColor,
-                          unselectedLabelColor: color.hintColor,
-                          overlayColor: WidgetStatePropertyAll(
-                            color.primaryColor,
-                          ),
-                          indicator: BoxDecoration(
-                            borderRadius: BorderRadius.circular(18),
-                            color: color.primaryColor,
-                          ),
-                          onTap: (index) {
-                            setState(() {
-                              switch (index) {
-                                case 0:
-                                  _selectedCategory = 'All';
-                                  break;
-                                case 1:
-                                  _selectedCategory = 'choreography';
-                                  break;
-                                case 2:
-                                  _selectedCategory = 'Apostle choir';
-                                  break;
-                                case 3:
-                                  _selectedCategory = 'Slow Jam';
-                                  break;
-                                case 4:
-                                  _selectedCategory = 'Instrumental songs';
-                                  break;
-                              }
-                            });
-                          },
-                          tabs: const [
-                            Tab(text: 'All'),
-                            Tab(text: 'Choreography'),
-                            Tab(text: 'Apostle choir'),
-                            Tab(text: 'Slow Jam'),
-                            Tab(text: 'Instrumental Songs'),
+                            CustomOutlinedButton(
+                              onPressed: () async {
+                                if (memberNameController.text.isEmpty ||
+                                    memberSurnameController.text.isEmpty ||
+                                    memberAddressController.text.isEmpty ||
+                                    memberContactController.text.isEmpty ||
+                                    selectedDistrictElder == null ||
+                                    selectedCommunityName == null) {
+                                  Api().showMessage(
+                                    context,
+                                    'Please fill in all required fields and select District/Community.',
+                                    'Error',
+                                    color.primaryColorDark,
+                                  );
+                                  return;
+                                }
+                                try {
+                                  Api().showLoading(context);
+                                  FirebaseFirestore firestore =
+                                      FirebaseFirestore.instance;
+                                  await firestore.collection('users').add({
+                                    'name': memberNameController.text,
+                                    'surname': memberSurnameController.text,
+                                    'email': memberEmailController.text,
+                                    'address': memberAddressController.text,
+                                    'phone': memberContactController.text,
+                                    'overseerUid':
+                                        FirebaseAuth.instance.currentUser?.uid,
+                                    'role': 'Member',
+                                    'week1': 0.00,
+                                    'week2': 0.00,
+                                    'week3': 0.00,
+                                    'week4': 0.00,
+                                    "province": selectedProvince,
+                                    "districtElderName": selectedDistrictElder,
+                                    "communityName": selectedCommunityName,
+                                  });
+                                  Navigator.of(context).pop();
+                                  Api().showMessage(
+                                    context,
+                                    'Member added successfully',
+                                    'Success',
+                                    color.splashColor,
+                                  );
+                                } catch (error) {
+                                  Navigator.of(context).pop();
+                                  Api().showMessage(
+                                    context,
+                                    'Failed to add member: $error',
+                                    'Error',
+                                    color.primaryColorDark,
+                                  );
+                                }
+
+                                memberNameController.clear();
+                                memberSurnameController.clear();
+                                memberEmailController.clear();
+                                memberAddressController.clear();
+                                memberContactController.clear();
+                                setState(() {
+                                  selectedDistrictElder = null;
+                                  selectedCommunityName = null;
+                                  _loadDashboardData(); // Reload chart data
+                                });
+                              },
+                              text: 'Add Member',
+                              backgroundColor: color.primaryColor,
+                              foregroundColor: color.scaffoldBackgroundColor,
+                              width: double.infinity,
+                            ),
                           ],
                         ),
-                        SizedBox(height: 10),
-                        Expanded(
-                          child: FutureBuilder<QuerySnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('tact_music')
-                                .where(
-                                  'songName',
-                                  isGreaterThanOrEqualTo: _searchQuery,
-                                )
-                                .where(
-                                  'songName',
-                                  isLessThanOrEqualTo: _searchQuery + '\uf8ff',
-                                )
-                                .get(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return Shimmer.fromColors(
-                                  baseColor: color.hintColor.withOpacity(0.3),
-                                  highlightColor: color.hintColor.withOpacity(
-                                    0.1,
-                                  ),
-                                  child: ListView.builder(
-                                    itemCount: 10, // Show 5 shimmer items
-                                    itemBuilder: (context, index) {
-                                      return Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Container(
-                                          height:
-                                              70, // Approximate height of ListTile
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(
-                                              18,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              }
-
-                              if (!snapshot.hasData ||
-                                  snapshot.data!.docs.isEmpty) {
-                                return Center(
-                                  child: Text('No songs available'),
-                                );
-                              }
-
-                              final allSongs = snapshot.data!.docs;
-
-                              final filteredSongs = _selectedCategory == 'All'
-                                  ? allSongs
-                                  : allSongs.where((doc) {
-                                      final songData =
-                                          doc.data() as Map<String, dynamic>;
-                                      return songData['category'] ==
-                                          _selectedCategory;
-                                    }).toList();
-
-                              if (filteredSongs.isEmpty) {
-                                return Center(
-                                  child: Text(
-                                    'No songs found in this category.',
-                                  ),
-                                );
-                              }
-
-                              return Stack(
-                                children: [
-                                  ListView.builder(
-                                    itemCount: filteredSongs.length,
-                                    itemBuilder: (context, index) {
-                                      final song =
-                                          filteredSongs[index].data()
-                                              as Map<String, dynamic>;
-
-                                      return Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              18,
-                                            ),
-                                            border: Border.all(width: 1.5),
-                                          ),
-                                          child: ListTile(
-                                            onTap: () {
-                                              _songPlayCount++;
-                                              print(
-                                                'Song play count: $_songPlayCount',
-                                              );
-                                              void playSong() {
-                                                showCupertinoSheet(
-                                                  enableDrag: true,
-                                                  context: context,
-                                                  pageBuilder: (context) {
-                                                    return PlaySong(
-                                                      songs: filteredSongs
-                                                          .map(
-                                                            (doc) =>
-                                                                doc.data()
-                                                                    as Map<
-                                                                      String,
-                                                                      dynamic
-                                                                    >,
-                                                          )
-                                                          .toList(),
-                                                      initialIndex: index,
-                                                    );
-                                                  },
-                                                );
-                                              }
-
-                                              if (_songPlayCount >= 4) {
-                                                adManager
-                                                    .showRewardedInterstitialAd((
-                                                      ad,
-                                                      reward,
-                                                    ) {
-                                                      print(
-                                                        'User earned reward: ${reward.amount} ${reward.type}',
-                                                      );
-                                                      playSong();
-                                                      _songPlayCount = 0;
-                                                    });
-                                                AdManager()
-                                                    .loadRewardedInterstitialAd(
-                                                      onAdFailed: () {
-                                                        playSong();
-                                                        _songPlayCount = 0;
-                                                      },
-                                                    );
-                                              } else {
-                                                playSong();
-                                              }
-                                            },
-                                            minVerticalPadding: 1,
-                                            trailing: Icon(
-                                              Icons.more_vert_outlined,
-                                            ),
-                                            subtitle: Text(
-                                              'by - ${song['artist'] ?? 'Unknown artist'} released on ${song['released'] is Timestamp ? (song['released'] as Timestamp).toDate().toString().split(' ')[0] : (song['released'] ?? 'Unknown date')}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w200,
-                                                fontStyle: FontStyle.italic,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                            title: Text(
-                                              song['songName']?.toString() ??
-                                                  'Untitled song',
-                                            ),
-                                            leading: Container(
-                                              height: 50,
-                                              width: 50,
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                border: Border.all(width: 1.5),
-                                              ),
-                                              child: Icon(
-                                                Icons.music_note_outlined,
-                                                color: Theme.of(
-                                                  context,
-                                                ).primaryColor,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  Positioned(
-                                    bottom: 10,
-                                    right: 20,
-                                    child: IconButton.filled(
-                                      onPressed: () {
-                                        showCupertinoSheet(
-                                          enableDrag: true,
-                                          context: context,
-                                          pageBuilder: (context) {
-                                            return DownloadedSongs();
-                                          },
-                                        );
-                                      },
-                                      style: ButtonStyle(
-                                        backgroundColor: WidgetStatePropertyAll(
-                                          color.splashColor,
-                                        ),
-                                      ),
-                                      icon: Icon(Icons.download_done, size: 40),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
 
-                // Add Member Tab
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ListView(
-                    children: [
-                      CupertinoTextField(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18.0),
-                          border: Border.all(color: color.primaryColor),
-                        ),
-                        controller: memberNameController,
-                        placeholder: 'Enter Member Name',
-                        padding: EdgeInsets.all(16.0),
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      SizedBox(height: 10),
-                      CupertinoTextField(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18.0),
-                          border: Border.all(color: color.primaryColor),
-                        ),
-                        controller: memberSurnameController,
-                        placeholder: 'Enter Member Surname',
-                        padding: EdgeInsets.all(16.0),
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      SizedBox(height: 10),
-                      CupertinoTextField(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18.0),
-                          border: Border.all(color: color.primaryColor),
-                        ),
-                        controller: memberEmailController,
-                        placeholder: 'Enter Member Email (Optional)',
-                        padding: EdgeInsets.all(16.0),
-                      ),
-                      SizedBox(height: 10),
-                      CupertinoTextField(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18.0),
-                          border: Border.all(color: color.primaryColor),
-                        ),
-                        controller: memberAddressController,
-                        placeholder: 'Enter Member Address',
-                        padding: EdgeInsets.all(16.0),
-                      ),
-                      SizedBox(height: 10),
-                      CupertinoTextField(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18.0),
-                          border: Border.all(color: color.primaryColor),
-                        ),
-                        controller: memberContactController,
-                        placeholder: 'Enter Contact Number',
-                        padding: EdgeInsets.all(16.0),
-                      ),
-                      SizedBox(height: 10),
+                    // 3. All Members Tab
+                    FutureBuilder<QuerySnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('users')
+                          .where(
+                            'overseerUid',
+                            isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+                          )
+                          .get(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(child: CircularProgressIndicator());
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return Center(child: Text('No members found.'));
+                        }
 
-                      // Dropdown selection for District Elder, Community Elder, and Community Name
-                      FutureBuilder<QuerySnapshot>(
-                        future: FirebaseFirestore.instance
-                            .collection('overseers')
-                            .where(
-                              'uid',
-                              isEqualTo: FirebaseAuth.instance.currentUser!.uid,
-                            )
-                            .get(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return Center(child: CircularProgressIndicator());
-                          }
-                          if (!snapshot.hasData ||
-                              snapshot.data!.docs.isEmpty) {
-                            return Center(
-                              child: Text('No overseer data found.'),
-                            );
-                          }
-                          var overseerData =
-                              snapshot.data!.docs.first.data()
-                                  as Map<String, dynamic>;
+                        final allMembers = snapshot.data!.docs;
+                        final query = _searchController.text.toLowerCase();
 
-                          selectedProvince = overseerData['province'];
+                        // --- UPDATED FILTER LOGIC ---
+                        final filteredMembers = allMembers.where((member) {
+                          final name = member['name']?.toLowerCase() ?? '';
+                          final surname =
+                              member['surname']?.toLowerCase() ?? '';
+                          final email =
+                              member['email']?.toLowerCase() ?? ''; // Get email
 
-                          List<dynamic> districts =
-                              overseerData['districts'] ?? [];
+                          return name.contains(query) ||
+                              surname.contains(query) ||
+                              email.contains(query); // Check email
+                        }).toList();
+                        // ----------------------------
 
-                          // Find the selected district object
-                          Map<String, dynamic>? selectedDistrict;
-                          try {
-                            selectedDistrict = districts.firstWhere(
-                              (d) =>
-                                  d['districtElderName'] ==
-                                  selectedDistrictElder,
-                            );
-                          } catch (_) {
-                            // If not found, it remains null
-                          }
-
-                          // Get unique district elder names
-                          List<String> districtElderNames = districts
-                              .map((d) => d['districtElderName'] as String?)
-                              .where((name) => name != null)
-                              .cast<String>()
-                              .toSet()
-                              .toList();
-
-                          // Get unique community elder names and community names for selected district
-                         
-                          List<String> communityNames = selectedDistrict != null
-                              ? (selectedDistrict['communities']
-                                            as List<dynamic>?)
-                                        ?.map(
-                                          (c) => c['communityName'] as String?,
-                                        )
-                                        .where((name) => name != null)
-                                        .cast<String>()
-                                        .toSet()
-                                        .toList() ??
-                                    []
-                              : [];
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              DropdownButton<String>(
-                                menuWidth: double.infinity,
-                                value: selectedDistrictElder,
-                                hint: Text('Choose a District Elder'),
-                                items: districtElderNames
-                                    .map(
-                                      (e) => DropdownMenuItem(
-                                        alignment: Alignment.center,
-                                        value: e,
-                                        child: Text(e),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    selectedDistrictElder = value;
-                                    // Update selectedDistrict and reset community selections
-                                    try {
-                                      selectedDistrict = districts.firstWhere(
-                                        (d) => d['districtElderName'] == value,
-                                      );
-                                    } catch (_) {
-                                      selectedDistrict = null;
-                                    }
-                                    selectedCommunityName = null;
-                                  });
-                                },
+                        return Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: _platformTextField(
+                                controller: _searchController,
+                                placeholder:
+                                    'Search Members by Name/Surname/Email',
                               ),
-                              if (selectedDistrictElder != null) ...[
-                                DropdownButton<String>(
-                                  menuWidth: double.infinity,
-                                  value: selectedCommunityName,
-                                  hint: Text('Choose a Community Name'),
-                                  items: communityNames
-                                      .map(
-                                        (e) => DropdownMenuItem(
-                                          alignment: Alignment.center,
-                                          value: e,
-                                          child: Text(e),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedCommunityName = value;
-                                    });
-                                  },
-                                ),
-                              ],
-                              SizedBox(height: 20),
-                            ],
-                          );
-                        },
-                      ),
-                      CustomOutlinedButton(
-                        onPressed: () async {
-                          if (memberNameController.text.isEmpty ||
-                              memberSurnameController.text.isEmpty ||
-                              memberAddressController.text.isEmpty ||
-                              memberContactController.text.isEmpty) {
-                            Api().showMessage(
-                              context,
-                              'Please fill in all fields',
-                              'Error',
-                              color.primaryColorDark,
-                            );
-                            return;
-                          }
-                          try {
-                            Api().showLoading(context);
-                            FirebaseFirestore firestore =
-                                FirebaseFirestore.instance;
-                            await firestore.collection('users').add({
-                              'name': memberNameController.text,
-                              'surname': memberSurnameController.text,
-                              'email': memberEmailController.text,
-                              'address': memberAddressController.text,
-                              'phone': memberContactController.text,
-                              'overseerUid':
-                                  FirebaseAuth.instance.currentUser?.uid,
-                              'role': 'Member',
-                              'week1': 0.00,
-                              'week2': 0.00,
-                              'week3': 0.00,
-                              'week4': 0.00,
-                              "province": selectedProvince,
-                              "districtElderName": selectedDistrictElder,
-                              "communityName": selectedCommunityName,
-                            });
-                            Navigator.of(context);
-                            Api().showMessage(
-                              context,
-                              'Member added successfully',
-                              'Success',
-                              color.splashColor,
-                            );
-                          } catch (error) {
-                            Api().showMessage(
-                              context,
-                              'Failed to add member: $error',
-                              'Error',
-                              color.primaryColorDark,
-                            );
-                          }
-
-                          memberNameController.clear();
-                          memberSurnameController.clear();
-                          memberEmailController.clear();
-                          memberAddressController.clear();
-                          memberContactController.clear();
-                        },
-                        text: 'Add Member',
-                        backgroundColor: color.primaryColor,
-                        foregroundColor: Colors.white,
-                        width: double.infinity,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // All Members Tab
-                FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance
-                      .collection('users')
-                      .where(
-                        'overseerUid',
-                        isEqualTo: FirebaseAuth.instance.currentUser?.uid,
-                      )
-                      .get(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return Center(child: Text('No members found.'));
-                    }
-                    final members = snapshot.data!.docs;
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: CupertinoTextField(
-                            controller:
-                                _searchController, // Assign the controller
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10.0),
-                              border: Border.all(color: color.primaryColor),
                             ),
-                            placeholder: 'Search Members',
-                            // onChanged is now handled by the listener on _searchController
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: members.length,
-                            itemBuilder: (context, index) {
-                              final member = members[index];
-                              return Column(
-                                children: [
-                                  Card(
-                                    color: color.scaffoldBackgroundColor
-                                        .withOpacity(0.7),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: filteredMembers.length,
+                                itemBuilder: (context, index) {
+                                  final member = filteredMembers[index];
+                                  return Card(
                                     elevation: 5,
                                     margin: EdgeInsets.symmetric(
                                       horizontal: 16,
@@ -1110,42 +1560,30 @@ class _OverseerPageState extends State<OverseerPage>
                                     ),
                                     child: ListTile(
                                       leading: Icon(
-                                        Icons.person,
+                                        Icons.person_pin,
                                         color: color.primaryColor,
                                       ),
-                                      subtitle: Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${member['name']} ${member['surname'] ?? ''}',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: color.primaryColor,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            if (member['email'].isNotEmpty)
-                                              Text(
-                                                '${member['email'] ?? 'N/A'}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            Text(
-                                              '${member['address'] ?? 'N/A'}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            Text(
-                                              '${member['phone'] ?? 'N/A'}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
+                                      title: Text(
+                                        '${member['name']} ${member['surname'] ?? ''}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
                                         ),
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                "${member['districtElderName'] ?? 'No District'} | ${member['communityName'] ?? ''}",
+                                              ),
+                                            ],
+                                          ),
+                                          if (member['phone'] != null &&
+                                              member['phone'].isNotEmpty)
+                                            Text(member['phone']),
+                                        ],
                                       ),
                                       trailing: IconButton(
                                         icon: Icon(
@@ -1153,45 +1591,63 @@ class _OverseerPageState extends State<OverseerPage>
                                           color: Colors.blue,
                                         ),
                                         onPressed: () async {
+                                          week1Controller.text =
+                                              member['week1']?.toString() ??
+                                              '0.00';
+                                          week2Controller.text =
+                                              member['week2']?.toString() ??
+                                              '0.00';
+                                          week3Controller.text =
+                                              member['week3']?.toString() ??
+                                              '0.00';
+                                          week4Controller.text =
+                                              member['week4']?.toString() ??
+                                              '0.00';
+
                                           showDialog(
                                             context: context,
                                             builder: (context) => AlertDialog(
                                               backgroundColor: color
                                                   .scaffoldBackgroundColor
-                                                  .withOpacity(0.8),
-                                              title: Text('Edit Member'),
+                                                  .withOpacity(0.95),
+                                              title: Text(
+                                                'Edit Tithe Offerings for ${member['name']}',
+                                              ),
                                               content: Column(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  CupertinoTextField(
+                                                  _platformTextField(
                                                     controller: week1Controller,
                                                     placeholder: 'Week 1',
+                                                    keyboardType:
+                                                        TextInputType.numberWithOptions(decimal: true),
                                                   ),
-                                                  SizedBox(height: 10),
-                                                  CupertinoTextField(
+                                                  _platformTextField(
                                                     controller: week2Controller,
                                                     placeholder: 'Week 2',
+                                                    keyboardType:
+                                                        TextInputType.numberWithOptions(decimal: true),
                                                   ),
-                                                  SizedBox(height: 10),
-                                                  CupertinoTextField(
+                                                  _platformTextField(
                                                     controller: week3Controller,
                                                     placeholder: 'Week 3',
+                                                    keyboardType:
+                                                        TextInputType.numberWithOptions(decimal: true),
                                                   ),
-                                                  SizedBox(height: 10),
-                                                  CupertinoTextField(
+                                                  _platformTextField(
                                                     controller: week4Controller,
                                                     placeholder: 'Week 4',
+                                                    keyboardType:
+                                                        TextInputType.numberWithOptions(decimal: true),
                                                   ),
                                                 ],
                                               ),
                                               actions: [
                                                 TextButton(
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                  },
+                                                  onPressed: () =>
+                                                      Navigator.pop(context),
                                                   child: Text('Cancel'),
                                                 ),
-                                                SizedBox(height: 10),
                                                 TextButton(
                                                   onPressed: () async {
                                                     Api().showLoading(context);
@@ -1226,6 +1682,7 @@ class _OverseerPageState extends State<OverseerPage>
                                                           'week3': week3,
                                                           'week4': week4,
                                                         });
+
                                                     Navigator.pop(context);
                                                     Navigator.pop(context);
 
@@ -1233,12 +1690,16 @@ class _OverseerPageState extends State<OverseerPage>
                                                     week2Controller.clear();
                                                     week3Controller.clear();
                                                     week4Controller.clear();
+
                                                     Api().showMessage(
                                                       context,
                                                       'Member updated successfully',
                                                       'Success',
                                                       color.splashColor,
                                                     );
+                                                    setState(() {
+                                                      _loadDashboardData(); // Reload chart data
+                                                    });
                                                   },
                                                   child: Text('Save'),
                                                 ),
@@ -1247,407 +1708,413 @@ class _OverseerPageState extends State<OverseerPage>
                                           );
                                         },
                                       ),
-                                      onTap: () {
-                                        Api().showMessage(
-                                          context,
-                                          'Tapped on ${member['name']}',
-                                          'Info',
-                                          color.primaryColor,
-                                        );
-                                      },
                                     ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-
-                // Reports Tab
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
-                  child: FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance
-                        .collection('overseers')
-                        .where(
-                          'uid',
-                          isEqualTo: FirebaseAuth.instance.currentUser?.uid,
-                        )
-                        .get(),
-                    builder: (context, asyncSnapshot) {
-                      var overseerData = asyncSnapshot.data?.docs ?? [];
-                      if (asyncSnapshot.connectionState ==
-                          ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
-                      }
-                      if (overseerData.isEmpty) {
-                        return Center(child: Text('No overseers found.'));
-                      } 
-                      return Center(
-                        child: GestureDetector(
-                          onTap: () async {
-                            // 🚀 SUBSCRIPTION & LIMIT LOGIC 🚀
-                            int totalOverseerMembers =
-                                await _getTotalOverseerMemberCount();
-                            await _checkSubscriptionStatusFromFirestore(); // Refresh Paystack status
-
-                            int memberLimit = 999999; // Default: No limit
-
-                            // --- TIER CHECK & SUBSCRIPTION PROMPT LOGIC ---
-                            if (totalOverseerMembers > 99 &&
-                                !_isSubscriptionActive) {
-                              final currentTierAmount =
-                                  _determineSubscriptionAmount(
-                                    totalOverseerMembers,
                                   );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    Column(
+                      children: [
+                        Text('Add Officer'),
 
+                        _platformTextField(
+                          controller: officerNameController,
+                          placeholder: 'District Initials & surname',
+                        ),
+                        _platformTextField(
+                          controller: communityOfficerController,
+                          placeholder: 'Enter community name',
+                        ),
+                        SizedBox(height: 10),
+                        CustomOutlinedButton(
+                          onPressed: () async {
+                            if (officerNameController.text.isEmpty ||
+                                communityOfficerController.text.isEmpty) {
                               Api().showMessage(
                                 context,
-                                'You have $totalOverseerMembers members. To view all members on reports, please subscribe (R${(currentTierAmount / 100).toStringAsFixed(2)}/month). The report will be **limited to 99 members**.',
-                                'Subscription Required',
-                                color.primaryColor,
+                                'Please fill in all required fields.',
+                                'Error',
+                                color.primaryColorDark,
                               );
-                              memberLimit = 99; // Enforce 99-member limit
-
-                              // Show a dialog to prompt for subscription
-                              showCupertinoDialog(
-                                context: context,
-                                builder: (ctx) => CupertinoAlertDialog(
-                                  title: const Text(
-                                    'Unlock Unlimited Reporting',
-                                  ),
-                                  content: Text(
-                                    'Your member count is $totalOverseerMembers. Subscribing will unlock unlimited reporting and authorize your card for monthly billing at the current tier price (R${(currentTierAmount / 100).toStringAsFixed(2)}).',
-                                  ),
-                                  actions: [
-                                    CupertinoDialogAction(
-                                      child: const Text('Cancel'),
-                                      onPressed: () => Navigator.pop(ctx),
-                                    ),
-                                    CupertinoDialogAction(
-                                      child: const Text('Authorize Card Now'),
-                                      onPressed: () {
-                                        Navigator.pop(ctx);
-                                        _initiatePaystackSubscription(
-                                          totalOverseerMembers,
-                                          context,
-                                        );
+                              return;
+                            }
+                            try {
+                              Api().showLoading(context);
+                              FirebaseFirestore firestore =
+                                  FirebaseFirestore.instance;
+                              await firestore
+                                  .collection('overseers')
+                                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                                  .update({
+                                    'districts': FieldValue.arrayUnion([
+                                      {
+                                        'districtElderName':
+                                            officerNameController.text,
+                                        'communities': [
+                                          {
+                                            'communityName':
+                                                communityOfficerController.text,
+                                          },
+                                        ],
                                       },
-                                    ),
-                                  ],
-                                ),
+                                    ]),
+                                  });
+                              Navigator.of(context).pop();
+                              Api().showMessage(
+                                context,
+                                'Officer added successfully',
+                                'Success',
+                                color.splashColor,
+                              );
+                            } catch (error) {
+                              Navigator.of(context).pop();
+                              Api().showMessage(
+                                context,
+                                'Failed to add officer: $error',
+                                'Error',
+                                color.primaryColorDark,
                               );
                             }
-                            // ------------------------------------
 
-                            FirebaseFirestore firestore =
-                                FirebaseFirestore.instance;
-                            QuerySnapshot<Map<String, dynamic>> snapshot =
-                                await firestore
-                                    .collection('overseers')
-                                    .where(
-                                      'uid',
-                                      isEqualTo: FirebaseAuth
-                                          .instance
-                                          .currentUser
-                                          ?.uid,
-                                    )
-                                    .get();
+                            officerNameController.clear();
+                            communityOfficerController.clear();
+                          },
+                          text: 'Add Officer',
+                          backgroundColor: color.primaryColor,
+                          foregroundColor: color.scaffoldBackgroundColor,
+                          width: double.infinity,
+                        ),
+                      ],
+                    ),
+                    // 4. Reports Tab
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: FutureBuilder<QuerySnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('overseers')
+                            .where(
+                              'uid',
+                              isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+                            )
+                            .get(),
+                        builder: (context, asyncSnapshot) {
+                          Map<String, dynamic> overseerData =
+                              (asyncSnapshot.data?.docs.first.data()
+                                  as Map<String, dynamic>?) ??
+                              {};
+                          if (asyncSnapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+                          if (overseerData.isEmpty) {
+                            return Center(
+                              child: Text('No overseer data found.'),
+                            );
+                          }
 
-                            var overseerData = snapshot.docs.isNotEmpty
-                                ? snapshot.docs.first.data()
-                                : null; 
-                            String overseerInitialsAndSurname =
-                                overseerData?['overseerInitialsAndSurname'] ?? 'N/A';
+                          String overseerInitialsAndSurname =
+                              overseerData["overseerInitialsAndSurname"] ??
+                              'N/A';
+                          String code = overseerData['code'] ?? '';
+                          String region = overseerData['region'] ?? '';
 
-                            String? currentSelectedDistrictElder =
-                                selectedDistrictElder;
-                            String? currentSelectedCommunityName =
-                                selectedCommunityName;
-                            String? code = overseerData?['code'] ?? '';
-                            String? region = overseerData?['region'] ?? '';
-                            // Function to get distinct district elder names
-                            List<String> getDistrictElderNames(
-                              Map<String, dynamic>? data,
-                            ) {
-                              if (data == null ||
-                                  !data.containsKey('districts') ||
-                                  data['districts'] == null) {
-                                return [];
-                              }
-                              return (data['districts'] as List<dynamic>)
-                                  .map(
-                                    (district) =>
-                                        district['districtElderName']
-                                            as String?,
-                                  )
-                                  .where((name) => name != null)
-                                  .cast<String>()
-                                  .toSet()
-                                  .toList();
+                          List<dynamic> districts =
+                              overseerData['districts'] ?? [];
+
+                          List<String> districtElderNames = (districts)
+                              .map((d) => d['districtElderName'] as String?)
+                              .where((name) => name != null)
+                              .cast<String>()
+                              .toSet()
+                              .toList();
+
+                          Map<String, dynamic>? currentDistrictData;
+                          if (selectedDistrictElder != null) {
+                            try {
+                              currentDistrictData = districts.firstWhere(
+                                (d) =>
+                                    d['districtElderName'] ==
+                                    selectedDistrictElder,
+                              );
+                            } catch (_) {
+                              currentDistrictData = null;
                             }
+                          }
 
-                            // Function to get community elder names for a given district
-                            List<String> getCommunityElderNamesForDistrict(
-                              Map<String, dynamic>? district,
-                            ) {
-                              if (district == null ||
-                                  !district.containsKey('communities') ||
-                                  district['communities'] == null) {
-                                return [];
-                              }
-                              return (district['communities'] as List<dynamic>)
-                                  .map(
-                                    (community) =>
-                                        community['communityElderName']
-                                            as String?,
-                                  )
-                                  .where((name) => name != null)
-                                  .cast<String>()
-                                  .toSet()
-                                  .toList();
-                            }
+                          List<String> communityNames =
+                              currentDistrictData != null
+                              ? (currentDistrictData['communities']
+                                            as List<dynamic>?)
+                                        ?.map(
+                                          (c) => c['communityName'] as String?,
+                                        )
+                                        .where((name) => name != null)
+                                        .cast<String>()
+                                        .toSet()
+                                        .toList() ??
+                                    []
+                              : [];
 
-                            // Function to get community names for a given district
-                            List<String> getCommunityNamesForDistrict(
-                              Map<String, dynamic>? district,
-                            ) {
-                              if (district == null ||
-                                  !district.containsKey('communities') ||
-                                  district['communities'] == null) {
-                                return [];
-                              }
-                              return (district['communities'] as List<dynamic>)
-                                  .map(
-                                    (community) =>
-                                        community['communityName'] as String?,
-                                  )
-                                  .where((name) => name != null)
-                                  .cast<String>()
-                                  .toSet()
-                                  .toList();
-                            }
-
-                            // Your showBottomSheet function
-                            showModalBottomSheet(
-                              showDragHandle: true,
-                              sheetAnimationStyle: AnimationStyle(
-                                duration: Duration(milliseconds: 300),
-                                reverseDuration: Duration(milliseconds: 300),
-                              ),
-                              context: context,
-                              builder: (context) {
-                                return StatefulBuilder(
-                                  builder: (context, setState) {
-                                    Map<String, dynamic>? selectedDistrict;
-
-                                    if (overseerData?.containsKey(
-                                          'districts',
-                                        ) ==
-                                        true) {
-                                      try {
-                                        selectedDistrict =
-                                            (overseerData!['districts']
-                                                        as List<dynamic>?)
-                                                    ?.firstWhere(
-                                                      (district) =>
-                                                          district['districtElderName'] ==
-                                                          currentSelectedDistrictElder,
-                                                    )
-                                                as Map<String, dynamic>?;
-                                      } catch (_) {
-                                        selectedDistrict = null;
-                                      }
+                          return Center(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'Generate Report',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: color.primaryColor,
+                                  ),
+                                ),
+                                SizedBox(height: 20),
+                                DropdownButtonFormField<String>(
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        'Select District Elder for Report',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10.0),
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12.0,
+                                      vertical: 12.0,
+                                    ),
+                                  ),
+                                  menuMaxHeight: 300,
+                                  value: selectedDistrictElder,
+                                  items: districtElderNames
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e,
+                                          child: Text(e),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedDistrictElder = value;
+                                      selectedCommunityName = null;
+                                    });
+                                  },
+                                ),
+                                SizedBox(height: 10),
+                                if (selectedDistrictElder != null)
+                                  DropdownButtonFormField<String>(
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          'Select Community Name for Report',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          10.0,
+                                        ),
+                                      ),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12.0,
+                                        vertical: 12.0,
+                                      ),
+                                    ),
+                                    menuMaxHeight: 300,
+                                    value: selectedCommunityName,
+                                    items: communityNames
+                                        .map(
+                                          (e) => DropdownMenuItem(
+                                            value: e,
+                                            child: Text(e),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedCommunityName = value;
+                                      });
+                                    },
+                                  ),
+                                SizedBox(height: 30),
+                                CustomOutlinedButton(
+                                  onPressed: () async {
+                                    if (selectedDistrictElder == null ||
+                                        selectedCommunityName == null) {
+                                      Api().showMessage(
+                                        context,
+                                        'Please select both a District Elder and a Community Name.',
+                                        'Error',
+                                        color.primaryColorDark,
+                                      );
+                                      return;
                                     }
 
-                                    
-                                    final List<String> communityNames =
-                                        getCommunityNamesForDistrict(
-                                          selectedDistrict,
-                                        );
+                                    int totalOverseerMembers =
+                                        await _getTotalOverseerMemberCount();
+                                    await _checkSubscriptionStatusFromFirestore();
 
-                                    return Center(
-                                      child: Container(
-                                        width: double.infinity,
-                                        margin: const EdgeInsets.all(16.0),
-                                        decoration: BoxDecoration(
-                                          color: color.scaffoldBackgroundColor,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
+                                    int memberLimit = 999999;
+                                    if (totalOverseerMembers > 99 &&
+                                        !_isSubscriptionActive) {
+                                      memberLimit = 99;
+
+                                      final currentTierAmount =
+                                          _determineSubscriptionAmount(
+                                            totalOverseerMembers,
+                                          );
+                                      showCupertinoDialog(
+                                        context: context,
+                                        builder: (ctx) => CupertinoAlertDialog(
+                                          title: const Text(
+                                            'Unlock Unlimited Reporting',
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                0.1,
+                                          content: Text(
+                                            'Your member count is $totalOverseerMembers. Subscribing will unlock unlimited reporting and authorize your card for monthly billing at R${(currentTierAmount / 100).toStringAsFixed(2)}.',
+                                          ),
+                                          actions: [
+                                            CupertinoDialogAction(
+                                              child: const Text('Cancel'),
+                                              onPressed: () =>
+                                                  Navigator.pop(ctx),
+                                            ),
+                                            CupertinoDialogAction(
+                                              child: const Text(
+                                                'Authorize Card Now',
                                               ),
-                                              blurRadius: 10,
-                                              spreadRadius: 5,
+                                              onPressed: () {
+                                                Navigator.pop(ctx);
+                                                _initiatePaystackSubscription(
+                                                  totalOverseerMembers,
+                                                  context,
+                                                );
+                                              },
                                             ),
                                           ],
                                         ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.start,
-                                            children: [
-                                              if (currentSelectedDistrictElder !=
-                                                  null) ...[
-                                                DropdownButton<String>(
-                                                  value:
-                                                      currentSelectedCommunityName,
-                                                  hint: Text(
-                                                    'Choose a Community Name',
-                                                  ),
-                                                  items: communityNames
-                                                      .map(
-                                                        (e) => DropdownMenuItem(
-                                                          value: e,
-                                                          child: Text(e),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                                  onChanged: (value) {
-                                                    setState(() {
-                                                      currentSelectedCommunityName =
-                                                          value;
-                                                    });
-                                                  },
-                                                ),
-                                              ],
-                                              SizedBox(height: 20),
-                                              CustomOutlinedButton(
-                                                onPressed: () async {
-                                                  // Check if all selection fields are filled
-                                                  if (currentSelectedDistrictElder !=
-                                                          null &&
-                                                      currentSelectedCommunityName !=
-                                                          null) {
-                                                    Navigator.pop(context);
-                                                    await _generatePdfAndDownload(
-                                                      currentSelectedDistrictElder,
-                                                      currentSelectedCommunityName!,
-                                                      selectedProvince, 
-                                                      overseerInitialsAndSurname,
-                                                      overseerData!,
-                                                      memberLimit, // Pass the determined limit
-                                                      code!,
-                                                      region!,
-                                                    );
-                                                  } else {
-                                                    // Show a snackbar or alert to inform the user to select all fields
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Please select all fields.',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                text:
-                                                    'Generate Balance sheet (PDF)',
-                                                backgroundColor: color
-                                                    .scaffoldBackgroundColor,
-                                                foregroundColor:
-                                                    color.primaryColor,
-                                                width: double.infinity,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
+                                      );
+                                      // Return here if we showed the dialog, waiting for the user to subscribe
+                                      return;
+                                    }
 
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 200,
-                                  height: 200,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(width: 2),
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(20.0),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Center(
-                                          child: Icon(
-                                            Icons.file_download_outlined,
-                                            size: 50,
-                                          ),
-                                        ),
-                                        SizedBox(height: 20),
-                                        Center(
-                                          child: Text(
-                                            'Download Balance Sheet a PDF',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                    // Proceed only if subscribed or under the free member limit
+                                    if (_isSubscriptionActive ||
+                                        totalOverseerMembers <= 99) {
+                                      await _generatePdfAndDownload(
+                                        selectedDistrictElder!,
+                                        selectedCommunityName!,
+                                        selectedProvince,
+                                        overseerInitialsAndSurname,
+                                        overseerData,
+                                        memberLimit,
+                                        code,
+                                        region,
+                                      );
+                                    }
+                                  },
+                                  text: 'Generate Balance Sheet (PDF)',
+                                  backgroundColor: color.primaryColor,
+                                  foregroundColor:
+                                      color.scaffoldBackgroundColor,
+                                  width: double.infinity,
                                 ),
+
+                                // Padding(
+                                //  padding: const EdgeInsets.only(top: 8.0),
+                                //  child: Text(
+                                //   'Report limited to 99 members until subscription is active.',
+                                //   style: TextStyle(color: Colors.red),
+                                //  ),
+                                // ),
                               ],
                             ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // --- PDF Generation Logic ---
-  // Updated signature with memberLimit
+  // --- MODIFIED PDF Generation Logic for Web Compatibility (The Fix) ---
+
   Future<void> _generatePdfAndDownload(
     String selectedDistrictElder,
     String selectedCommunityName,
-    String selectedProvince, 
+    String selectedProvince,
     String overseerInitialsAndSurname,
     Map<String, dynamic> overseerData,
-    int memberLimit, // NEW ARGUMENT
+    int memberLimit,
     String code,
     String region,
   ) async {
-    Api().showLoading(context); // Show loading indicator
+    Api().showLoading(context);
+    final _cloisterFont = pw.Font.ttf(
+      await rootBundle.load(
+        'assets/CloisterBlack.ttf',
+      ), // Make sure this path is correct in pubspec.yaml
+    );
     try {
       final balanceSheetTable = await _buildPdfBalanceSheetTable(
         context,
         selectedDistrictElder,
         selectedCommunityName,
-        memberLimit, // Pass the limit
+        memberLimit,
       );
 
-      // Check if the balanceSheetTable is null (meaning no members were found)
       if (balanceSheetTable == null) {
-        Navigator.pop(context); // Dismiss loading dialog
-        return; // Exit the function to prevent further execution
+        Navigator.pop(context);
+        return;
       }
 
       final pdf = pw.Document();
+      final month = DateTime.now().month;
+      String monthName;
+      switch (month) {
+        case 1:
+          monthName = 'January';
+          break;
+        case 2:
+          monthName = 'February';
+          break;
+        case 3:
+          monthName = 'March';
+          break;
+
+        case 4:
+          monthName = 'April';
+          break;
+        case 5:
+          monthName = 'May';
+          break;
+        case 6:
+          monthName = 'June';
+          break;
+        case 7:
+          monthName = 'July';
+          break;
+        case 8:
+          monthName = 'August';
+          break;
+        case 9:
+          monthName = 'September';
+          break;
+        case 10:
+          monthName = 'October';
+          break;
+        case 11:
+          monthName = 'November';
+          break;
+        case 12:
+          monthName = 'December';
+          break;
+        default:
+          monthName = 'Unknown';
+          break;
+      }
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -1668,8 +2135,9 @@ class _OverseerPageState extends State<OverseerPage>
                           child: pw.Text(
                             'The Twelve Apostles Church in Trinity',
                             style: pw.TextStyle(
-                              fontSize: 20,
+                              fontSize: 25,
                               fontWeight: pw.FontWeight.bold,
+                              font: _cloisterFont,
                             ),
                           ),
                         ),
@@ -1677,17 +2145,44 @@ class _OverseerPageState extends State<OverseerPage>
                         pw.Center(
                           child: pw.Text('P. O. Box 40376, Red Hill, 4071'),
                         ),
-                        pw.Center(
-                          child: pw.Text('Tel./Fax No\'s: (031) 569 6164'),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.center,
+                          children: [
+                            pw.Center(
+                              child: pw.Text(
+                                'Tel./Fax No\'s:',
+                                style: pw.TextStyle(font: _cloisterFont),
+                              ),
+                            ),
+                            pw.Center(child: pw.Text('(031) 569 6164')),
+                          ],
                         ),
-                        pw.Center(
-                          child: pw.Text('Email: thetacc@telkomsa.net'),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.center,
+                          children: [
+                            pw.Center(
+                              child: pw.Text(
+                                'Email:',
+                                style: pw.TextStyle(font: _cloisterFont),
+                              ),
+                            ),
+                            pw.Center(child: pw.Text('thetacc@telkomsa.net')),
+                          ],
                         ),
                       ],
                     ),
                   ],
                 ),
               pw.SizedBox(height: 30),
+              pw.Table(
+                columnWidths: {
+                  0: pw.FlexColumnWidth(3),
+                  1: pw.FlexColumnWidth(1),
+                  2: pw.FlexColumnWidth(3),
+                  3: pw.FlexColumnWidth(1),
+                },
+                children: [],
+              ),
               pw.Text(
                 'Income and Expenditure Statement',
                 style: pw.TextStyle(
@@ -1696,9 +2191,10 @@ class _OverseerPageState extends State<OverseerPage>
                 ),
               ),
               pw.SizedBox(height: 10),
+
               _buildPdfTextRow(
                 'For the Month:',
-                '${DateTime.now().month}',
+                '$monthName',
                 'Year:',
                 '${DateTime.now().year}',
               ),
@@ -1802,7 +2298,6 @@ class _OverseerPageState extends State<OverseerPage>
               pw.SizedBox(height: 10),
               balanceSheetTable,
               pw.SizedBox(height: 10),
-
               pw.SizedBox(height: 30),
               pw.Text(
                 'NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details',
@@ -1817,10 +2312,7 @@ class _OverseerPageState extends State<OverseerPage>
                 ),
               ),
               pw.SizedBox(height: 10),
-              _buildPdfSignatureRow(
-                'Overseer',
-                overseerInitialsAndSurname,
-              ),
+              _buildPdfSignatureRow('Overseer', overseerInitialsAndSurname),
               _buildPdfSignatureRow('Community Elder', '_____________'),
               _buildPdfSignatureRow('Secretary', '_____________'),
               _buildPdfSignatureRow('District Elder', selectedDistrictElder),
@@ -1834,14 +2326,28 @@ class _OverseerPageState extends State<OverseerPage>
         ),
       );
 
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/church_report.pdf');
-      await file.writeAsBytes(await pdf.save());
+      // --- PLATFORM AWARE SAVE/SHARE LOGIC (FIX FOR WEB ERROR) ---
+      final pdfData = await pdf.save();
+      final filename =
+          '$overseerInitialsAndSurname\'s balance sheet (${DateTime.now().toIso8601String()}).pdf';
 
-      await Printing.sharePdf(
-        bytes: await file.readAsBytes(),
-        filename: 'church_report(${DateTime.now().toIso8601String()}).pdf',
-      );
+      if (kIsWeb) {
+        // Web/Desktop: Use Printing.sharePdf (or print/download layout) directly
+        await Printing.sharePdf(bytes: pdfData, filename: filename);
+      } else {
+        // Mobile/Desktop (non-web): Use path_provider and dart:io
+        final directory = await getTemporaryDirectory();
+        final file = File(
+          '${directory.path}/$filename',
+        ); // Correct File constructor usage
+        await file.writeAsBytes(pdfData);
+
+        await Printing.sharePdf(
+          bytes: await file.readAsBytes(),
+          filename: filename,
+        );
+      }
+      // -----------------------------------------------------------
 
       Navigator.pop(context);
       Api().showMessage(
@@ -1858,20 +2364,18 @@ class _OverseerPageState extends State<OverseerPage>
         'Error',
         Theme.of(context).primaryColorDark,
       );
+      print('PDF Generation Error: $e');
     }
   }
 
-  // Helper for PDF Balance Sheet Table
-  // Updated signature with memberLimit
   Future<pw.Widget?> _buildPdfBalanceSheetTable(
     BuildContext context,
     String selectedDistrictElder,
     String selectedCommunityName,
-    int memberLimit, // NEW ARGUMENT
+    int memberLimit,
   ) async {
     FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-    // Build the base query
     Query<Map<String, dynamic>> query = firestore
         .collection('users')
         .where('districtElderName', isEqualTo: selectedDistrictElder)
@@ -1881,9 +2385,7 @@ class _OverseerPageState extends State<OverseerPage>
           isEqualTo: FirebaseAuth.instance.currentUser?.uid,
         );
 
-    // Apply limit if enforced by subscription check
     if (memberLimit < 999999) {
-      // Enforces the limit on the Firestore query
       query = query.limit(memberLimit);
     }
 
@@ -1892,11 +2394,10 @@ class _OverseerPageState extends State<OverseerPage>
     if (memberLatestData.docs.isEmpty) {
       Api().showMessage(
         context,
-        'No members found for the selected community. Please ensure your data is accurate.',
+        'No members found for the selected community, however, a report has still been generated.',
         'Error',
         Theme.of(context).primaryColorDark,
       );
-      return null; // Return null to indicate no data was found
     }
 
     List<Map<String, dynamic>> allMembersData = [];
@@ -1920,10 +2421,15 @@ class _OverseerPageState extends State<OverseerPage>
     for (var memberData in allMembersData) {
       String memberName = memberData['name'] ?? 'N/A';
       String memberSurname = memberData['surname'] ?? 'N/A';
-      String memberWeek1 = memberData['week1']?.toString() ?? '0.00';
-      String memberWeek2 = memberData['week2']?.toString() ?? '0.00';
-      String memberWeek3 = memberData['week3']?.toString() ?? '0.00';
-      String memberWeek4 = memberData['week4']?.toString() ?? '0.00';
+      // Safely convert num/string to string
+      String memberWeek1 =
+          (memberData['week1'] as num?)?.toStringAsFixed(2) ?? '0.00';
+      String memberWeek2 =
+          (memberData['week2'] as num?)?.toStringAsFixed(2) ?? '0.00';
+      String memberWeek3 =
+          (memberData['week3'] as num?)?.toStringAsFixed(2) ?? '0.00';
+      String memberWeek4 =
+          (memberData['week4'] as num?)?.toStringAsFixed(2) ?? '0.00';
 
       var total =
           (double.parse(memberWeek1) +
@@ -1934,10 +2440,10 @@ class _OverseerPageState extends State<OverseerPage>
 
       tableData.add(<String>[
         '${memberName} ${memberSurname}',
-        'R${double.parse(memberWeek1).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek2).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek3).toStringAsFixed(2)}',
-        'R${double.parse(memberWeek4).toStringAsFixed(2)}',
+        'R${memberWeek1}',
+        'R${memberWeek2}',
+        'R${memberWeek3}',
+        'R${memberWeek4}',
         'R${total}',
       ]);
 
@@ -1968,7 +2474,6 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-  // Helper for PDF text rows (e.g., "For the Month: ___ Year: ___")
   pw.Widget _buildPdfTextRow(
     String label1,
     String value1, [
@@ -1984,7 +2489,6 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-  // Helper for PDF report rows (income/expenditure)
   pw.Widget _buildPdfReportRow(
     String label,
     String rText,
@@ -2041,7 +2545,6 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
-  // Helper for PDF signature rows
   pw.Widget _buildPdfSignatureRow(String role, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 4.0),
@@ -2066,6 +2569,10 @@ class _OverseerPageState extends State<OverseerPage>
     memberEmailController.dispose();
     memberAddressController.dispose();
     memberContactController.dispose();
+    week1Controller.dispose();
+    week2Controller.dispose();
+    week3Controller.dispose();
+    week4Controller.dispose();
     super.dispose();
   }
 }

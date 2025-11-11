@@ -1,16 +1,20 @@
-// =========================================================================
-// IMPORTS AND INITIALIZATION
-// =========================================================================
+// The updated way to get environment variables
+require("dotenv").config(); // add this line at the top
 const functions = require('firebase-functions');
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const fetch = require('node-fetch');
+// const fetch = require('node-fetch'); // <-- REMOVED this problematic package
 const admin = require('firebase-admin');
 const crypto = require('crypto');
-// 2ND GEN IMPORTS for HTTP and Scheduled functions
-const { onRequest } = require("firebase-functions/v2/https");
-const { onSchedule } = require("firebase-functions/v2/scheduler"); 
+ 
+
+// --- ADD THESE FOR EMAIL ---
+const nodemailer = require("nodemailer");
+const cors = require("cors"); // ✅ only import 
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
+// ---------------------------
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -19,10 +23,17 @@ const db = admin.firestore();
 // Create an Express app
 const app = express();
 app.use(bodyParser.json());
+app.use(cors({ origin: ["https://tactapp.web.app", "https://tact-3c612.web.app"] }));
+ 
+// Now use environment variables directly:
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; 
+const GMAIL_EMAIL = process.env.GMAIL_EMAIL;
+const GMAIL_PASSWORD = process.env.GMAIL_PASSWORD;
+console.log(`Paystack key loaded: ${PAYSTACK_SECRET_KEY}`, !!PAYSTACK_SECRET_KEY);
 
-// **SECURE:** Retrieve the secret key from environment configuration
-const PAYSTACK_SECRET_KEY = functions.config().paystack.secret_key; 
-const PAYSTACK_API_BASE = 'https://api.paystack.co';
+// Initialize Paystack constants
+// !! SECURITY: Make sure this is set in your environment, not hardcoded
+ const PAYSTACK_API_BASE = 'https://api.paystack.co';
 
 // --- TIERED PRICING CONSTANTS (in CENTS) ---
 const TIER1_CENTS = 18900; // R189
@@ -43,13 +54,13 @@ function determineSubscriptionAmount(memberCount) {
     } else if (memberCount >= 50) {
         return TIER1_CENTS;
     } else {
-        // Default to TIER1 as the minimum paid subscription if they manually subscribe
+        // Default to TIER1 as the minimum paid subscription
         return TIER1_CENTS; 
     }
 }
 
 // =========================================================================
-// 1. HTTP ENDPOINT: /initialize-subscription 
+// 1. HTTP ENDPOINT: /initialize-subscription
 // =========================================================================
 app.post('/initialize-subscription', async (req, res) => {
     try {
@@ -58,22 +69,15 @@ app.post('/initialize-subscription', async (req, res) => {
         if (!email || !amount || !uid) {
             return res.status(400).json({ error: 'Missing required subscription details.' });
         }
-
-        // Double check the incoming amount against server-side logic for security
-        if (determineSubscriptionAmount(memberCount) !== amount) {
-            console.warn(`Amount mismatch for UID ${uid}. Client sent ${amount}, server calculated ${determineSubscriptionAmount(memberCount)}.`);
-        }
         
-        // Generate a unique reference for the authorization transaction
         const reference = `AUTH_${uid}_${Date.now()}`;
         
         const body = {
             email: email,
-            amount: amount, // Amount passed from client (in cents)
+            amount: amount,
             currency: 'ZAR',
-            reference: reference, // Unique reference for the initial transaction
+            reference: reference, 
             channels: ['card', 'bank', 'ussd', 'qr'],
-            // Metadata is crucial for the webhook to know this is a subscription initiation
             metadata: {
                 custom_fields: [
                     {
@@ -128,7 +132,6 @@ app.post('/initialize-subscription', async (req, res) => {
 // 2. PAYSTACK WEBHOOK HANDLER (Subscription Flow)
 // =========================================================================
 app.post('/paystack-subscription-webhook', async (req, res) => {
-    // 1. Security Check: Verify Paystack Signature (Crucial)
     const hash = crypto.createHmac('sha512', PAYSTACK_SECRET_KEY)
         .update(JSON.stringify(req.body))
         .digest('hex');
@@ -141,16 +144,13 @@ app.post('/paystack-subscription-webhook', async (req, res) => {
     const event = req.body;
     const transaction = event.data;
 
-    // Check if it's a successful charge event for a subscription
     if (event.event === 'charge.success' && transaction.status === 'success') {
         
-        // Extract metadata saved during initialization
         const metadata = transaction.metadata?.custom_fields;
         const subscriptionTypeField = metadata?.find(f => f.variable_name === 'subscription_type');
         const overseerUidField = metadata?.find(f => f.variable_name === 'firebase_uid');
         const memberCountField = metadata?.find(f => f.variable_name === 'member_count');
 
-        // Verify this is the subscription type webhook we care about
         if (subscriptionTypeField?.value !== 'monthly_overseer_tier' || !overseerUidField?.value) {
             return res.status(200).send('Event received, but not a subscription charge.'); 
         }
@@ -166,18 +166,16 @@ app.post('/paystack-subscription-webhook', async (req, res) => {
         }
 
         try {
-            // Determine the next charge date (30 days from now)
             const nextChargeDate = admin.firestore.Timestamp.fromMillis(
                 Date.now() + (30 * 24 * 60 * 60 * 1000)
             );
             
             const currentMemberCount = memberCountField ? parseInt(memberCountField.value) : 0;
 
-            // 2. Update the overseer document for recurring charges
-            await db.collection('overseers').doc(overseerUid).update({
+            await db.collection('overseers').doc(overseerUid).set({
                 paystackAuthCode: authCode,
                 paystackEmail: email,
-                subscriptionStatus: 'active', // Set to active on successful initial charge/authorization
+                subscriptionStatus: 'active',
                 lastCharged: admin.firestore.FieldValue.serverTimestamp(),
                 lastChargedAmount: chargedAmountCents,
                 currentMemberCount: currentMemberCount,
@@ -193,13 +191,12 @@ app.post('/paystack-subscription-webhook', async (req, res) => {
         }
     }
     
-    // Process failed initial charges
     if (event.event === 'charge.failure') {
         const metadata = transaction.metadata?.custom_fields;
         const overseerUidField = metadata?.find(f => f.variable_name === 'firebase_uid');
 
         if (overseerUidField?.value) {
-             await db.collection('overseers').doc(overseerUidField.value).update({
+             await db.collection('overseers').doc(overseerUidField.value).set({
                 subscriptionStatus: 'payment_failed',
                 lastAttempted: admin.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
@@ -207,7 +204,6 @@ app.post('/paystack-subscription-webhook', async (req, res) => {
         }
     }
 
-    // Acknowledge the webhook regardless of event type to prevent retries
     res.status(200).send('Webhook received.');
 });
 
@@ -282,25 +278,30 @@ app.post('/create-payment-link', async (req, res) => {
         type: 'flat',
         subaccounts: subaccounts,
       } : undefined,
-      // ** CORRECTION: Paystack uses 'reference' for order tracking.
       reference: orderReference,
     };
-    const response = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
+    
+    // --- FIX: Replaced node-fetch with axios ---
+    const response = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    const data = response.data; // axios uses .data
+    // -------------------------------------------
+    
     if (!data.status) {
       console.error('Paystack API error:', data.message);
       return res.status(400).json({ error: data.message || 'Paystack API error' });
     }
     return res.json({ paymentLink: data.data.authorization_url });
   } catch (error) {
-    console.error('Error creating payment link:', error);
+    console.error('Error creating payment link:', error.response?.data || error.message);
     return res.status(500).json({ error: 'Server error' });
   }
 });
@@ -310,7 +311,6 @@ app.post('/paystack-webhook', async (req, res) => {
     .update(JSON.stringify(req.body))
     .digest('hex');
 
-  // Verify that the request is from Paystack
   if (hash !== req.headers['x-paystack-signature']) {
     return res.status(401).send('Invalid signature');
   }
@@ -320,20 +320,15 @@ app.post('/paystack-webhook', async (req, res) => {
     const transaction = event.data;
     const orderReference = transaction.reference;
     
-    // Check if this webhook is for an 'order' and not a 'subscription'
     const isSubscriptionWebhook = transaction.metadata?.custom_fields?.some(
         f => f.variable_name === 'subscription_type' && f.value === 'monthly_overseer_tier'
     );
 
     if (isSubscriptionWebhook) {
-        // Ignore here; this event is handled by /paystack-subscription-webhook
         return res.status(200).send('Subscription event delegated.');
     }
 
-    // Process as an Order Webhook
     const paystackAmount = transaction.amount;
-    
-    // Fetch the order from Firestore
     const orderDoc = await db.collection('orders').doc(orderReference).get();
     if (!orderDoc.exists) {
       console.error(`Order ${orderReference} not found.`);
@@ -341,11 +336,8 @@ app.post('/paystack-webhook', async (req, res) => {
     }
     
     const orderData = orderDoc.data();
-    
-    // Convert the stored amount to cents for a reliable comparison.
     const firestoreAmountCents = Math.round(orderData.totalPaidAmount * 100);
 
-    // Now, compare the amounts.
     if (paystackAmount !== firestoreAmountCents) {
       console.error(`Payment amount mismatch for order: ${orderReference}`);
       console.error(`Paystack amount: ${paystackAmount}, Firestore amount: ${firestoreAmountCents}`);
@@ -377,31 +369,91 @@ app.post('/paystack-webhook', async (req, res) => {
 });
 
 // =========================================================================
-// 4. FUNCTION EXPORTS (2ND GEN) - FIXED
+// 4. NEW EMAIL ROUTE (Integrated into the 'api' app)
 // =========================================================================
 
-// EXPORT 1: HTTP Express App (2nd Gen) - PROPERLY WRAPPED
-// This is the key fix: wrap the Express app in a function handler
-exports.api = onRequest({
-  memory: '1GiB',
-  timeoutSeconds: 540,
-  maxInstances: 100,
-}, (req, res) => {
-  return app(req, res);
+let emailTransporter; // Use a unique name
+app.post('/sendCustomEmail', async (req, res) => {
+    const { to, subject, body, attachmentUrl } = req.body;
+
+    if (!to || !subject || !body) {
+      return res.status(400).send({ error: "Missing required fields: to, subject, body" });
+    }
+
+    try {
+      if (!emailTransporter) { 
+        if (!GMAIL_EMAIL || !GMAIL_PASSWORD) {
+           console.error("Gmail email or password not set in functions config.");
+           return res.status(500).send({ error: "Email service not configured." });
+        }
+        
+        emailTransporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: GMAIL_EMAIL,
+            pass: GMAIL_PASSWORD,
+          },
+        });
+      }
+
+      let emailAttachments = [];
+
+      if (attachmentUrl) {
+        console.log(`Downloading attachment from: ${attachmentUrl}`);
+        try {
+          const response = await axios.get(attachmentUrl, {
+            responseType: "arraybuffer",
+          });
+          const buffer = Buffer.from(response.data, "binary");
+          
+          emailAttachments.push({
+            filename: "Report.pdf",
+            content: buffer,
+            contentType: "application/pdf",
+          });
+
+        } catch (e) {
+          console.error("Failed to download attachment:", e);
+          return res.status(500).send({ error: "Failed to download attachment." });
+        }
+      }
+
+      const mailOptions = {
+        from: `"Dankie App" <${GMAIL_EMAIL}>`,
+        to: to,
+        subject: subject,
+        html: `<p>${body.replace(/\n/g, "<br>")}</p>`,
+        attachments: emailAttachments,
+      };
+
+      await emailTransporter.sendMail(mailOptions);
+      console.log(`Email successfully sent to ${to}`);
+      return res.status(200).send({ success: true });
+
+    } catch (error) {
+      console.error("Error sending email:", error);
+      return res.status(500).send({ error: "Failed to send email." });
+    }
 });
 
-// EXPORT 2: SCHEDULED SUBSCRIPTION CRON JOB (2nd Gen)
+
+// =========================================================================
+// 5. EXPORT THE 'api' FUNCTION
+// =========================================================================
+exports.api = functions.https.onRequest(app);
+
+// =========================================================================
+// 6. SCHEDULED SUBSCRIPTION CRON JOB (FIXED TO V1 SYNTAX)
 exports.monthlySubscriptionCharge = onSchedule(
   {
-    schedule: '0 0 1 * *',
+    schedule: '0 0 1 * *', // Runs at midnight UTC on the 1st of every month
     timeZone: 'UTC',
-    memory: '1GiB',
-    timeoutSeconds: 540,
+    region: 'us-central1', // V2 functions often require a region
   },
   async (event) => {
+    
     console.log('Starting monthly subscription charge job.');
 
-    // Get all active overseer subscriptions
     const activeOverseersSnapshot = await db.collection('overseers')
         .where('subscriptionStatus', '==', 'active')
         .get();
@@ -417,7 +469,6 @@ exports.monthlySubscriptionCharge = onSchedule(
       const overseerData = doc.data();
       const overseerId = doc.id;
       
-      // Use the nextChargeDate field set by the webhook/last charge
       if (overseerData.nextChargeDate && overseerData.nextChargeDate.toMillis() > Date.now()) {
         console.log(`Overseer ${overseerId} not yet due for charge.`);
         continue; 
@@ -433,16 +484,12 @@ exports.monthlySubscriptionCharge = onSchedule(
           return;
         }
 
-        // Get the current member count from the 'users' collection
         const membersSnapshot = await db.collection('users')
             .where('overseerUid', '==', overseerId)
             .get();
         const currentMemberCount = membersSnapshot.size;
-
-        // Determine the dynamic charge amount (in cents) using the shared function
         const chargeAmountCents = determineSubscriptionAmount(currentMemberCount);
 
-        // Call Paystack's Charge Authorization API
         try {
           const chargeResponse = await axios.post(
             `${PAYSTACK_API_BASE}/transaction/charge_authorization`,
@@ -465,12 +512,10 @@ exports.monthlySubscriptionCharge = onSchedule(
           );
 
           if (chargeResponse.data.status) {
-            // Success: Update Firestore with new charge details
             await doc.ref.update({
               lastCharged: admin.firestore.FieldValue.serverTimestamp(),
               lastChargedAmount: chargeAmountCents,
               currentMemberCount: currentMemberCount,
-              // Set next charge date for next month (30 days from now)
               nextChargeDate: admin.firestore.Timestamp.fromMillis(
                 Date.now() + (30 * 24 * 60 * 60 * 1000)
               ),
@@ -478,7 +523,6 @@ exports.monthlySubscriptionCharge = onSchedule(
             });
             console.log(`Successfully charged overseer ${overseerId} R${(chargeAmountCents / 100).toFixed(2)}.`);
           } else {
-            // Failure: Log the failure and update status to flag for attention
             console.error(`Charge failed for overseer ${overseerId}: ${chargeResponse.data.message}`);
             await doc.ref.update({ 
               subscriptionStatus: 'payment_failed',

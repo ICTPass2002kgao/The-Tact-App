@@ -1,19 +1,14 @@
+// Login_Page.dart
 // ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, use_build_context_synchronously
 
 // --- PLATFORM UTILITIES IMPORTS ---
-// We use foundation for platform checks that work everywhere (including web).
 import 'package:flutter/foundation.dart';
-
+import 'package:shared_preferences/shared_preferences.dart'; // ⭐️ ADDED: For persistent login
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:ttact/Pages/FaceVerificationPage.dart';
-// Note: webview_flutter and device_info_plus imports kept, assuming necessary
-// for non-web platforms, even though Google Sign-In code was removed.
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/ForgotPassword.dart';
@@ -25,21 +20,16 @@ import 'package:text_field_validation/text_field_validation.dart';
 import 'package:camera/camera.dart';
 
 // --- PLATFORM UTILITIES ---
-
-// Checks if we are running on native mobile (Android or iOS), excluding web.
 bool get isMobileNative =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS);
 
-// Checks if we are running on native iOS, excluding web.
 bool get isIOSPlatform =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
-// Checks if we are running on native Android, excluding web.
 bool get isAndroidPlatform =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-
 // ---------------------------
 
 class Login_Page extends StatefulWidget {
@@ -57,7 +47,6 @@ class _Login_PageState extends State<Login_Page>
   bool _obscureText = true;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  // REMOVED: final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   // ANIMATION
   late AnimationController _logoAnimationController;
@@ -85,7 +74,6 @@ class _Login_PageState extends State<Login_Page>
       CurvedAnimation(parent: _logoAnimationController, curve: Curves.easeIn),
     );
 
-    // Only run animation on mobile/web to prevent distracting on desktop
     if (isMobileNative || kIsWeb) {
       _logoAnimationController.forward();
     }
@@ -98,8 +86,6 @@ class _Login_PageState extends State<Login_Page>
     txtPassword.dispose();
     super.dispose();
   }
-
-  // REMOVED: isHuaweiDevice method and signInWithGoogle method.
 
   // Email/Password Login Handler with Face Verification Step
   Future<void> _handleEmailPasswordLogin() async {
@@ -128,6 +114,14 @@ class _Login_PageState extends State<Login_Page>
 
       var uid = user.uid;
 
+      // 🚀 PERSISTENT LOGIN IMPLEMENTATION START 🚀
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'authToken',
+        uid,
+      ); // Save the UID as the persistent token
+      // 🚀 PERSISTENT LOGIN IMPLEMENTATION END 🚀
+
       // 🚀 REVENUECAT IMPLEMENTATION: Set the App User ID here
       // await Purchases.logIn(uid);
       // --------------------------------------------------------
@@ -146,7 +140,7 @@ class _Login_PageState extends State<Login_Page>
         if (!context.mounted) return;
         Navigator.pop(context); // Dismiss loading dialog
 
-        // Obtain available cameras and pick the first one to pass into FaceVerificationScreen
+        // Obtain available cameras
         final cameras = await availableCameras();
         if (cameras.isEmpty) {
           if (!context.mounted) return;
@@ -178,7 +172,7 @@ class _Login_PageState extends State<Login_Page>
       // 2. Other Roles (Standard Login)
       final overseerQuery = await FirebaseFirestore.instance
           .collection('overseers')
-          .where('email', isEqualTo: txtEmail.text)
+          .where('email', isEqualTo: txtEmail.text.trim())
           .get();
 
       if (overseerQuery.docs.isNotEmpty) {
@@ -248,7 +242,6 @@ class _Login_PageState extends State<Login_Page>
 
   @override
   Widget build(BuildContext context) {
-    // Define breakpoints for responsiveness
     final screenWidth = MediaQuery.of(context).size.width;
     const double webBreakpoint = 900.0;
     final bool isDesktop = screenWidth >= webBreakpoint;
@@ -256,8 +249,6 @@ class _Login_PageState extends State<Login_Page>
     return Scaffold(
       backgroundColor: Colors.transparent,
 
-      // Fix: Conditionally show AppBar only if not on desktop/web,
-      // and use the correct platform check.
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -273,10 +264,8 @@ class _Login_PageState extends State<Login_Page>
         child: LayoutBuilder(
           builder: (context, constraints) {
             return Center(
-              // Constrain the content width for large screens
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 1400),
-                // Use the dedicated Web Layout for large screens
                 child: isDesktop ? buildWebLayout() : buildMobileLayout(),
               ),
             );
@@ -286,7 +275,6 @@ class _Login_PageState extends State<Login_Page>
     );
   }
 
-  // ENHANCED: Web Layout for an appealing, centered, two-column look.
   Widget buildWebLayout() {
     final screenWidth = MediaQuery.of(context).size.width;
     final contentWidth = screenWidth > 1400 ? 1200 : screenWidth * 0.8;
@@ -294,13 +282,9 @@ class _Login_PageState extends State<Login_Page>
     return Center(
       child: Container(
         width: contentWidth.toDouble(),
-        height:
-            MediaQuery.of(context).size.height *
-            0.8, // Take 80% of screen height
+        height: MediaQuery.of(context).size.height * 0.8,
         decoration: BoxDecoration(
-          color: Theme.of(
-            context,
-          ).cardColor, // Use card color for the main container
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
@@ -313,7 +297,6 @@ class _Login_PageState extends State<Login_Page>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Left Side: Image/Logo
             Expanded(
               flex: 2,
               child: ClipRRect(
@@ -325,7 +308,6 @@ class _Login_PageState extends State<Login_Page>
               ),
             ),
 
-            // Right Side: Login Form
             Expanded(
               flex: 3,
               child: Padding(
@@ -346,10 +328,8 @@ class _Login_PageState extends State<Login_Page>
     );
   }
 
-  // Mobile/Tablet Layout (Closer to original structure)
   Widget buildMobileLayout() {
     final color = Theme.of(context);
-    // CORRECTED FIX: Used the safe isAndroidPlatform getter instead of Platform.isAndroid
     final bool showAd = isMobileNative && isAndroidPlatform;
 
     return Column(
@@ -371,7 +351,6 @@ class _Login_PageState extends State<Login_Page>
           ),
         ),
 
-        // Ad Banner (Conditional: Only show on native Android)
         if (showAd) AdManager().bannerAdWidget(),
 
         Expanded(
@@ -379,7 +358,6 @@ class _Login_PageState extends State<Login_Page>
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Card(
-                // Use a subtle color scheme for the card background
                 color: color.primaryColor.withOpacity(0.4),
                 elevation: 20,
                 shape: RoundedRectangleBorder(
@@ -399,11 +377,10 @@ class _Login_PageState extends State<Login_Page>
 
   Widget buildFormContent({required bool isWeb}) {
     final colorScheme = Theme.of(context);
- 
+
     final textColor = isWeb
-        ? colorScheme
-              .scaffoldBackgroundColor  
-        : Colors.white;  
+        ? colorScheme.scaffoldBackgroundColor
+        : Colors.white;
 
     return Form(
       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -414,10 +391,9 @@ class _Login_PageState extends State<Login_Page>
           Text(
             "Welcome Back",
             style: TextStyle(
-              fontSize: isWeb ? 40 : 32, // Larger font on web
+              fontSize: isWeb ? 40 : 32,
               fontWeight: FontWeight.w900,
-              color:
-                  colorScheme.primaryColor, // Use primary color for main title
+              color: colorScheme.primaryColor,
             ),
           ),
           Text(
@@ -436,19 +412,21 @@ class _Login_PageState extends State<Login_Page>
           const SizedBox(height: 10),
 
           // Password Field
-          // FIXED: Uses the safe isIOSPlatform getter
           if (isIOSPlatform)
             CupertinoTextField(
+              style: TextStyle(color: colorScheme.scaffoldBackgroundColor),
+              placeholderStyle: TextStyle(
+                color: colorScheme.scaffoldBackgroundColor,
+              ),
               controller: txtPassword,
               placeholder: 'Password',
               obscureText: _obscureText,
               decoration: BoxDecoration(
-                
-                color: Colors.transparent,
                 border: Border.all(color: CupertinoColors.systemGrey4),
                 borderRadius: BorderRadius.circular(15.0),
               ),
               padding: const EdgeInsets.all(16.0),
+
               suffixMode: OverlayVisibilityMode.editing,
               suffix: CupertinoButton(
                 padding: EdgeInsets.zero,
@@ -463,14 +441,12 @@ class _Login_PageState extends State<Login_Page>
             )
           else
             TextFormField(
-              // Style text input color to contrast with the field background
               style: TextStyle(color: colorScheme.scaffoldBackgroundColor),
               controller: txtPassword,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                // Use a light color for field fill for better visibility
                 fillColor: colorScheme.hintColor.withOpacity(0.2),
                 filled: true,
                 focusedBorder: OutlineInputBorder(
@@ -488,7 +464,6 @@ class _Login_PageState extends State<Login_Page>
                   onPressed: () => setState(() => _obscureText = !_obscureText),
                 ),
                 hintText: 'Password',
-                // Hint text color contrast fix
                 hintStyle: TextStyle(
                   color: colorScheme.scaffoldBackgroundColor,
                 ),
@@ -513,7 +488,6 @@ class _Login_PageState extends State<Login_Page>
                 child: Text(
                   'Forgot Password?',
                   style: TextStyle(
-                    // Use the dynamic text color
                     color: textColor,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -534,7 +508,7 @@ class _Login_PageState extends State<Login_Page>
 
           const SizedBox(height: 10),
 
-          // Proceed without Login Button
+          // Proceed without Login Button (Logout action)
           CustomOutlinedButton(
             text: "Proceed without login",
             backgroundColor: colorScheme.scaffoldBackgroundColor,
@@ -542,6 +516,12 @@ class _Login_PageState extends State<Login_Page>
             onPressed: () async {
               try {
                 await FirebaseAuth.instance.signOut();
+
+                // ⭐️ CLEAR TOKEN ON LOGOUT/SIGNOUT ⭐️
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('authToken');
+                // ------------------------------------
+
                 if (!context.mounted) return;
                 Navigator.pushNamed(context, '/main-menu');
               } catch (e) {
@@ -592,5 +572,3 @@ class _Login_PageState extends State<Login_Page>
     );
   }
 }
-
-// REMOVED: GoogleWebViewSignIn class.

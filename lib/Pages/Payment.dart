@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Pages/Login.dart'; // Assume Login_Page exists in Pages directory
+import 'package:ttact/Pages/SignUpPage.dart'; // Assume SignUpPage exists in Pages directory
 
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 700.0;
@@ -25,6 +27,144 @@ class CartHelper {
   static Future<void> clearCart() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cartKey);
+  }
+}
+
+// Inline login form used by Payment page when the user is not authenticated.
+// This widget performs a simple email/password sign-in with FirebaseAuth and
+// invokes the onSuccess callback when authentication succeeds.
+class InlineLoginForm extends StatefulWidget {
+  final VoidCallback? onSuccess;
+  const InlineLoginForm({Key? key, this.onSuccess}) : super(key: key);
+
+  @override
+  _InlineLoginFormState createState() => _InlineLoginFormState();
+}
+
+class _InlineLoginFormState extends State<InlineLoginForm> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email and password')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      widget.onSuccess?.call();
+    } on FirebaseAuthException catch (e) {
+      String message = 'Authentication failed';
+      if (e.code == 'user-not-found') {
+        message = 'No user found for that email.';
+      } else if (e.code == 'wrong-password') {
+        message = 'Wrong password provided.';
+      } else if (e.message != null) {
+        message = e.message!;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login error: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Please sign in to continue',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+              autofillHints: const [AutofillHints.email],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _signIn,
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Sign in'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('No account?'),
+                TextButton(
+                  onPressed: () {
+                    // Navigate to SignUpPage if available in app
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SignUpPage()),
+                    );
+                  },
+                  child: const Text('Create one'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -64,6 +204,12 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     super.dispose();
   }
 
+  String? name;
+  String? surname;
+  String? email;
+  String? sellerName;
+  String? sellerSurname;
+  String? sellerEmail;
   void _initializeAddress() async {
     setState(() {
       _isLoadingAddress = true;
@@ -85,6 +231,9 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
           if (storedAddress != null && storedAddress.isNotEmpty) {
             _addressController.text = storedAddress;
             setState(() {
+              name = userData?['name'];
+              surname = userData?['surname'];
+              email = userData?['email'];
               _isLoadingAddress = false;
             });
             return;
@@ -195,7 +344,65 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     return total;
   }
 
+  // NEW: Function to show the conditional login prompt
+  void _showLoginPrompt() {
+    final loginForm = InlineLoginForm(
+      onSuccess: () {
+        // Upon successful login, close the prompt and retry payment
+        if (kIsWeb) {
+          Navigator.pop(context); // Close dialog
+        } else {
+          Navigator.pop(context); // Close bottom sheet
+        }
+        // Retry the payment process with the now-logged-in user
+        _payWithPaystack();
+      },
+    );
+
+    if (kIsWeb) {
+      // Web: Show as a centered dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          contentPadding: EdgeInsets.zero,
+          content: Container(
+            width: 400,
+            height: 550, // Constrain size for desktop visibility
+            child: loginForm,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: Theme.of(context).scaffoldBackgroundColor,
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Mobile: Show as a bottom sheet
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: loginForm,
+        ),
+      );
+    }
+  }
+
   Future<void> _payWithPaystack() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // Redirect to the new login prompt
+      _showLoginPrompt();
+      return;
+    }
+
+    // --- Existing Payment Validation and Logic ---
     if (widget.cartProducts.isEmpty) {
       Api().showMessage(
         context,
@@ -210,17 +417,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         context,
         'Please provide a delivery address.',
         'Address Missing',
-        Colors.red,
-      );
-      return;
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      Api().showMessage(
-        context,
-        'You must be logged in to pay.',
-        'Not Logged In',
         Colors.red,
       );
       return;
@@ -242,6 +438,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         'orderId': createdOrderReference,
         'userId': user.uid,
         'products': widget.cartProducts.map((p) {
+          setState(() {
+            sellerEmail = p['sellerEmail'];
+            sellerName = p['sellerName'];
+            sellerSurname = p['sellerSurname'];
+          });
           return {
             'productName': p['productName'],
             'price': p['price'],
@@ -260,7 +461,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         'paymentMethod': 'Paystack',
         'status': 'pending_payment',
         'createdAt': FieldValue.serverTimestamp(),
-        'customerEmail': user.email ?? 'no_email@example.com',
+        'customerEmail': email ?? 'no_email@example.com',
         'totalPaidAmount': _calculateTotal(),
       };
 
@@ -274,6 +475,53 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
           if (newStatus == 'paid') {
             subscription?.cancel(); // Stop listening
+
+            Api().sendEmail(
+              email!, // recipient: the buyer
+              "Payment Successful – Check Your Order",
+              """
+  <p>Dear ${name} ${surname},</p>
+
+  <p>Thank you for your purchase on <strong>Dankie Mobile (TACT)</strong>!</p>
+
+  <p>We have successfully received your payment. You can now visit your <strong>Order Page</strong> to view the status of your order and track any updates.</p>
+
+  <p>If you did not make this purchase or notice any issues, please contact our support team immediately.</p>
+
+  <br>
+  <p>Best regards,<br>
+  Dankie Mobile Support Team</p>
+  <a href="https://dankie-website.web.app/">Dankie Mobile</a>
+  """,
+              context,
+            );
+            Api().sendEmail(
+              sellerEmail!, // the seller's email
+              "New Order Received – Customer Purchase",
+              """
+  <p>Dear ${sellerName},</p>
+
+  <p>You have received a new order on <strong>Dankie Mobile (TACT)</strong>!</p>
+
+  <ul>
+    <li>Customer: ${name} ${surname}</li>
+    <li>Email: ${email}</li> 
+    <li>Purchased At: ${DateTime.now().toLocal()}</li>
+    <li>Total Amount: R${_calculateTotal()}</li>
+  </ul>
+
+  <p>Please check your <strong>Orders Page</strong> to view and process this order.</p>
+
+  <p>If there are any issues, contact the support team immediately.</p>
+
+  <br>
+  <p>Best regards,<br>
+  Dankie Mobile Support Team</p>
+  <a href="https://dankie-website.web.app/">Dankie Mobile</a>
+  """,
+              context,
+            );
+
             // FIX: Clear the local cart storage upon successful payment
             CartHelper.clearCart();
             Navigator.pushReplacementNamed(context, '/orders');
@@ -303,7 +551,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         Uri.parse('$YOUR_BACKEND_BASE_URL/create-payment-link'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'email': user.email ?? 'no_email@example.com',
+          'email': email ?? 'no_email@example.com',
           'products': productsForPaystack,
           'orderReference': createdOrderReference,
         }),
@@ -366,6 +614,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
               children: [
                 // --- Address Card ---
                 Card(
+                  // Use theme colors for card background
                   color: color.scaffoldBackgroundColor.withOpacity(0.9),
                   elevation: 5,
                   margin: const EdgeInsets.only(bottom: 16.0),
@@ -419,6 +668,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
                 // --- Delivery Option Card ---
                 Card(
+                  // Use theme colors for card background
                   color: color.scaffoldBackgroundColor.withOpacity(0.9),
                   elevation: 5,
                   margin: const EdgeInsets.only(bottom: 16.0),
@@ -506,10 +756,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                             ),
                             child: Text(
                               'Delivery Charge: R${deliveryCharge.toStringAsFixed(2)}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w500,
                                 fontSize: 16,
-                                color: Colors.blueGrey,
+                                color: color
+                                    .hintColor, // Use hintColor for detail text
                               ),
                             ),
                           ),
@@ -520,6 +771,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
                 // --- Order Summary Card ---
                 Card(
+                  // Use theme colors for card background
                   color: color.scaffoldBackgroundColor.withOpacity(0.9),
                   elevation: 5,
                   margin: const EdgeInsets.only(bottom: 20.0),
@@ -580,9 +832,9 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                             height: 40,
                                             fit: BoxFit.cover,
                                             errorBuilder: (c, e, s) =>
-                                                _buildPlaceholderImage(),
+                                                _buildPlaceholderImage(color),
                                           )
-                                        : _buildPlaceholderImage(),
+                                        : _buildPlaceholderImage(color),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -603,7 +855,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                           'R${productPrice.toStringAsFixed(2)} x ${productQuantity}',
                                           style: TextStyle(
                                             fontSize: 13,
-                                            color: Colors.grey[700],
+                                            color: color
+                                                .hintColor, // Use hintColor
                                           ),
                                         ),
                                         Text(
@@ -611,7 +864,9 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                           style: TextStyle(
                                             fontSize: 13,
                                             fontStyle: FontStyle.italic,
-                                            color: Colors.grey[500],
+                                            color: color.hintColor.withOpacity(
+                                              0.7,
+                                            ), // Use hintColor
                                           ),
                                         ),
                                       ],
@@ -727,12 +982,12 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
   }
 
   // Helper to build image placeholder
-  Widget _buildPlaceholderImage() {
+  Widget _buildPlaceholderImage(ThemeData color) {
     return Container(
       width: 40,
       height: 40,
-      color: Colors.grey[200],
-      child: Icon(Icons.image, color: Colors.grey[600], size: 20),
+      color: color.hintColor.withOpacity(0.2), // Use theme hintColor
+      child: Icon(Icons.image, color: color.hintColor, size: 20),
     );
   }
 }

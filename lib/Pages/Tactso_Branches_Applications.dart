@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously, prefer_const_literals_to_create_immutables
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
@@ -12,6 +14,9 @@ import 'package:flutter/foundation.dart';
 const double _desktopContentMaxWidth = 1000.0;
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= 800; // Adjusted breakpoint for admin console
+
+// Helper to check for mobile web (used for conditional navigation)
+bool _isMobileWeb(BuildContext context) => kIsWeb && !isLargeScreen(context);
 // --------------------------
 
 // Placeholder for your Api utility class (if needed for messages)
@@ -43,6 +48,11 @@ class Api {
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  void showLoading(BuildContext context) {
+    // Placeholder for loading functionality used in previous snippets
+    // In this context, the loading is often handled by state or streams.
   }
 }
 
@@ -76,6 +86,49 @@ class _TactsoBranchesApplicationsState
   void initState() {
     super.initState();
     _loadUniversityData();
+  
+   Future.delayed(Duration.zero, _checkAuthorization);
+  }
+  
+  bool _isAuthorized = false;
+  Future<void> _checkAuthorization() async {
+    final user = FirebaseAuth.instance.currentUser;
+    
+    // --- 1. Authentication Check (Is the user logged in?) ---
+    if (user == null) {
+      if (mounted) {
+        // Not logged in: Redirect to login
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+      return;
+    }
+
+    // --- 2. Role Check (Does the user have the 'Admin' role?) ---
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('tactso_branches')
+          .doc(user.uid)
+          .get();
+
+      final String uid = userDoc.data()?['uid'] ?? '';
+
+      if (uid == user.uid) {
+        // Access granted!
+        setState(() {
+          _isAuthorized = true;
+        });
+      }   else {
+        // Logged in, but NOT an Admin: Redirect to login
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+      }
+    } catch (e) { 
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    }
   }
 
   Future<void> _loadUniversityData() async {
@@ -97,7 +150,6 @@ class _TactsoBranchesApplicationsState
           });
         }
       } catch (e) {
-        // print('Error fetching university data: $e'); // Suppressed print
         if (mounted) {}
       }
     }
@@ -174,10 +226,9 @@ class _TactsoBranchesApplicationsState
           CupertinoColors.activeGreen,
         );
         // Manually trigger a rebuild to update streams immediately
-        setState(() {}); 
+        setState(() {});
       }
     } catch (e) {
-      // print('Error updating status: $e'); // Suppressed print
       if (mounted) {
         Api().showMessage(
           context,
@@ -225,7 +276,7 @@ class _TactsoBranchesApplicationsState
       builder: (BuildContext context) {
         final colorScheme = Theme.of(context);
         return Center(
-          // FIX: Constrain the modal width for desktop viewing
+          // Constrain the modal width for desktop viewing
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 600),
             child: StatefulBuilder(
@@ -381,7 +432,7 @@ class _TactsoBranchesApplicationsState
                         ),
                         // Status Dropdown
                         Material(
-                          color: Colors.transparent,
+                          color: Colors.transparent, // Important for blending with Cupertino sheet
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12.0),
                             decoration: BoxDecoration(
@@ -588,6 +639,7 @@ class _TactsoBranchesApplicationsState
     // are wrapped correctly for desktop/web.
     return CupertinoTabScaffold(
       tabBar: CupertinoTabBar(
+        // Use a standard BottomNavigationBar approach for small screens
         backgroundColor: color.appBarTheme.backgroundColor,
         activeColor: color.primaryColor, // Use primary color for active tab
         inactiveColor: color.hintColor,
@@ -606,6 +658,7 @@ class _TactsoBranchesApplicationsState
         return CupertinoTabView(
           builder: (BuildContext context) {
             return Scaffold(
+              // NOTE: AppBar handles the title, logout, and back button (if available)
               appBar: AppBar(
                 title: Text('${_universityName ?? 'University'} Admin Console'),
                 backgroundColor: color.primaryColor,
@@ -618,7 +671,7 @@ class _TactsoBranchesApplicationsState
                   ),
                 ],
               ),
-              // FIX: Wrap the body content in a Center/ConstrainedBox for web/desktop
+              // Wrap the body content in a Center/ConstrainedBox for web/desktop
               body: Center(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
@@ -655,7 +708,7 @@ class _TactsoBranchesApplicationsState
           ),
           const Divider(height: 20, thickness: 1),
 
-          // FIX: Use Wrap for metrics on desktop to show them side-by-side
+          // Use Wrap for metrics on desktop to show them side-by-side
           Wrap(
             spacing: 16.0,
             runSpacing: 16.0,
@@ -722,7 +775,7 @@ class _TactsoBranchesApplicationsState
     );
   }
 
-  // --- NEW: Helper Widget for Metric Cards (Updated with responsiveness) ---
+  // --- Helper Widget for Metric Cards (Updated with responsiveness) ---
   Widget _buildMetricCard(
     BuildContext context,
     String title,
@@ -733,7 +786,7 @@ class _TactsoBranchesApplicationsState
     required bool isDesktop,
   }) {
     final double cardWidth = isDesktop
-        ? (_desktopContentMaxWidth / 2) - 80 // Two columns on desktop
+        ? (MediaQuery.of(context).size.width * 0.45) // Closer approximation for two columns within the max width
         : double.infinity;
         
     return StreamBuilder<QuerySnapshot>(
@@ -743,7 +796,7 @@ class _TactsoBranchesApplicationsState
           return Card(
             margin: EdgeInsets.only(bottom: 16.0),
             child: SizedBox(
-              width: cardWidth,
+              width: isDesktop ? (_desktopContentMaxWidth / 2) - 32 : double.infinity, // Use calculation for a two-column desktop layout
               height: 100,
               child: Center(child: CupertinoActivityIndicator()),
             ),
@@ -764,7 +817,8 @@ class _TactsoBranchesApplicationsState
           elevation: 0, 
           margin: const EdgeInsets.only(bottom: 16.0),
           child: Container(
-            width: cardWidth, // Apply responsive width
+            // Use the calculated width if desktop, otherwise fill
+            width: isDesktop ? (_desktopContentMaxWidth / 2) - 32 : double.infinity,
             padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -805,7 +859,6 @@ class _TactsoBranchesApplicationsState
   // --- End Helper Widget ---
 
   Widget _buildApplicationsTab(BuildContext context) {
-    final color = Theme.of(context);
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
           .collection('tactso_branches')
@@ -845,135 +898,134 @@ class _TactsoBranchesApplicationsState
           itemBuilder: (context, index) {
             var doc = snapshot.data!.docs[index];
             var application = doc.data() as Map<String, dynamic>;
-            var applicationDetails =
-                application['applicationDetails'] as Map<String, dynamic>?;
-
-            if (applicationDetails == null) {
-              return const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Card(
-                  child: CupertinoListTile(
-                    title: Text('Invalid Application Data'),
-                    leading: Icon(
-                      CupertinoIcons.xmark_circle_fill,
-                      color: CupertinoColors.systemRed,
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            String fullName = applicationDetails['fullName'] ?? 'N/A';
-            String primaryProgram =
-                applicationDetails['primaryProgram'] ?? 'N/A';
-            String currentStatus = application['status'] ?? 'N/A';
-            Timestamp? submissionTimestamp =
-                application['submissionDate'] as Timestamp?;
-            String submissionDate = submissionTimestamp != null
-                ? DateFormat(
-                    'MMM dd, yyyy HH:mm',
-                  ).format(submissionTimestamp.toDate())
-                : 'N/A';
-
-            Color statusColor = currentStatus == 'New'
-                ? CupertinoColors.systemOrange
-                : CupertinoColors.systemGreen;
-
-            return Card(
-              color: color.scaffoldBackgroundColor,
-              elevation: 4,
-              shadowColor: statusColor.withOpacity(0.5),
-              margin: const EdgeInsets.symmetric(
-                vertical: 8.0,
-                horizontal: 4.0,
-              ),
-              child: CupertinoListTile(
-                title: Text(
-                  fullName,
-                  style: TextStyle(
-                    color: color.textTheme.bodyLarge?.color,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Program: $primaryProgram',
-                      style: TextStyle(color: color.hintColor),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8.0,
-                          height: 8.0,
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Status: $currentStatus',
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      'Submitted: $submissionDate',
-                      style: TextStyle(color: color.hintColor, fontSize: 12),
-                    ),
-                  ],
-                ),
-                trailing: const Icon(
-                  CupertinoIcons.chevron_right,
-                  color: CupertinoColors.systemGrey,
-                ),
-                onTap: () async {
-                  String initialStatus = application['status'] ?? 'New';
-                  if (initialStatus == 'New') {
-                    await _updateApplicationStatus(
-                      applicationId: doc.id,
-                      newStatus: 'Reviewed',
-                      globalApplicationRequestId:
-                          application['globalApplicationRequestId'],
-                      userId: application['userId'],
-                    );
-                  }
-
-                  // Note: A short delay helps ensure the stream updates before fetching the single doc,
-                  // but generally streams should handle this without manual delay.
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  
-                  DocumentSnapshot updatedDoc = await _firestore
-                      .collection('tactso_branches')
-                      .doc(_currentuid)
-                      .collection('application_requests')
-                      .doc(doc.id)
-                      .get();
-
-                  if (updatedDoc.exists) {
-                    _showApplicationDetails(
-                      updatedDoc.data() as Map<String, dynamic>,
-                      updatedDoc.id,
-                    );
-                  } else {
-                    Api().showMessage(
-                      context,
-                      'Error',
-                      'Application not found after update.',
-                      CupertinoColors.systemRed,
-                    );
-                  }
-                },
-              ),
-            );
+            return _buildApplicationListTile(context, doc.id, application);
           },
         );
       },
+    );
+  }
+  
+  // Extracted List Tile Builder for readability
+  Widget _buildApplicationListTile(
+      BuildContext context, String docId, Map<String, dynamic> application) {
+    final color = Theme.of(context);
+    var applicationDetails = application['applicationDetails'] as Map<String, dynamic>?;
+
+    if (applicationDetails == null) {
+      return const Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Card(
+          child: CupertinoListTile(
+            title: Text('Invalid Application Data'),
+            leading: Icon(
+              CupertinoIcons.xmark_circle_fill,
+              color: CupertinoColors.systemRed,
+            ),
+          ),
+        ),
+      );
+    }
+
+    String fullName = applicationDetails['fullName'] ?? 'N/A';
+    String primaryProgram = applicationDetails['primaryProgram'] ?? 'N/A';
+    String currentStatus = application['status'] ?? 'N/A';
+    Timestamp? submissionTimestamp = application['submissionDate'] as Timestamp?;
+    String submissionDate = submissionTimestamp != null
+        ? DateFormat('MMM dd, yyyy HH:mm').format(submissionTimestamp.toDate())
+        : 'N/A';
+
+    Color statusColor =
+        currentStatus == 'New' ? CupertinoColors.systemOrange : CupertinoColors.systemGreen;
+
+    return Card(
+      color: color.scaffoldBackgroundColor,
+      elevation: 4,
+      shadowColor: statusColor.withOpacity(0.5),
+      margin: const EdgeInsets.symmetric(
+        vertical: 8.0,
+        horizontal: 4.0,
+      ),
+      child: CupertinoListTile(
+        title: Text(
+          fullName,
+          style: TextStyle(
+            color: color.textTheme.bodyLarge?.color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Program: $primaryProgram',
+              style: TextStyle(color: color.hintColor),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 8.0,
+                  height: 8.0,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Status: $currentStatus',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Submitted: $submissionDate',
+              style: TextStyle(color: color.hintColor, fontSize: 12),
+            ),
+          ],
+        ),
+        trailing: const Icon(
+          CupertinoIcons.chevron_right,
+          color: CupertinoColors.systemGrey,
+        ),
+        onTap: () async {
+          String initialStatus = application['status'] ?? 'New';
+          if (initialStatus == 'New') {
+            await _updateApplicationStatus(
+              applicationId: docId,
+              newStatus: 'Reviewed',
+              globalApplicationRequestId:
+                  application['globalApplicationRequestId'],
+              userId: application['userId'],
+            );
+          }
+ 
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          DocumentSnapshot updatedDoc = await _firestore
+              .collection('tactso_branches')
+              .doc(_currentuid)
+              .collection('application_requests')
+              .doc(docId)
+              .get();
+
+          if (updatedDoc.exists) {
+            _showApplicationDetails(
+              updatedDoc.data() as Map<String, dynamic>,
+              updatedDoc.id,
+            );
+          } else {
+            Api().showMessage(
+              context,
+              'Error',
+              'Application not found after update.',
+              CupertinoColors.systemRed,
+            );
+          }
+        },
+      ),
     );
   }
 }

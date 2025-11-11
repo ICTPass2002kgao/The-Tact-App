@@ -41,30 +41,58 @@ class _SellerProductPageState extends State<SellerProductPage>
 
   // Predefined lists of colors and sizes to choose from
   final List<String> _availableColors = [
-    'Black', 'White', 'Grey', 'Red', 'Blue', 'Green', 'Yellow', 'Pink',
-    'Purple', 'Orange', 'Brown',
+    'Black',
+    'White',
+    'Grey',
+    'Red',
+    'Blue',
+    'Green',
+    'Yellow',
+    'Pink',
+    'Purple',
+    'Orange',
+    'Brown',
   ];
 
   final List<String> _availableSizeTypes = [
-    'Standard/Missy Sizes', 'Numeric Sizes (US/UK)', 'Suit Sizes',
+    'Standard/Missy Sizes',
+    'Numeric Sizes (US/UK)',
+    'Suit Sizes',
   ];
 
   final List<String> _availableStandardSizes = [
-    'S', 'M', 'X', 'XX', 'SS', 'SSS', 'XL',
+    'S',
+    'M',
+    'X',
+    'XX',
+    'SS',
+    'SSS',
+    'XL',
   ];
 
   final List<Map<String, String>> _availableNumericSizes = [
-    {'size': '1', 'type': 'Kids'}, {'size': '2', 'type': 'Kids'},
-    {'size': '3', 'type': 'Kids'}, {'size': '4', 'type': 'Kids'},
-    {'size': '5', 'type': 'Kids'}, {'size': '6', 'type': 'Kids'},
-    {'size': '7', 'type': 'Kids'}, {'size': '8', 'type': 'Kids'},
-    {'size': '9', 'type': 'Kids'}, {'size': '10', 'type': 'Kids'},
-    {'size': '1', 'type': 'Adults'}, {'size': '2', 'type': 'Adults'},
-    {'size': '3', 'type': 'Adults'}, {'size': '4', 'type': 'Adults'},
-    {'size': '5', 'type': 'Adults'}, {'size': '6', 'type': 'Adults'},
-    {'size': '7', 'type': 'Adults'}, {'size': '8', 'type': 'Adults'},
-    {'size': '9', 'type': 'Adults'}, {'size': '10', 'type': 'Adults'},
-    {'size': '11', 'type': 'Adults'}, {'size': '12', 'type': 'Adults'},
+    {'size': '1', 'type': 'Kids'},
+    {'size': '2', 'type': 'Kids'},
+    {'size': '3', 'type': 'Kids'},
+    {'size': '4', 'type': 'Kids'},
+    {'size': '5', 'type': 'Kids'},
+    {'size': '6', 'type': 'Kids'},
+    {'size': '7', 'type': 'Kids'},
+    {'size': '8', 'type': 'Kids'},
+    {'size': '9', 'type': 'Kids'},
+    {'size': '10', 'type': 'Kids'},
+    {'size': '1', 'type': 'Adults'},
+    {'size': '2', 'type': 'Adults'},
+    {'size': '3', 'type': 'Adults'},
+    {'size': '4', 'type': 'Adults'},
+    {'size': '5', 'type': 'Adults'},
+    {'size': '6', 'type': 'Adults'},
+    {'size': '7', 'type': 'Adults'},
+    {'size': '8', 'type': 'Adults'},
+    {'size': '9', 'type': 'Adults'},
+    {'size': '10', 'type': 'Adults'},
+    {'size': '11', 'type': 'Adults'},
+    {'size': '12', 'type': 'Adults'},
     {'size': '13', 'type': 'Adults'},
   ];
 
@@ -74,7 +102,12 @@ class _SellerProductPageState extends State<SellerProductPage>
   );
 
   final List<String> orderStatuses = [
-    'pending', 'processing', 'ready_for_pickup', 'dispatched', 'completed', 'cancelled',
+    'pending',
+    'processing',
+    'ready_for_pickup',
+    'dispatched',
+    'completed',
+    'cancelled',
   ];
 
   late int _randomDisplayPercentage;
@@ -82,11 +115,9 @@ class _SellerProductPageState extends State<SellerProductPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 4, 
-      vsync: this,
-    );
+    _tabController = TabController(length: 4, vsync: this);
     _generateRandomDisplayDiscount();
+    fetchCurrentUser();
   }
 
   void _generateRandomDisplayDiscount() {
@@ -101,6 +132,25 @@ class _SellerProductPageState extends State<SellerProductPage>
     locationController.dispose();
     suitSizeController.dispose();
     super.dispose();
+  }
+
+  bool isVerified = false;
+  String? email;
+  String? name;
+  String? surname;
+  Future<void> fetchCurrentUser() async {
+    final userData = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user?.uid)
+        .get();
+
+    setState(() {
+      // ⭐️ FIX 2: Default to false, not true
+      isVerified = userData.data()?['accountVerified'] ?? false;
+      name = userData.data()?['name'] ?? "N/A";
+      surname = userData.data()?['surname'] ?? "N/A";
+      email = userData.data()?['email'] ?? "N/A";
+    });
   }
 
   Future<void> addSellerProduct(
@@ -118,17 +168,24 @@ class _SellerProductPageState extends State<SellerProductPage>
         colors.isEmpty ||
         sizes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Please fill all required fields: price, location, at least one color, and at least one size.',
-            ),
-          ),
+        Api().showMessage(
+          context,
+          "Please fill all required fields: price, location, at least one color, and at least one size.",
+          "Warning",
+          Colors.red,
         );
       }
       return;
     }
-
+    if (!isVerified) {
+      Api().showMessage(
+        context,
+        "You account is not yet verified as a seller",
+        "Warning",
+        Colors.red,
+      );
+      return;
+    }
     final existingProduct = await FirebaseFirestore.instance
         .collection('seller_products')
         .where('productId', isEqualTo: productId)
@@ -171,6 +228,9 @@ class _SellerProductPageState extends State<SellerProductPage>
         'availableColors': colors,
         'availableSizes': sizes,
         'subaccountCode': subaccountCode,
+        'sellerName': name,
+        'sellerEmail': email,
+        'sellerSurname': surname,
       });
 
       priceController.clear();
@@ -202,6 +262,15 @@ class _SellerProductPageState extends State<SellerProductPage>
   }
 
   Future<void> updateSellerProductPrice(String docId, double newPrice) async {
+    if (!isVerified) {
+      Api().showMessage(
+        context,
+        "You account is not yet verified as a seller",
+        "Warning",
+        Colors.red,
+      );
+      return;
+    }
     final color = Theme.of(context);
     try {
       await FirebaseFirestore.instance
@@ -231,6 +300,15 @@ class _SellerProductPageState extends State<SellerProductPage>
   }
 
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
+    if (!isVerified) {
+      Api().showMessage(
+        context,
+        "You account is not yet verified as a seller",
+        "Warning",
+        Colors.red,
+      );
+      return;
+    }
     final color = Theme.of(context);
     try {
       await FirebaseFirestore.instance.collection('orders').doc(orderId).update(
@@ -285,10 +363,10 @@ class _SellerProductPageState extends State<SellerProductPage>
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Dashboard Cards Grid/Wrap
               _buildDashboardMetrics(currentSellerId, isDesktop),
-              
+
               const SizedBox(height: 20),
               Text(
                 "Note: Product views are incremented when customers interact with your products on the shopping page.",
@@ -316,17 +394,29 @@ class _SellerProductPageState extends State<SellerProductPage>
               .get(),
           builder: (context, productsSnapshot) {
             // Loading State
-            if (ordersSnapshot.connectionState == ConnectionState.waiting || 
+            if (ordersSnapshot.connectionState == ConnectionState.waiting ||
                 productsSnapshot.connectionState == ConnectionState.waiting) {
               return Wrap(
-                spacing: 15, runSpacing: 15,
-                children: List.generate(4, (i) => _buildDashboardCard("Loading...", "...", Icons.hourglass_empty, isDesktop)),
+                spacing: 15,
+                runSpacing: 15,
+                children: List.generate(
+                  4,
+                  (i) => _buildDashboardCard(
+                    "Loading...",
+                    "...",
+                    Icons.hourglass_empty,
+                    isDesktop,
+                  ),
+                ),
               );
             }
-            
+
             // Error State
             if (ordersSnapshot.hasError || productsSnapshot.hasError) {
-              return Text("Error loading data.", style: TextStyle(color: Colors.red));
+              return Text(
+                "Error loading data.",
+                style: TextStyle(color: Colors.red),
+              );
             }
 
             // Processing Data
@@ -354,7 +444,8 @@ class _SellerProductPageState extends State<SellerProductPage>
                     productItem['sellerId'] == currentSellerId) {
                   containsSellerProduct = true;
                   orderRevenueFromSeller +=
-                      (productItem['itemTotalPrice'] as num?)?.toDouble() ?? 0.0;
+                      (productItem['itemTotalPrice'] as num?)?.toDouble() ??
+                      0.0;
                 }
               }
 
@@ -363,7 +454,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                 totalRevenueForSeller += orderRevenueFromSeller;
               }
             }
-            
+
             // Build the final set of cards
             return Wrap(
               spacing: 15,
@@ -401,9 +492,16 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
 
-  Widget _buildDashboardCard(String title, String value, IconData icon, bool isDesktop) {
+  Widget _buildDashboardCard(
+    String title,
+    String value,
+    IconData icon,
+    bool isDesktop,
+  ) {
     // Calculate card width based on desktop status
-    final cardWidth = isDesktop ? (MediaQuery.of(context).size.width * 0.8 / 2) - 30 : double.infinity;
+    final cardWidth = isDesktop
+        ? (MediaQuery.of(context).size.width * 0.8 / 2) - 30
+        : double.infinity;
 
     return Card(
       elevation: 4,
@@ -480,11 +578,20 @@ class _SellerProductPageState extends State<SellerProductPage>
                 final imageUrl = data['imageUrl'];
                 final currentPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
                 final productViews = (data['views'] as int?) ?? 0;
-                final List<String> availableColors = (data['availableColors'] as List<dynamic>? ?? []).map((c) => c.toString()).toList();
-                final List<String> availableSizes = (data['availableSizes'] as List<dynamic>? ?? []).map((s) => s.toString()).toList();
+                final List<String> availableColors =
+                    (data['availableColors'] as List<dynamic>? ?? [])
+                        .map((c) => c.toString())
+                        .toList();
+                final List<String> availableSizes =
+                    (data['availableSizes'] as List<dynamic>? ?? [])
+                        .map((s) => s.toString())
+                        .toList();
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   elevation: 2,
                   child: ListTile(
                     leading:
@@ -506,7 +613,10 @@ class _SellerProductPageState extends State<SellerProductPage>
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Price: R${currentPrice.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text(
+                          "Price: R${currentPrice.toStringAsFixed(2)}",
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
                         Text(
                           "Location: ${data['location'] ?? 'N/A'}",
                           maxLines: 1,
@@ -515,14 +625,20 @@ class _SellerProductPageState extends State<SellerProductPage>
                         ),
                         Text(
                           "Views: $productViews | Colors: ${availableColors.join(', ')} | Sizes: ${availableSizes.join(', ')}",
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                     trailing: IconButton(
-                      icon: Icon(Icons.edit, color: Theme.of(context).primaryColor),
+                      icon: Icon(
+                        Icons.edit,
+                        color: Theme.of(context).primaryColor,
+                      ),
                       onPressed: () {
                         final TextEditingController newPriceController =
                             TextEditingController(
@@ -535,9 +651,10 @@ class _SellerProductPageState extends State<SellerProductPage>
                               title: Text("Update Price for $productName"),
                               content: TextField(
                                 controller: newPriceController,
-                                keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: const InputDecoration(
                                   labelText: "New Price (R)",
                                   hintText: "e.g., 175.50",
@@ -552,10 +669,12 @@ class _SellerProductPageState extends State<SellerProductPage>
                                 ),
                                 ElevatedButton(
                                   onPressed: () async {
-                                    final double? updatedPrice = double.tryParse(
-                                      newPriceController.text,
-                                    );
-                                    if (updatedPrice != null && updatedPrice >= 0) {
+                                    final double? updatedPrice =
+                                        double.tryParse(
+                                          newPriceController.text,
+                                        );
+                                    if (updatedPrice != null &&
+                                        updatedPrice >= 0) {
                                       await updateSellerProductPrice(
                                         docId,
                                         updatedPrice,
@@ -565,7 +684,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                                       }
                                     } else {
                                       if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           const SnackBar(
                                             content: Text(
                                               'Please enter a valid positive number for price.',
@@ -600,6 +721,11 @@ class _SellerProductPageState extends State<SellerProductPage>
       return const Center(child: Text("Please log in to add products."));
     }
 
+    // ⭐️ FIX 1: Return a dedicated widget instead of calling Api().showMessage()
+    if (!isVerified) {
+      return _buildNotVerifiedWidget();
+    }
+
     final String sellerId = user!.uid;
 
     return FutureBuilder<List<String>>(
@@ -608,41 +734,54 @@ class _SellerProductPageState extends State<SellerProductPage>
           .where('sellerId', isEqualTo: sellerId)
           .get()
           .then(
-            (snapshot) => snapshot.docs.map((doc) => doc['productId'] as String).toList(),
+            (snapshot) =>
+                snapshot.docs.map((doc) => doc['productId'] as String).toList(),
           ),
       builder: (context, existingProductIdsSnapshot) {
-        if (existingProductIdsSnapshot.connectionState == ConnectionState.waiting) {
+        if (existingProductIdsSnapshot.connectionState ==
+            ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (existingProductIdsSnapshot.hasError) {
           return Center(
-            child: Text("Error fetching existing products: ${existingProductIdsSnapshot.error}"),
+            child: Text(
+              "Error fetching existing products: ${existingProductIdsSnapshot.error}",
+            ),
           );
         }
 
-        final List<String> existingProductIds = existingProductIdsSnapshot.data ?? [];
+        final List<String> existingProductIds =
+            existingProductIdsSnapshot.data ?? [];
 
         return FutureBuilder<QuerySnapshot>(
           future: FirebaseFirestore.instance.collection('products').get(),
           builder: (context, allProductsSnapshot) {
-            if (allProductsSnapshot.connectionState == ConnectionState.waiting) {
+            if (allProductsSnapshot.connectionState ==
+                ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (allProductsSnapshot.hasError) {
               return Center(child: Text("Error: ${allProductsSnapshot.error}"));
             }
-            if (!allProductsSnapshot.hasData || allProductsSnapshot.data!.docs.isEmpty) {
-              return const Center(child: Text("No base products available to add."));
+            if (!allProductsSnapshot.hasData ||
+                allProductsSnapshot.data!.docs.isEmpty) {
+              return const Center(
+                child: Text("No base products available to add."),
+              );
             }
 
-            final availableProducts = allProductsSnapshot.data!.docs.where((prod) {
+            final availableProducts = allProductsSnapshot.data!.docs.where((
+              prod,
+            ) {
               return !existingProductIds.contains(prod.id);
             }).toList();
 
             if (availableProducts.isEmpty) {
-              return const Center(child: Text("You have added all available products."));
+              return const Center(
+                child: Text("You have added all available products."),
+              );
             }
-            
+
             // Wrap the ListView in a constrained container for web aesthetic
             return Center(
               child: Container(
@@ -651,12 +790,17 @@ class _SellerProductPageState extends State<SellerProductPage>
                   itemCount: availableProducts.length,
                   itemBuilder: (context, index) {
                     final prod = availableProducts[index];
-                    final String adminProductName = prod['name'] ?? 'Unnamed Product (Admin)';
-                    final String adminProductDescription = prod['description'] ?? 'No description (Admin)';
+                    final String adminProductName =
+                        prod['name'] ?? 'Unnamed Product (Admin)';
+                    final String adminProductDescription =
+                        prod['description'] ?? 'No description (Admin)';
                     final dynamic adminProductImageUrl = prod['imageUrl'];
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
                       elevation: 2,
                       child: ListTile(
                         leading:
@@ -674,7 +818,11 @@ class _SellerProductPageState extends State<SellerProductPage>
                                 errorBuilder: (context, error, stackTrace) =>
                                     const Icon(Icons.broken_image),
                               )
-                            : Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey),
+                            : Icon(
+                                Icons.inventory_2_outlined,
+                                size: 40,
+                                color: Colors.grey,
+                              ),
                         title: Text(
                           adminProductName,
                           style: const TextStyle(fontWeight: FontWeight.w900),
@@ -688,7 +836,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                         ),
                         onTap: () async {
                           // ... (Location fetching logic - Kept As Is)
-                           if (_sellerAddress == null) {
+                          if (_sellerAddress == null) {
                             Api().showLoading(context);
                             try {
                               final sellerSnapshot = await FirebaseFirestore
@@ -697,8 +845,10 @@ class _SellerProductPageState extends State<SellerProductPage>
                                   .where('role', isEqualTo: 'Seller')
                                   .where(
                                     'email',
-                                    isEqualTo:
-                                        FirebaseAuth.instance.currentUser!.email,
+                                    isEqualTo: FirebaseAuth
+                                        .instance
+                                        .currentUser!
+                                        .email,
                                   )
                                   .get();
                               if (sellerSnapshot.docs.isNotEmpty) {
@@ -742,223 +892,366 @@ class _SellerProductPageState extends State<SellerProductPage>
                               builder: (context) {
                                 return Center(
                                   child: ConstrainedBox(
-                                    constraints: BoxConstraints(maxWidth: 600), // Constraint for web/desktop modal
+                                    constraints: BoxConstraints(
+                                      maxWidth: 600,
+                                    ), // Constraint for web/desktop modal
                                     child: StatefulBuilder(
-                                      builder: (BuildContext context, StateSetter setModalState) {
-                                        return Padding(
-                                          padding: EdgeInsets.only(
-                                            bottom: MediaQuery.of(context).viewInsets.bottom,
-                                            top: 20,
-                                            left: 20,
-                                            right: 20,
-                                          ),
-                                          child: SingleChildScrollView(
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Center(
-                                                  child: Text(
-                                                    "Add Your Price, Location, Colors & Sizes for:",
-                                                    style: TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Theme.of(context).primaryColor,
-                                                    ),
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                ),
-                                                Center(
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.only(bottom: 16.0),
-                                                    child: Text(
-                                                      adminProductName,
-                                                      style: TextStyle(
-                                                        fontSize: 20,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Theme.of(context).primaryColor,
+                                      builder:
+                                          (
+                                            BuildContext context,
+                                            StateSetter setModalState,
+                                          ) {
+                                            return Padding(
+                                              padding: EdgeInsets.only(
+                                                bottom: MediaQuery.of(
+                                                  context,
+                                                ).viewInsets.bottom,
+                                                top: 20,
+                                                left: 20,
+                                                right: 20,
+                                              ),
+                                              child: SingleChildScrollView(
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Center(
+                                                      child: Text(
+                                                        "Add Your Price, Location, Colors & Sizes for:",
+                                                        style: TextStyle(
+                                                          fontSize: 18,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Theme.of(
+                                                            context,
+                                                          ).primaryColor,
+                                                        ),
+                                                        textAlign:
+                                                            TextAlign.center,
                                                       ),
-                                                      textAlign: TextAlign.center,
                                                     ),
-                                                  ),
-                                                ),
-                                                TextField(
-                                                  controller: priceController,
-                                                  keyboardType: TextInputType.number,
-                                                  decoration: const InputDecoration(
-                                                    labelText: "Price (R)",
-                                                    hintText: "e.g., 150.00",
-                                                    border: OutlineInputBorder(),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 10),
-                                                TextField(
-                                                  controller: locationController,
-                                                  decoration: const InputDecoration(
-                                                    labelText: "Location (e.g., Shop A12, Market St)",
-                                                    hintText: "e.g., My Store Front, City",
-                                                    border: OutlineInputBorder(),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 20),
-                                                const Divider(),
-                                                Text(
-                                                  "Select Colors:",
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                    color: Colors.grey[700],
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Wrap(
-                                                  spacing: 8.0,
-                                                  runSpacing: 8.0,
-                                                  children: _availableColors.map((color) {
-                                                    final isSelected = _selectedColors.contains(color);
-                                                    return FilterChip(
-                                                      label: Text(color),
-                                                      selected: isSelected,
-                                                      onSelected: (selected) {
+                                                    Center(
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              bottom: 16.0,
+                                                            ),
+                                                        child: Text(
+                                                          adminProductName,
+                                                          style: TextStyle(
+                                                            fontSize: 20,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: Theme.of(
+                                                              context,
+                                                            ).primaryColor,
+                                                          ),
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    TextField(
+                                                      controller:
+                                                          priceController,
+                                                      keyboardType:
+                                                          TextInputType.number,
+                                                      decoration:
+                                                          const InputDecoration(
+                                                            labelText:
+                                                                "Price (R)",
+                                                            hintText:
+                                                                "e.g., 150.00",
+                                                            border:
+                                                                OutlineInputBorder(),
+                                                          ),
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                    TextField(
+                                                      controller:
+                                                          locationController,
+                                                      decoration: const InputDecoration(
+                                                        labelText:
+                                                            "Location (e.g., Shop A12, Market St)",
+                                                        hintText:
+                                                            "e.g., My Store Front, City",
+                                                        border:
+                                                            OutlineInputBorder(),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 20),
+                                                    const Divider(),
+                                                    Text(
+                                                      "Select Colors:",
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.grey[700],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Wrap(
+                                                      spacing: 8.0,
+                                                      runSpacing: 8.0,
+                                                      children: _availableColors.map((
+                                                        color,
+                                                      ) {
+                                                        final isSelected =
+                                                            _selectedColors
+                                                                .contains(
+                                                                  color,
+                                                                );
+                                                        return FilterChip(
+                                                          label: Text(color),
+                                                          selected: isSelected,
+                                                          onSelected: (selected) {
+                                                            setModalState(() {
+                                                              if (selected) {
+                                                                _selectedColors
+                                                                    .add(color);
+                                                              } else {
+                                                                _selectedColors
+                                                                    .remove(
+                                                                      color,
+                                                                    );
+                                                              }
+                                                            });
+                                                          },
+                                                          backgroundColor:
+                                                              isSelected
+                                                              ? Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .primaryColor
+                                                                    .withOpacity(
+                                                                      0.2,
+                                                                    )
+                                                              : Colors
+                                                                    .grey
+                                                                    .shade100,
+                                                          selectedColor:
+                                                              Theme.of(
+                                                                context,
+                                                              ).primaryColor,
+                                                          labelStyle: TextStyle(
+                                                            color: isSelected
+                                                                ? Colors.white
+                                                                : Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .textTheme
+                                                                      .bodyMedium!
+                                                                      .color,
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                    ),
+                                                    const SizedBox(height: 20),
+                                                    const Divider(),
+                                                    Text(
+                                                      "Select Size Type:",
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.grey[700],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    DropdownButtonFormField<
+                                                      String
+                                                    >(
+                                                      value: _selectedSizeType,
+                                                      hint: const Text(
+                                                        'Choose a size type',
+                                                      ),
+                                                      decoration: const InputDecoration(
+                                                        border:
+                                                            OutlineInputBorder(),
+                                                        contentPadding:
+                                                            EdgeInsets.symmetric(
+                                                              horizontal: 10,
+                                                            ),
+                                                      ),
+                                                      items: _availableSizeTypes
+                                                          .map((type) {
+                                                            return DropdownMenuItem<
+                                                              String
+                                                            >(
+                                                              value: type,
+                                                              child: Text(type),
+                                                            );
+                                                          })
+                                                          .toList(),
+                                                      onChanged: (value) {
                                                         setModalState(() {
-                                                          if (selected) {
-                                                            _selectedColors.add(color);
-                                                          } else {
-                                                            _selectedColors.remove(color);
-                                                          }
+                                                          _selectedSizeType =
+                                                              value;
+                                                          _selectedStandardSizes
+                                                              .clear();
+                                                          _selectedNumericSizes
+                                                              .clear();
+                                                          _selectedSuitSizes
+                                                              .clear();
                                                         });
                                                       },
-                                                      backgroundColor: isSelected ? Theme.of(context).primaryColor.withOpacity(0.2) : Colors.grey.shade100,
-                                                      selectedColor: Theme.of(context).primaryColor,
-                                                      labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
-                                                       
-                                                    );
-                                                  }).toList(),
-                                                ),
-                                                const SizedBox(height: 20),
-                                                const Divider(),
-                                                Text(
-                                                  "Select Size Type:",
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                    color: Colors.grey[700],
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 8),
-                                                DropdownButtonFormField<String>(
-                                                  value: _selectedSizeType,
-                                                  hint: const Text('Choose a size type'),
-                                                  decoration: const InputDecoration(
-                                                    border: OutlineInputBorder(),
-                                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                                  ),
-                                                  items: _availableSizeTypes.map((type) {
-                                                    return DropdownMenuItem<String>(
-                                                      value: type,
-                                                      child: Text(type),
-                                                    );
-                                                  }).toList(),
-                                                  onChanged: (value) {
-                                                    setModalState(() {
-                                                      _selectedSizeType = value;
-                                                      _selectedStandardSizes.clear();
-                                                      _selectedNumericSizes.clear();
-                                                      _selectedSuitSizes.clear();
-                                                    });
-                                                  },
-                                                ),
-                                                const SizedBox(height: 20),
-                                                if (_selectedSizeType != null) ...[
-                                                  Text(
-                                                    "Select Size:",
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: Colors.grey[700],
                                                     ),
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  if (_selectedSizeType == 'Standard/Missy Sizes')
-                                                    _buildStandardSizeSelector(setModalState)
-                                                  else if (_selectedSizeType == 'Numeric Sizes (US/UK)')
-                                                    _buildNumericSizeSelector(setModalState)
-                                                  else if (_selectedSizeType == 'Suit Sizes')
-                                                    _buildSuitSizeSelector(setModalState),
-                                                  const SizedBox(height: 20),
-                                                ],
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.end,
-                                                  children: [
-                                                    TextButton(
-                                                      onPressed: () {
-                                                        Navigator.pop(context);
-                                                      },
-                                                      child: const Text("Cancel"),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    ElevatedButton(
-                                                      onPressed: () async {
-                                                        List<String> sizesToSave = [];
-                                                        if (_selectedSizeType == 'Standard/Missy Sizes') {
-                                                          sizesToSave = _selectedStandardSizes;
-                                                        } else if (_selectedSizeType == 'Numeric Sizes (US/UK)') {
-                                                          sizesToSave = _selectedNumericSizes;
-                                                        } else if (_selectedSizeType == 'Suit Sizes') {
-                                                          sizesToSave = _selectedSuitSizes;
-                                                        }
-
-                                                        if (priceController.text.isEmpty ||
-                                                            locationController.text.isEmpty ||
-                                                            _selectedColors.isEmpty ||
-                                                            sizesToSave.isEmpty) {
-                                                          if (mounted) {
-                                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                              const SnackBar(
-                                                                content: Text(
-                                                                  'Please fill in all fields: price, location, colors, and at least one size.',
-                                                                ),
-                                                              ),
+                                                    const SizedBox(height: 20),
+                                                    if (_selectedSizeType !=
+                                                        null) ...[
+                                                      Text(
+                                                        "Select Size:",
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 16,
+                                                          color:
+                                                              Colors.grey[700],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      if (_selectedSizeType ==
+                                                          'Standard/Missy Sizes')
+                                                        _buildStandardSizeSelector(
+                                                          setModalState,
+                                                        )
+                                                      else if (_selectedSizeType ==
+                                                          'Numeric Sizes (US/UK)')
+                                                        _buildNumericSizeSelector(
+                                                          setModalState,
+                                                        )
+                                                      else if (_selectedSizeType ==
+                                                          'Suit Sizes')
+                                                        _buildSuitSizeSelector(
+                                                          setModalState,
+                                                        ),
+                                                      const SizedBox(
+                                                        height: 20,
+                                                      ),
+                                                    ],
+                                                    Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment.end,
+                                                      children: [
+                                                        TextButton(
+                                                          onPressed: () {
+                                                            Navigator.pop(
+                                                              context,
                                                             );
-                                                          }
-                                                          return;
-                                                        }
+                                                          },
+                                                          child: const Text(
+                                                            "Cancel",
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        ElevatedButton(
+                                                          onPressed: () async {
+                                                            List<String>
+                                                            sizesToSave = [];
+                                                            if (_selectedSizeType ==
+                                                                'Standard/Missy Sizes') {
+                                                              sizesToSave =
+                                                                  _selectedStandardSizes;
+                                                            } else if (_selectedSizeType ==
+                                                                'Numeric Sizes (US/UK)') {
+                                                              sizesToSave =
+                                                                  _selectedNumericSizes;
+                                                            } else if (_selectedSizeType ==
+                                                                'Suit Sizes') {
+                                                              sizesToSave =
+                                                                  _selectedSuitSizes;
+                                                            }
 
-                                                        try {
-                                                          Api().showLoading(context);
-                                                          await addSellerProduct(
-                                                            prod.id,
-                                                            adminProductName,
-                                                            adminProductDescription,
-                                                            adminProductImageUrl,
-                                                            _selectedColors,
-                                                            sizesToSave,
-                                                          );
-                                                          if (mounted) {
-                                                            Navigator.pop(context); // Dismiss loading
-                                                            Navigator.pop(context); // Dismiss modal
-                                                          }
-                                                        } catch (e) {
-                                                          if (mounted) {
-                                                            Navigator.pop(context);
-                                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                              SnackBar(
-                                                                content: Text('Error adding product: $e'),
-                                                              ),
-                                                            );
-                                                          }
-                                                        }
-                                                      },
-                                                      child: const Text("Submit"),
+                                                            if (priceController
+                                                                    .text
+                                                                    .isEmpty ||
+                                                                locationController
+                                                                    .text
+                                                                    .isEmpty ||
+                                                                _selectedColors
+                                                                    .isEmpty ||
+                                                                sizesToSave
+                                                                    .isEmpty) {
+                                                              if (mounted) {
+                                                                ScaffoldMessenger.of(
+                                                                  context,
+                                                                ).showSnackBar(
+                                                                  const SnackBar(
+                                                                    content: Text(
+                                                                      'Please fill in all fields: price, location, colors, and at least one size.',
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              }
+                                                              return;
+                                                            }
+
+                                                            try {
+                                                              Api().showLoading(
+                                                                context,
+                                                              );
+                                                              if (!isVerified) {
+                                                                Api().showMessage(
+                                                                  context,
+                                                                  "You account is not yet verified as a seller",
+                                                                  "Warning",
+                                                                  Colors.red,
+                                                                );
+                                                                Navigator.of(
+                                                                  context,
+                                                                ).pop(); // Pop loading
+                                                                return;
+                                                              }
+                                                              await addSellerProduct(
+                                                                prod.id,
+                                                                adminProductName,
+                                                                adminProductDescription,
+                                                                adminProductImageUrl,
+                                                                _selectedColors,
+                                                                sizesToSave,
+                                                              );
+                                                              if (mounted) {
+                                                                Navigator.pop(
+                                                                  context,
+                                                                ); // Dismiss loading
+                                                                Navigator.pop(
+                                                                  context,
+                                                                ); // Dismiss modal
+                                                              }
+                                                            } catch (e) {
+                                                              if (mounted) {
+                                                                Navigator.pop(
+                                                                  context,
+                                                                );
+                                                                ScaffoldMessenger.of(
+                                                                  context,
+                                                                ).showSnackBar(
+                                                                  SnackBar(
+                                                                    content: Text(
+                                                                      'Error adding product: $e',
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              }
+                                                            }
+                                                          },
+                                                          child: const Text(
+                                                            "Submit",
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
+                                                    const SizedBox(height: 10),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 10),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                              ),
+                                            );
+                                          },
                                     ),
                                   ),
                                 );
@@ -979,6 +1272,32 @@ class _SellerProductPageState extends State<SellerProductPage>
   }
   // --- END ADD PRODUCT TAB ---
 
+  // --- ⭐️ ADD THIS NEW WIDGET ⭐️ ---
+  Widget _buildNotVerifiedWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.gpp_bad_outlined, size: 80, color: Colors.red[700]),
+            SizedBox(height: 20),
+            Text(
+              "Account Not Verified",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10),
+            Text(
+              "Your account has not been verified by an admin yet. You cannot add products until your account is approved.",
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // --- ORDERS TAB (Maintains List layout) ---
   Widget ordersTab() {
@@ -1023,11 +1342,16 @@ class _SellerProductPageState extends State<SellerProductPage>
                 final orderDoc = relevantOrders[index];
                 final orderData = orderDoc.data() as Map<String, dynamic>;
                 final orderId = orderDoc.id;
-                final customerId = orderData['userId'] as String;
 
-                final orderRef = orderData['orderReference'] ?? orderId.substring(0, 8).toUpperCase();
+                // ⭐️ FIX: Changed from 'userId' to 'buyerId' to match your order creation logic
+                final customerId = orderData['buyerId'] as String;
+
+                final orderRef =
+                    orderData['orderReference'] ??
+                    orderId.substring(0, 8).toUpperCase();
                 final currentStatus = orderData['status'] ?? 'pending';
-                final orderDate = (orderData['createdAt'] as Timestamp?)?.toDate();
+                final orderDate = (orderData['createdAt'] as Timestamp?)
+                    ?.toDate();
 
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance
@@ -1036,20 +1360,34 @@ class _SellerProductPageState extends State<SellerProductPage>
                       .get(),
                   builder: (context, customerSnapshot) {
                     String customerName = 'Unknown Customer';
-                    if (customerSnapshot.connectionState == ConnectionState.done && customerSnapshot.hasData) {
-                      final customerData = customerSnapshot.data!.data() as Map<String, dynamic>?;
-                      if (customerData != null && customerData.containsKey('name')) {
-                        customerName = customerData['name'] ?? 'Unknown Customer';
+                    if (customerSnapshot.connectionState ==
+                            ConnectionState.done &&
+                        customerSnapshot.hasData) {
+                      final customerData =
+                          customerSnapshot.data!.data()
+                              as Map<String, dynamic>?;
+                      if (customerData != null &&
+                          customerData.containsKey('name')) {
+                        customerName =
+                            customerData['name'] ?? 'Unknown Customer';
                       }
                     }
 
                     return Card(
                       color: Theme.of(context).cardColor,
                       elevation: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 0,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: ExpansionTile(
-                        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         title: _buildOrderSummary(
                           orderRef: orderRef,
                           customerName: customerName,
@@ -1080,7 +1418,6 @@ class _SellerProductPageState extends State<SellerProductPage>
   }
   // --- END ORDERS TAB ---
 
-
   // --- SHARED BUILDERS (No functional changes) ---
 
   Widget _buildStandardSizeSelector(StateSetter setModalState) {
@@ -1102,8 +1439,11 @@ class _SellerProductPageState extends State<SellerProductPage>
             });
           },
           selectedColor: Theme.of(context).primaryColor,
-          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
-           
+          labelStyle: TextStyle(
+            color: isSelected
+                ? Colors.white
+                : Theme.of(context).textTheme.bodyMedium!.color,
+          ),
         );
       }).toList(),
     );
@@ -1132,8 +1472,11 @@ class _SellerProductPageState extends State<SellerProductPage>
             });
           },
           selectedColor: Theme.of(context).primaryColor,
-          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
-           
+          labelStyle: TextStyle(
+            color: isSelected
+                ? Colors.white
+                : Theme.of(context).textTheme.bodyMedium!.color,
+          ),
         );
       }).toList(),
     );
@@ -1158,8 +1501,11 @@ class _SellerProductPageState extends State<SellerProductPage>
             });
           },
           selectedColor: Theme.of(context).primaryColor,
-          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium!.color),
-           
+          labelStyle: TextStyle(
+            color: isSelected
+                ? Colors.white
+                : Theme.of(context).textTheme.bodyMedium!.color,
+          ),
         );
       }).toList(),
     );
@@ -1168,7 +1514,7 @@ class _SellerProductPageState extends State<SellerProductPage>
   // (Helper functions _getStatusColor, _getStatusIcon, _filterOrders,
   // _buildOrderSummary, _buildOrderDetails, _showStatusUpdateDialog)
   // ... (are kept as is from the original code)
-  
+
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'pending_payment':
@@ -1438,7 +1784,7 @@ class _SellerProductPageState extends State<SellerProductPage>
               title: const Text("Update Order Status"),
               // Constrain width of alert dialog for desktop
               content: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 400), 
+                constraints: BoxConstraints(maxWidth: 400),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1464,7 +1810,8 @@ class _SellerProductPageState extends State<SellerProductPage>
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    if (tempSelectedStatus != null && tempSelectedStatus != currentStatus) {
+                    if (tempSelectedStatus != null &&
+                        tempSelectedStatus != currentStatus) {
                       await updateOrderStatus(orderId, tempSelectedStatus!);
                       if (context.mounted) Navigator.pop(context);
                     } else {
@@ -1492,7 +1839,7 @@ class _SellerProductPageState extends State<SellerProductPage>
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
-    
+
     // Check if the screen is large enough for desktop layout
     final isDesktop = isLargeScreen(context);
 
@@ -1509,7 +1856,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                 labelColor: color.primaryColor,
                 unselectedLabelColor: color.hintColor,
                 indicatorColor: color.primaryColor,
-                isScrollable: isDesktop ? false : true, // Full width tabs on desktop
+                isScrollable: isDesktop
+                    ? false
+                    : true, // Full width tabs on desktop
                 tabs: const [
                   Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
                   Tab(text: "My Products", icon: Icon(Icons.inventory)),
@@ -1522,7 +1871,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                   controller: _tabController,
                   children: [
                     // Pass isDesktop to Dashboard for responsive grid layout
-                    dashboardTab(), 
+                    dashboardTab(),
                     myProductsTab(),
                     addProductTab(),
                     ordersTab(),

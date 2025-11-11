@@ -8,12 +8,15 @@ class UpcomingEventsCard extends StatelessWidget {
   final String eventTitle;
   final String eventDescription;
   final Color? highlightColor;
+  final String? posterUrl;
+
   const UpcomingEventsCard({
     super.key,
     required this.date,
     required this.eventTitle,
     required this.eventDescription,
     required this.eventMonth,
+    this.posterUrl,
     this.highlightColor,
   });
 
@@ -69,7 +72,8 @@ class UpcomingEventsCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                SizedBox(width: 10),
+                SizedBox(width: 5),
+
                 Expanded(
                   child: Card(
                     elevation: 10,
@@ -117,6 +121,31 @@ class UpcomingEventsCard extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                if (posterUrl != null)
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: color.primaryColor, width: 2),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Image.network(
+                        posterUrl!,
+                        width: 68,
+                        height: 68,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 70,
+                            height: 70,
+                            color: Colors.grey[300],
+                            child: Icon(Icons.error, color: Colors.grey),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
               ],
             ),
             // Draw diagonal line if highlightColor is provided

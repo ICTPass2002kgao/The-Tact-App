@@ -34,22 +34,17 @@ class EventDetailBottomSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 60,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: color.hintColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-            if (posterUrl != null)
-              Image.asset(
-                posterUrl!,
-                width: double.infinity,
+            if (  posterUrl != null)
+              Image.network(
+                  posterUrl!,
+                width: double.infinity, 
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container( 
+                    color: Colors.grey[300],
+                    child: Icon(Icons.error, color: Colors.grey),
+                  );
+                },
               ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -69,7 +64,7 @@ class EventDetailBottomSheet extends StatelessWidget {
                 IconButton(
                   onPressed: () {
                     SharePlus.instance.share(
-                      ShareParams(text: 'https://www.facebook.com'),
+                      ShareParams(text: posterUrl ?? title),
                     );
                   },
                   icon: Icon(Icons.share, color: color.scaffoldBackgroundColor),
@@ -104,14 +99,14 @@ class EventDetailBottomSheet extends StatelessWidget {
             SizedBox(height: 20),
             CustomOutlinedButton(
               onPressed: () async {
-                final url = Uri.parse('https://www.facebook.com');
+                final url = Uri.parse('');
                 // Replace with your live stream URL
                 if (await canLaunchUrl(url)) {
                   await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                 } else {
                   Api().showMessage(
                     context,
-                    'Cannot join live',
+                    'Not live yet Counting down',
                     "Error",
                     color.primaryColorDark,
                   );

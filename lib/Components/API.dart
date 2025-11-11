@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'dart:io';
+import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 
@@ -21,18 +22,90 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:toastification/toastification.dart';
-import 'package:ttact/Components/AdBanner.dart'; 
+import 'package:ttact/Components/AdBanner.dart';
 
 import 'package:ttact/Components/song.dart';
- 
+
 import 'CustomOutlinedButton.dart';
 
 class Api {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-String YOUR_BACKEND_BASE_URL =
-    'https://us-central1-tact-3c612.cloudfunctions.net/api';
+  String YOUR_BACKEND_BASE_URL =
+      'https://us-central1-tact-3c612.cloudfunctions.net/api';
+
+  final String EMAIL_CF_URL =
+      'https://us-central1-tact-3c612.cloudfunctions.net/api/sendCustomEmail';
+
+  // --- NEW METHOD 1: Code Generation ---
+  String generateVerificationCode() {
+    // Generates a random 6-digit number as a String
+    final random = Random();
+    // Generates a number between 100000 and 999999
+    return (random.nextInt(900000) + 100000).toString();
+  }
+
+  // --- NEW METHOD 2: Email Sending ---
+  // In your Api.dart file:
+
+  // --- THIS IS THE FIX ---
+  // The correct endpoint is /api/sendCustomEmail
+
+  // --- NEW METHOD 2: Email Sending ---
+  Future<bool> sendEmail(
+    String email,
+    String subject,
+    String message,
+    BuildContext context,
+  ) async {
+    try {
+      final url = Uri.parse(EMAIL_CF_URL); // This now uses the correct URL
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"to": email, "subject": subject, "body": message}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return true;
+        } else {
+          String errorMessage = data['error'] ?? 'Unknown function error';
+          showMessage(
+            context,
+            'Email Error',
+            'Failed to send verification email: $errorMessage',
+            Theme.of(context).primaryColorDark,
+          );
+          print('CF Error: $errorMessage');
+          return false;
+        }
+      } else {
+        // This is the error you are seeing
+        showMessage(
+          context,
+          'Network Error',
+          'Could not reach the verification service. Status: ${response.statusCode}',
+          Theme.of(context).primaryColorDark,
+        );
+        print('HTTP Error: ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      showMessage(
+        context,
+        'Connection Error',
+        'Failed to connect to the server: $e',
+        Theme.of(context).primaryColorDark,
+      );
+      print('Exception: $e');
+      return false;
+    }
+  }
+
   Future<String?> createSellerSubaccount({
     required String uid,
     required String businessName,
@@ -74,16 +147,17 @@ String YOUR_BACKEND_BASE_URL =
     String txtContactNumber,
 
     String selectedMemberUid,
-    String role,  
-String selectedProvince,
-    String selectedDistrictElder, 
-    String selectedCommunityName, 
+    String role,
+    String selectedProvince,
+    String selectedDistrictElder,
+    String selectedCommunityName,
 
-    BuildContext context, {required String bankCode,required String accountNumber}
-  ) async {
+    BuildContext context, {
+    required String bankCode,
+    required String accountNumber,
+  }) async {
     try {
       final color = Theme.of(context);
-
 
       UserCredential credentials = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -96,55 +170,103 @@ String selectedProvince,
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
           "name": name,
-          "surname": surname, 
-          "email": email, 
-          "profileUrl": "", 
-          "address": txtAddress, 
+          "surname": surname,
+          "email": email,
+          "profileUrl": "",
+          "address": txtAddress,
           "phone": txtContactNumber,
           "overseerUid": selectedMemberUid,
           'week1': 0.00,
           'week2': 0.00,
           'week3': 0.00,
-          'week4': 0.00, 
+          'week4': 0.00,
           "role": role,
 
-                            if (role == 'Seller')
-                            'sellerPaystackAccount':'',
+          if (role == 'Seller') 'sellerPaystackAccount': '',
+          if (role == 'Seller') 'accountVerified': false,
           "province": selectedProvince,
-          "districtElderName": selectedDistrictElder, 
+          "districtElderName": selectedDistrictElder,
           "communityName": selectedCommunityName,
-                            "uid": FirebaseAuth
-                                .instance
-                                .currentUser!
-                                .uid, // Ensure uid is stored
+          "uid": FirebaseAuth.instance.currentUser!.uid, // Ensure uid is stored
         });
       }
-if (role == 'Seller') {
-                        String? subaccountCode = await createSellerSubaccount(
-                          uid: FirebaseAuth.instance.currentUser!.uid,
-                          businessName: '${name} ${surname}\' s Shopping',
-                          email: email,
-                          accountNumber: accountNumber,
-                          bankCode:bankCode, // get this from user input
-                        );
+      if (role == 'Seller') {
+        String? subaccountCode = await createSellerSubaccount(
+          uid: FirebaseAuth.instance.currentUser!.uid,
+          businessName: '${name} ${surname}\' s Shopping',
+          email: email,
+          accountNumber: accountNumber,
+          bankCode: bankCode, // get this from user input
+        );
 
-                        if (subaccountCode != null) {
-                          print('Subaccount created: $subaccountCode');
-                          
-                        } else {
-                          // Handle failure
-                          print('Failed to create Paystack subaccount');
-                        }
-                      }
+        if (subaccountCode != null) {
+          sendEmail(email, "Seller Account Created – Pending Verification", """
+  <p>Dear ${name} ${surname},</p>
+
+  <p>Welcome to <strong>Dankie Mobile (TACT)</strong>! Your seller account has been created successfully.</p>
+
+  <p>Our team will now review and verify your account details to ensure everything is in order. 
+  This process usually takes a short while, and you’ll receive an email notification once your account has been approved.</p>
+
+  <p>After verification, you’ll be able to start adding your products and managing your sales on the platform.</p>
+
+  <p>If you did not register as a seller or believe this was a mistake, please contact our support team immediately.</p>
+
+  <br>
+  <p>Best regards,<br>
+  The Dankie Mobile Support Team</p>
+  """, context);
+
+          sendEmail(
+            "kgaogelodeveloper@gmail.com",
+            "New Seller Registration – Verification Required",
+            """
+  <p>Hello Admin,</p>
+
+  <p>A new seller has registered on <strong>Dankie Mobile (TACT)</strong>:</p>
+
+  <ul>
+    <li>Name: ${name} ${surname}</li>
+    <li>Email: ${email}</li>
+    <li>Registered At: ${DateTime.now().toLocal()}</li>
+  </ul>
+
+  <p>Please review and verify this seller account as soon as possible so they can start selling on the platform.</p>
+
+  <br>
+  <p>Best regards,<br>
+  Dankie Mobile System Notification</p>
+  """,
+            context,
+          );
+          print('Subaccount created: $subaccountCode');
+        } else {
+          // Handle failure
+          print('Failed to create Paystack subaccount');
+        }
+      }
       await user?.sendEmailVerification();
 
       Navigator.pop(context);
+      if (role == 'Member ') {
+        sendEmail(email, "Account Created Successfully", """
+  <p>Dear ${name} $surname,</p>
 
-                      AdManager().showRewardedInterstitialAd((ad, reward) {
-                        print(
-                          'User earned reward: ${reward.amount} ${reward.type}',
-                        );
-                      });
+  <p>Welcome to <strong>Dankie Mobile(TACT)</strong>! Your account has been created successfully.</p>
+
+  <p>You can now log in and start exploring all available features tailored for you.</p>
+
+  <p>If you did not request this account, please contact our support team immediately.</p>
+
+  <br>
+  <p>Best regards,<br>
+  Dankie Support Team</p>
+  """, context);
+      }
+
+      AdManager().showRewardedInterstitialAd((ad, reward) {
+        print('User earned reward: ${reward.amount} ${reward.type}');
+      });
       showMessage(
         context,
 
@@ -187,9 +309,14 @@ if (role == 'Seller') {
 
       autoCloseDuration: const Duration(seconds: 5),
 
-      title: Text(title, style: TextStyle(color: _color)),
+      title: Text(title, style: TextStyle(color: Colors.white)),
 
-      description: RichText(text: TextSpan(text: message)),
+      description: RichText(
+        text: TextSpan(
+          text: message,
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
 
       alignment: Alignment.bottomCenter,
 
@@ -228,7 +355,7 @@ if (role == 'Seller') {
       closeOnClick: true,
     );
   }
- 
+
   void showLogoutMessage(
     BuildContext context,
 
@@ -327,51 +454,6 @@ if (role == 'Seller') {
   // print('Error sending email: $e');
 
   // }}
-
-  Future<void> sendEmail(
-    BuildContext context,
-
-    String email,
-
-    String _message,
-
-    String subject,
-
-    String body,
-  ) async {
-    String username = "weath3rextreme@gmail.com";
-
-    String password = "mhoi nfdw pdhq eqip";
-
-    final smtpServer = SmtpServer(
-      'smtp.gmail.com',
-
-      port: 465,
-
-      username: username,
-
-      password: password,
-
-      ssl: true,
-    );
-
-    final message = Message()
-      ..from = Address(username, 'Weather Alert Extreme')
-      ..recipients.add(email)
-      ..subject = subject
-      ..html = _message
-      ..text = body;
-
-    try {
-      showLoading(context);
-
-      final report = await send(message, smtpServer);
-
-      print("Email send successfully ${report.toString()}");
-    } catch (e) {
-      print(e.toString());
-    }
-  }
 
   //Music API
 }
@@ -555,7 +637,8 @@ class LocalStorageService {
         final file = File(filePath);
 
         await file.writeAsBytes(response.bodyBytes);
- 
+
+        // Create a new Song object with the local file path
 
         final updatedSong = Song(
           id: songToDownload.id,
@@ -568,7 +651,7 @@ class LocalStorageService {
 
           createdAt: songToDownload.createdAt,
 
-          localFilePath: filePath,  
+          localFilePath: filePath,
         );
 
         debugPrint('Song downloaded to: $filePath');
