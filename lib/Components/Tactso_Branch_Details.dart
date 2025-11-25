@@ -1,9 +1,19 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/CustomOutlinedButton.dart';
+// Assuming CustomOutlinedButton is defined elsewhere,
+// but we will use a local builder to ensure platform styling.
+// import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/Ask_For_Assistance.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+// --- PLATFORM UTILITIES ---
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
 
 class TactsoBranchDetails extends StatelessWidget {
   final Map<String, dynamic> universityDetails;
@@ -15,11 +25,84 @@ class TactsoBranchDetails extends StatelessWidget {
     required this.campusListForUniversity,
   }) : super(key: key);
 
+  // --- HELPER: Build Platform Specific Button ---
+  Widget _buildPlatformButton({
+    required BuildContext context,
+    required VoidCallback onPressed,
+    required String text,
+    required Color backgroundColor,
+    required Color foregroundColor,
+    bool isOutlined = false,
+  }) {
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton(
+          // iOS buttons usually don't have outlines, they are filled or text.
+          // We simulate the look using color.
+          color: isOutlined ? Theme.of(context).cardColor : backgroundColor,
+          disabledColor: CupertinoColors.quaternarySystemFill,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          borderRadius: BorderRadius.circular(12),
+          onPressed: onPressed,
+
+          child: Text(
+            text,
+            style: TextStyle(
+              color: foregroundColor,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Android Material Button
+      return SizedBox(
+        width: double.infinity,
+        child: isOutlined
+            ? OutlinedButton(
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: foregroundColor,
+                  side: BorderSide(color: foregroundColor),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  text,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              )
+            : ElevatedButton(
+                onPressed: onPressed,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: backgroundColor,
+                  foregroundColor: foregroundColor,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  text,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context);
+    final theme = Theme.of(context);
 
-    // Helper to check if the university has multiple campuses based on the stored data
+    // Handle Colors based on Platform preference
+    final primaryColor = theme.primaryColor;
+    final scaffoldColor = theme.scaffoldBackgroundColor;
+
+    // Helper to check if the university has multiple campuses
     final bool hasMultipleCampuses =
         universityDetails['hasMultipleCampuses'] ?? false;
 
@@ -27,25 +110,27 @@ class TactsoBranchDetails extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: color.primaryColor,
+          color: primaryColor,
+          // iOS usually prefers rounded rectangles or full sheets
           borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Drag Handle
             Center(
               child: Container(
                 width: 60,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: color.hintColor,
+                  color: theme.hintColor.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Image display
+            // --- IMAGE SECTION ---
             if (universityDetails['imageUrl'] == null ||
                 (universityDetails['imageUrl'] as List).isEmpty ||
                 (universityDetails['imageUrl'][0] as String).isEmpty)
@@ -54,11 +139,13 @@ class TactsoBranchDetails extends StatelessWidget {
                 child: Center(
                   child: CircleAvatar(
                     radius: 100,
-                    backgroundColor: color.hintColor,
+                    backgroundColor: theme.hintColor,
                     child: Icon(
-                      Icons.location_city,
+                      isIOSPlatform
+                          ? CupertinoIcons.building_2_fill
+                          : Icons.location_city,
                       size: 100,
-                      color: color.scaffoldBackgroundColor,
+                      color: scaffoldColor,
                     ),
                   ),
                 ),
@@ -69,7 +156,6 @@ class TactsoBranchDetails extends StatelessWidget {
                   borderRadius: BorderRadius.circular(15),
                   child: Image.network(
                     universityDetails['imageUrl'][0],
-                    height: 200,
                     width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
@@ -78,11 +164,11 @@ class TactsoBranchDetails extends StatelessWidget {
                         child: Center(
                           child: CircleAvatar(
                             radius: 100,
-                            backgroundColor: color.hintColor,
+                            backgroundColor: theme.hintColor,
                             child: Icon(
                               Icons.broken_image,
                               size: 100,
-                              color: color.scaffoldBackgroundColor,
+                              color: scaffoldColor,
                             ),
                           ),
                         ),
@@ -93,6 +179,7 @@ class TactsoBranchDetails extends StatelessWidget {
               ),
             const SizedBox(height: 15),
 
+            // --- TITLE & SHARE ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -104,27 +191,41 @@ class TactsoBranchDetails extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: color.scaffoldBackgroundColor,
+                      color: scaffoldColor,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    Share.share(
-                      "Check out ${universityDetails['universityName'] ?? 'this university'}'s application page: ${universityDetails['applicationLink'] ?? ''}",
-                    );
-                  },
-                  icon: Icon(Icons.share, color: color.scaffoldBackgroundColor),
-                ),
+                isIOSPlatform
+                    ? CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          Share.share(
+                            "Check out ${universityDetails['universityName'] ?? 'this university'}'s application page: ${universityDetails['applicationLink'] ?? ''}",
+                          );
+                        },
+                        child: Icon(CupertinoIcons.share, color: scaffoldColor),
+                      )
+                    : IconButton(
+                        onPressed: () {
+                          Share.share(
+                            "Check out ${universityDetails['universityName'] ?? 'this university'}'s application page: ${universityDetails['applicationLink'] ?? ''}",
+                          );
+                        },
+                        icon: Icon(Icons.share, color: scaffoldColor),
+                      ),
               ],
             ),
             const SizedBox(height: 10),
 
+            // --- ADDRESS & MAPS ---
             Row(
               children: [
                 Icon(
-                  Icons.location_on_outlined,
-                  color: color.scaffoldBackgroundColor,
+                  isIOSPlatform
+                      ? CupertinoIcons.location_solid
+                      : Icons.location_on_outlined,
+                  color: scaffoldColor,
                 ),
                 const SizedBox(width: 8),
                 Flexible(
@@ -132,39 +233,46 @@ class TactsoBranchDetails extends StatelessWidget {
                     onTap: () async {
                       final address = universityDetails['address'] ?? '';
                       if (address.isNotEmpty) {
-                        final encodedAddress = Uri.encodeComponent(address);
-                        // Corrected Google Maps URL for launching
-                        final googleMapsUrl = Uri.parse(
-                          'https://www.google.com/maps/search/?api=1&query=$encodedAddress',
-                        );
-                        if (await canLaunchUrl(googleMapsUrl)) {
+                        // Platform specific map URLs
+                        Uri mapUrl;
+                        if (isIOSPlatform) {
+                          mapUrl = Uri.parse(
+                            'https://maps.apple.com/?q=${Uri.encodeComponent(address)}',
+                          );
+                        } else {
+                          mapUrl = Uri.parse(
+                            'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}',
+                          );
+                        }
+
+                        if (await canLaunchUrl(mapUrl)) {
                           await launchUrl(
-                            googleMapsUrl,
+                            mapUrl,
                             mode: LaunchMode.externalApplication,
                           );
                         } else {
                           Api().showMessage(
                             context,
-                            'Cannot launch address on Google Maps',
+                            'Cannot launch Maps',
                             "Error",
-                            color.primaryColorDark,
+                            theme.primaryColorDark,
                           );
                         }
                       } else {
                         Api().showMessage(
                           context,
-                          'No address provided for the main university.',
+                          'No address provided.',
                           "Error",
-                          color.primaryColorDark,
+                          theme.primaryColorDark,
                         );
                       }
                     },
                     child: Text(
                       universityDetails['address'] ?? 'Address not available',
                       style: TextStyle(
-                        decorationColor: color.scaffoldBackgroundColor,
+                        decorationColor: scaffoldColor,
                         decoration: TextDecoration.underline,
-                        color: color.scaffoldBackgroundColor,
+                        color: scaffoldColor,
                         fontSize: 16,
                       ),
                       maxLines: 2,
@@ -176,22 +284,26 @@ class TactsoBranchDetails extends StatelessWidget {
             ),
             const SizedBox(height: 15),
 
+            // --- STATUS ---
             Text(
               (universityDetails['isApplicationOpen'] ?? false)
                   ? 'Applications Open'
                   : 'Applications Closed',
               style: TextStyle(
                 color: (universityDetails['isApplicationOpen'] ?? false)
-                    ? color.splashColor
-                    : color.primaryColorDark,
+                    ? theme.splashColor
+                    : theme.primaryColorDark,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
+                decoration: TextDecoration.none,
               ),
             ),
             const SizedBox(height: 20),
 
+            // --- APPLY BUTTON ---
             (universityDetails['isApplicationOpen'] ?? false)
-                ? CustomOutlinedButton(
+                ? _buildPlatformButton(
+                    context: context,
                     onPressed: () async {
                       final url = Uri.parse(
                         universityDetails['applicationLink'] ?? 'about:blank',
@@ -201,35 +313,35 @@ class TactsoBranchDetails extends StatelessWidget {
                       } else {
                         Api().showMessage(
                           context,
-                          'Cannot open the application link. Please check the URL.',
+                          'Cannot open application link.',
                           "Error",
-                          color.primaryColorDark,
+                          theme.primaryColorDark,
                         );
                       }
                     },
                     text: 'Apply for yourself',
-                    backgroundColor: color.primaryColor,
-                    foregroundColor: color.scaffoldBackgroundColor,
-                    width: double.infinity,
+                    backgroundColor: scaffoldColor, // Inverted for contrast
+                    foregroundColor: primaryColor,
                   )
-                : CustomOutlinedButton(
+                : _buildPlatformButton(
+                    context: context,
                     onPressed: () {
                       Api().showMessage(
                         context,
-                        'Applications are currently closed for this university.',
+                        'Applications are currently closed.',
                         "Information",
-                        color.primaryColorDark,
+                        theme.primaryColorDark,
                       );
                     },
                     text: 'Applications closed',
-                    backgroundColor: color.primaryColorDark,
-                    foregroundColor: color.scaffoldBackgroundColor,
-                    width: double.infinity,
+                    backgroundColor: theme.primaryColorDark,
+                    foregroundColor: scaffoldColor,
                   ),
             const SizedBox(height: 10),
 
-            // **UPDATED: Ask for Help Button Logic**
-            CustomOutlinedButton(
+            // --- ASK FOR HELP BUTTON ---
+            _buildPlatformButton(
+              context: context,
               onPressed: () {
                 // Ensure campusListForUniversity is a List<Map<String, dynamic>>
                 List<Map<String, dynamic>> actualCampusList = [];
@@ -242,31 +354,34 @@ class TactsoBranchDetails extends StatelessWidget {
                 }
 
                 if (hasMultipleCampuses && actualCampusList.isNotEmpty) {
-                  _showCampusSelectionBottomSheet(
-                    context,
-                    color,
-                    actualCampusList,
-                  );
+                  // BRANCHED LOGIC FOR CAMPUS SELECTION
+                  if (isIOSPlatform) {
+                    _showiOSCampusSelection(context, theme, actualCampusList);
+                  } else {
+                    _showAndroidCampusSelection(
+                      context,
+                      theme,
+                      actualCampusList,
+                    );
+                  }
                 } else {
-                  // Navigate directly if no multiple campuses or no campus data
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => UniversityApplicationScreen(
                         universityData: universityDetails,
                         selectedCampus: actualCampusList.isNotEmpty
-                            ? actualCampusList
-                                  .first // Pass the first/only campus if exists
-                            : null, // No specific campus selected
+                            ? actualCampusList.first
+                            : null,
                       ),
                     ),
                   );
                 }
               },
               text: 'Ask for Help!',
-              backgroundColor: color.scaffoldBackgroundColor,
-              foregroundColor: color.primaryColor,
-              width: double.infinity,
+              backgroundColor: Colors.transparent,
+              foregroundColor: scaffoldColor,
+              isOutlined: true,
             ),
             const SizedBox(height: 10),
           ],
@@ -275,22 +390,20 @@ class TactsoBranchDetails extends StatelessWidget {
     );
   }
 
-  // NEW: Method to show campus selection bottom sheet
-  void _showCampusSelectionBottomSheet(
+  // --- ANDROID/MATERIAL BOTTOM SHEET ---
+  void _showAndroidCampusSelection(
     BuildContext context,
-    ThemeData color,
+    ThemeData theme,
     List<Map<String, dynamic>> campuses,
   ) {
-    Navigator.pop(context);
+    Navigator.pop(context); // Close current detail sheet
     showModalBottomSheet(
       context: context,
-      backgroundColor: color.primaryColor, // Match your theme
+      backgroundColor: theme.primaryColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (BuildContext context) {
-        // Corrected: _selectedCampus needs to live here to persist its state
-        // throughout the modal's lifecycle, managed by StatefulBuilder.
         Map<String, dynamic>? _selectedCampus;
 
         return StatefulBuilder(
@@ -299,7 +412,7 @@ class TactsoBranchDetails extends StatelessWidget {
               padding: const EdgeInsets.all(20.0),
               child: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min, // Use min to wrap content
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
@@ -307,39 +420,34 @@ class TactsoBranchDetails extends StatelessWidget {
                         width: 60,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: color.hintColor,
+                          color: theme.hintColor,
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Select a Campus for Assistance',
+                      'Select a Campus',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: color.scaffoldBackgroundColor,
+                        color: theme.scaffoldBackgroundColor,
                       ),
                     ),
                     const SizedBox(height: 15),
-                    // Removed Expanded here to avoid forcing height if content is short
-                    // and using ListView.builder with shrinkWrap.
                     ListView.builder(
-                      scrollDirection: Axis.vertical,
-                      shrinkWrap: true, // Important for ListView in Column
-                      itemCount:
-                          campuses.length, // Use the passed 'campuses' list
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: campuses.length,
                       itemBuilder: (context, index) {
                         final campus = campuses[index];
-
-                        // Only show RadioListTile if campusName is not empty
                         if (campus['campusName'] != null &&
                             campus['campusName'].isNotEmpty) {
                           return RadioListTile<Map<String, dynamic>>(
                             title: Text(
-                              campus['campusName'] ?? 'Unknown Campus',
+                              campus['campusName'],
                               style: TextStyle(
-                                color: color.scaffoldBackgroundColor,
+                                color: theme.scaffoldBackgroundColor,
                               ),
                             ),
                             value: campus,
@@ -349,20 +457,18 @@ class TactsoBranchDetails extends StatelessWidget {
                                 _selectedCampus = value;
                               });
                             },
-                            activeColor:
-                                color.splashColor, // Active radio button color
-                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: theme.splashColor,
                           );
-                        } else {
-                          return const SizedBox.shrink(); // Hide if campus name is empty
                         }
+                        return const SizedBox.shrink();
                       },
                     ),
                     const SizedBox(height: 20),
-                    CustomOutlinedButton(
+                    _buildPlatformButton(
+                      context: context,
                       onPressed: () {
                         if (_selectedCampus != null) {
-                          Navigator.pop(context); // Close the bottom sheet
+                          Navigator.pop(context);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -375,16 +481,15 @@ class TactsoBranchDetails extends StatelessWidget {
                         } else {
                           Api().showMessage(
                             context,
-                            'Please select a campus to proceed.',
+                            'Select a campus first.',
                             "Warning",
-                            color.hintColor,
+                            theme.hintColor,
                           );
                         }
                       },
-                      text: 'Proceed with Selected Campus',
-                      backgroundColor: color.scaffoldBackgroundColor,
-                      foregroundColor: color.primaryColor,
-                      width: double.infinity,
+                      text: 'Proceed',
+                      backgroundColor: theme.scaffoldBackgroundColor,
+                      foregroundColor: theme.primaryColor,
                     ),
                   ],
                 ),
@@ -393,6 +498,50 @@ class TactsoBranchDetails extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  // --- IOS CUPERTINO PICKER / SHEET ---
+  void _showiOSCampusSelection(
+    BuildContext context,
+    ThemeData theme,
+    List<Map<String, dynamic>> campuses,
+  ) {
+    // Using CupertinoActionSheet for selection as it adheres to HIG
+    // better than a modal with radio buttons for short lists.
+    // If list is very long, CupertinoPicker is better, but ActionSheet is safer for overlay contexts.
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: const Text('Select Campus'),
+        message: const Text('Which campus do you need assistance with?'),
+        actions: campuses.map((campus) {
+          return CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context); // Close popup
+              // Navigate
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => UniversityApplicationScreen(
+                    universityData: universityDetails,
+                    selectedCampus: campus,
+                  ),
+                ),
+              );
+            },
+            child: Text(campus['campusName'] ?? 'Unknown Campus'),
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          isDestructiveAction: true,
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: const Text('Cancel'),
+        ),
+      ),
     );
   }
 }

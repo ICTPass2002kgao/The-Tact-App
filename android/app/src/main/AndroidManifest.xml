@@ -9,29 +9,29 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-feature android:name="android.hardware.camera" android:required="true" />
-<uses-feature android:name="android.hardware.camera.front" android:required="true" />
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-<uses-permission android:name="com.android.vending.BILLING" />
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="com.android.vending.BILLING" />
 
-    <!-- Remove Google Ad ID permission (if needed) -->
-    <uses-permission
-        android:name="com.google.android.gms.permission.AD_ID"
-        tools:node="remove" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
 
+    <!-- [FIX 1] REMOVED the AD_ID 'tools:node=remove' block. 
+         Huawei parser crashes on this. If you don't want AD_ID, simply don't include the line. -->
+
+    <!-- [FIX 2] Removed 'tools:targetApi'. Build.gradle handles this. -->
     <application
         android:label="DANKIE"
         android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="false"
-        tools:targetApi="33">
+        android:usesCleartextTraffic="false">
 
         <!-- AdMob App ID -->
         <meta-data 
             android:name="com.google.android.gms.ads.APPLICATION_ID" 
             android:value="ca-app-pub-6759693957212853~5704923982"/>
 
-        <!-- Main Flutter Activity -->
+        <!-- [FIX 3] Switched back to relative path '.MainActivity' 
+             This is safer. Ensure your Kotlin MainActivity extends AudioServiceActivity instead. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -49,23 +49,37 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Deep Links -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="tact-3c612.web.app" android:pathPrefix="/song" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ttact" android:host="open" />
+            </intent-filter>
         </activity>
 
-        <!-- Required for Flutter v2 embedding -->
         <meta-data 
             android:name="flutterEmbedding" 
             android:value="2" />
 
-        <!-- Audio Service for background playback - ADD EXPORTED ATTRIBUTE -->
+        <!-- Audio Service -->
         <service 
             android:name="com.ryanheise.audioservice.AudioService"
-            android:exported="true">
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
-        <!-- Media Button Receiver - ADD EXPORTED ATTRIBUTE -->
         <receiver 
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true">
@@ -73,8 +87,11 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+        
+        <meta-data
+            android:name="com.ryanheise.audioservice.android.DEFAULT_RESTART_ACTIVITY_CLASS"
+            android:value="com.thetact.ttact.MainActivity" />
 
-        <!-- Meta data for notification -->
         <meta-data
             android:name="com.ryanheise.audioservice.NotificationChannelId"
             android:value="com.thetact.ttact.audio"/>
@@ -86,7 +103,6 @@
             android:resource="@color/notification_color"/>
     </application>
 
-    <!-- Needed if your app interacts with browsers or web views -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW"/>

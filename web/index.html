@@ -1,49 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="The TACT church system ">
+  <meta name="description" content="The TACT church system">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="ttact">
+  <meta name="apple-mobile-web-app-title" content="Dankie">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
-
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBzPf3eQnhq13QKvDw9ZShYSYk1qycHMww"></script>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6759693957212853" crossorigin="anonymous"></script>
   <title>DANKIE | TACT</title>
   <link rel="manifest" href="manifest.json">
-  <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6759693957212853"
-     crossorigin="anonymous"></script>
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-format="fluid"
-     data-ad-layout-key="-fb+5w+4e-db+86"
-     data-ad-client="ca-pub-6759693957212853"
-     data-ad-slot="5097553669"></ins> -->
+
+  <style>
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      z-index: 99999;
+    }  
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgb(0, 123, 255);
+      animation: pulse 1s infinite ease-in-out;
+    }
+
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.4); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.6; }
+    }
+  </style>
 </head>
 <body>
-<!-- <script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script> -->
+  <div id="loader">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <script>
+     window.addEventListener("flutter-first-frame", function () {
+        var loader = document.getElementById("loader");
+        if (loader) {
+           loader.style.opacity = "0";
+           setTimeout(() => loader.remove(), 300);
+        }
+     });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

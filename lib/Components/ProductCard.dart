@@ -100,12 +100,15 @@ class _Product_CardState extends State<Product_Card> {
     return Card(
       elevation: 5,
       color: theme.scaffoldBackgroundColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: theme.primaryColor, width: 2.0),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: theme.hintColor.withOpacity(0.2),
+            width: 1.0,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,6 +173,7 @@ class _Product_CardState extends State<Product_Card> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Divider(color: Theme.of(context).primaryColor),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -14,7 +14,8 @@ bool get _useCupertinoStyle =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS);
-const double _desktopContentMaxWidth = 1000.0; // Increased max width for two columns
+const double _desktopContentMaxWidth =
+    1000.0; // Increased max width for two columns
 // --------------------------
 
 class AdminAddOverseer extends StatefulWidget {
@@ -107,15 +108,15 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
       FirebaseFirestore firestore = FirebaseFirestore.instance;
 
       // --- FIX: Correctly structure the districts array for Firestore ---
-      final List<Map<String, dynamic>> structuredDistricts =
-          districtCommunities.entries
-              .map(
-                (entry) => {
-                  'districtElderName': entry.key, // <-- ADDED DISTRICT NAME
-                  'communities': entry.value,
-                },
-              )
-              .toList();
+      final List<Map<String, dynamic>> structuredDistricts = districtCommunities
+          .entries
+          .map(
+            (entry) => {
+              'districtElderName': entry.key, // <-- ADDED DISTRICT NAME
+              'communities': entry.value,
+            },
+          )
+          .toList();
       // -------------------------------------------------------------------
 
       await firestore.collection('overseers').add({
@@ -129,10 +130,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         'subscriptionStatus': 'inactive',
         'paystackAuthCode': null,
         'paystackEmail': null,
-        'code':overseerCodeController.text,
-        'region':overseerRegionController.text, 
-        
-        
+        'code': overseerCodeController.text,
+        'region': overseerRegionController.text,
+
         // --- USING THE CORRECTLY STRUCTURED LIST ---
         'districts': structuredDistricts,
       });
@@ -178,7 +178,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     TextStyle? style,
     EdgeInsets padding = const EdgeInsets.all(16.0),
   }) {
-    final ThemeData color = Theme.of(context); // Get theme inside the build method if needed, or pass it
+    final ThemeData color = Theme.of(
+      context,
+    ); // Get theme inside the build method if needed, or pass it
     // FIX: Use platform check _useCupertinoStyle
     if (_useCupertinoStyle) {
       return CupertinoTextField(
@@ -186,9 +188,7 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         placeholder: placeholder,
         obscureText: obscureText,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(
-            10.0,
-          ), // Smaller radius for form
+          borderRadius: BorderRadius.circular(10.0), // Smaller radius for form
           border: Border.all(color: color.primaryColor.withOpacity(0.5)),
         ),
         padding: padding,
@@ -215,7 +215,11 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
   }
 
   // Helper function to build the District/Community Card (reused logic)
-  Widget _buildDistrictCard(String districtElderName, List<Map<String, String>> communitiesInThisDistrict, ThemeData color) {
+  Widget _buildDistrictCard(
+    String districtElderName,
+    List<Map<String, String>> communitiesInThisDistrict,
+    ThemeData color,
+  ) {
     return Card(
       elevation: 4,
       margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -236,15 +240,10 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(
-                    Icons.delete_forever,
-                    color: Colors.red,
-                  ),
+                  icon: Icon(Icons.delete_forever, color: Colors.red),
                   onPressed: () {
                     setState(() {
-                      districtCommunities.remove(
-                        districtElderName,
-                      );
+                      districtCommunities.remove(districtElderName);
                     });
                   },
                 ),
@@ -256,14 +255,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
             if (communitiesInThisDistrict.isNotEmpty)
               ...communitiesInThisDistrict.map(
                 (communityMap) => Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16.0,
-                    top: 4,
-                    bottom: 4,
-                  ),
+                  padding: const EdgeInsets.only(left: 16.0, top: 4, bottom: 4),
                   child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
@@ -279,8 +273,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                         ),
                         onPressed: () {
                           setState(() {
-                            districtCommunities[districtElderName]
-                                ?.remove(communityMap);
+                            districtCommunities[districtElderName]?.remove(
+                              communityMap,
+                            );
                           });
                         },
                       ),
@@ -323,9 +318,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                   child: CustomOutlinedButton(
                     width: double.infinity,
                     onPressed: () {
-                      String communityName =
-                          overseerCommunityNameController.text
-                              .trim();
+                      String communityName = overseerCommunityNameController
+                          .text
+                          .trim();
 
                       if (communityName.isEmpty) {
                         Api().showMessage(
@@ -343,28 +338,25 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                       );
 
                       if (communityExists) {
-                          Api().showMessage(
-                            context,
-                            'Community already exists in this district.',
-                            'Error',
-                            color.primaryColorDark,
-                          );
-                          return;
+                        Api().showMessage(
+                          context,
+                          'Community already exists in this district.',
+                          'Error',
+                          color.primaryColorDark,
+                        );
+                        return;
                       }
 
-
                       setState(() {
-                        districtCommunities[districtElderName]
-                            ?.add({
-                              'communityName': communityName,
-                            });
+                        districtCommunities[districtElderName]?.add({
+                          'communityName': communityName,
+                        });
                         overseerCommunityNameController.clear();
                       });
                     },
                     text: 'Add Community',
                     backgroundColor: color.primaryColor,
-                    foregroundColor:
-                        color.scaffoldBackgroundColor,
+                    foregroundColor: color.scaffoldBackgroundColor,
                   ),
                 ),
               ],
@@ -378,7 +370,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
   @override
   Widget build(BuildContext context) {
     final ThemeData color = Theme.of(context);
-    final isDesktop = MediaQuery.of(context).size.width > 600; // Simple check for desktop/wider view
+    final isDesktop =
+        MediaQuery.of(context).size.width >
+        600; // Simple check for desktop/wider view
 
     // --- Main Content Area ---
     Widget mainContent = Padding(
@@ -429,7 +423,7 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                     _buildDistrictList(color),
                   ],
                 ),
-          
+
           const SizedBox(height: 30),
 
           // --- Final Submit Button (Bottom of screen, full width) ---
@@ -448,7 +442,8 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
-        child: SingleChildScrollView( // Wrap the whole content in a scroll view
+        child: SingleChildScrollView(
+          // Wrap the whole content in a scroll view
           child: mainContent,
         ),
       ),
@@ -648,7 +643,11 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                 districtCommunities[districtElderName] ?? [];
 
             // Reuse the extracted helper function
-            return _buildDistrictCard(districtElderName, communitiesInThisDistrict, color);
+            return _buildDistrictCard(
+              districtElderName,
+              communitiesInThisDistrict,
+              color,
+            );
           },
         ),
         if (districtCommunities.isEmpty)
@@ -660,11 +659,14 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                 child: Text(
                   'No districts added yet. Use the "Add New District Elder" section on the left to begin.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontStyle: FontStyle.italic, color: color.hintColor),
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: color.hintColor,
+                  ),
                 ),
               ),
             ),
-          )
+          ),
       ],
     );
   }

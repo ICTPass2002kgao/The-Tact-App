@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/Item_Card.dart';
@@ -8,6 +10,26 @@ import 'package:lottie/lottie.dart';
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 800.0;
 // --------------------------
+// --- PLATFORM UTILITIES ---
+bool get isMobileNative =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -325,7 +347,18 @@ class _CartPageState extends State<CartPage> {
     );
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: isIOSPlatform ?CupertinoNavigationBar(
+        middle: const Text('My Cart 🛒'),
+        backgroundColor: color.primaryColor,
+        // This is tricky. CupertinoNavigationBar doesn't handle theming from Material themes well.
+        // We'll force the text color.
+        leading: CupertinoNavigationBarBackButton(
+          color: color.scaffoldBackgroundColor,
+          onPressed: () => Navigator.of(context).pop(),
+        ), 
+        // A bit of a hack to make the text white
+        brightness: Brightness.dark, 
+      ): AppBar(
         backgroundColor: color.primaryColor,
         foregroundColor: color.scaffoldBackgroundColor,
         title: const Text(

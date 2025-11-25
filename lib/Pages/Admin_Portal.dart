@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, use_build_context_synchronously
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,6 +20,16 @@ const double _desktopBreakpoint = 800.0;
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
+bool get isIOSPlatform { 
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+ 
+bool get isAndroidPlatform { 
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 // Define navigation items once
 final List<Map<String, dynamic>> _adminNavItems = [
   {'label': 'Home', 'icon': Ionicons.home, 'page': AdminHomePage()},
@@ -134,9 +145,9 @@ class _AdminPortalState extends State<AdminPortal> {
     //Please wait screen while checking auth/role
 
     if (FirebaseAuth.instance.currentUser == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return   Scaffold(body:isIOSPlatform?Center(child:CupertinoActivityIndicator() ,): Center(child: CircularProgressIndicator()));
     } else if (!_isAuthorized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return  Scaffold(body:isIOSPlatform?Center(child:CupertinoActivityIndicator() ,): Center(child: CircularProgressIndicator()));
     }
     final color = Theme.of(context);
     final isDesktop = isLargeScreen(context);

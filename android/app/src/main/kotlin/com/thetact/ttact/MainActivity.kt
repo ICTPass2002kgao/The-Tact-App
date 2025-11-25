@@ -1,7 +1,10 @@
 package com.thetact.ttact
 
-import io.flutter.embedding.android.FlutterFragmentActivity 
+// [FIX] Import the AudioService class
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 
- class MainActivity: FlutterFragmentActivity() {
-    // ...
+// [FIX] Extend AudioServiceFragmentActivity
+// This replaces FlutterFragmentActivity but preserves the fragment functionality
+// required by plugins like local_auth, while enabling background audio.
+class MainActivity: AudioServiceFragmentActivity() {
 }

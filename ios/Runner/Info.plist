@@ -51,13 +51,21 @@
     <string>This app needs access to your camera for face verification.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>We need microphone access to record video (optional, but often required by the camera plugin even for photos).</string>
-    
+     
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>This app needs access to your location to auto-fill your address.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>This app needs access to your location to auto-fill your address.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>This app needs access to your location to auto-fill your address.</string>
-
+    <key>UIBackgroundModes</key>
+<array>
+    <string>audio</string>
+</array>
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+</dict>
 </dict>
 </plist>

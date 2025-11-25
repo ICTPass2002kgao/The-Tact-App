@@ -1,20 +1,29 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:flutter/cupertino.dart'; // Essential for iOS widgets
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ttact/Pages/Login.dart'; // Assume Login_Page exists in Pages directory
-import 'package:ttact/Pages/SignUpPage.dart'; // Assume SignUpPage exists in Pages directory
+import 'package:ttact/Pages/SignUpPage.dart';
 
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 700.0;
+
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+bool get isAndroidPlatform {
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 // --------------------------
 
 // --- IMPORTANT: CONFIGURE YOUR BACKEND ENDPOINT ---
@@ -30,9 +39,7 @@ class CartHelper {
   }
 }
 
-// Inline login form used by Payment page when the user is not authenticated.
-// This widget performs a simple email/password sign-in with FirebaseAuth and
-// invokes the onSuccess callback when authentication succeeds.
+// --- INLINE LOGIN FORM (Platform Aware) ---
 class InlineLoginForm extends StatefulWidget {
   final VoidCallback? onSuccess;
   const InlineLoginForm({Key? key, this.onSuccess}) : super(key: key);
@@ -45,6 +52,7 @@ class _InlineLoginFormState extends State<InlineLoginForm> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscureText = true;
 
   @override
   void dispose() {
@@ -54,13 +62,12 @@ class _InlineLoginFormState extends State<InlineLoginForm> {
   }
 
   Future<void> _signIn() async {
+    FocusScope.of(context).unfocus();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password')),
-      );
+      _showError('Please enter email and password');
       return;
     }
 
@@ -81,13 +88,9 @@ class _InlineLoginFormState extends State<InlineLoginForm> {
       } else if (e.message != null) {
         message = e.message!;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      _showError(message);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Login error: $e')));
+      _showError('Login error: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -95,69 +98,213 @@ class _InlineLoginFormState extends State<InlineLoginForm> {
     }
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Helper to build TextFields based on platform
+  Widget _buildPlatformTextField({
+    required TextEditingController controller,
+    required String label,
+    bool isPassword = false,
+    required Iterable<String> autofillHints,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    final theme = Theme.of(context);
+
+    if (isIOSPlatform) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.hintColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          CupertinoTextField(
+            controller: controller,
+            placeholder: 'Enter $label',
+            obscureText: isPassword ? _obscureText : false,
+            keyboardType: keyboardType,
+            padding: const EdgeInsets.all(14),
+            autofillHints: autofillHints,
+            style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            suffix: isPassword
+                ? CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    child: Icon(
+                      _obscureText
+                          ? CupertinoIcons.eye_slash
+                          : CupertinoIcons.eye,
+                      color: CupertinoColors.systemGrey,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureText = !_obscureText),
+                  )
+                : null,
+            clearButtonMode: isPassword
+                ? OverlayVisibilityMode.never
+                : OverlayVisibilityMode.editing,
+          ),
+        ],
+      );
+    } else {
+      return TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: isPassword ? _obscureText : false,
+        autofillHints: autofillHints,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    _obscureText ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () => setState(() => _obscureText = !_obscureText),
+                )
+              : null,
+        ),
+      );
+    }
+  }
+
+  // Helper to build Main Action Button
+  Widget _buildPlatformButton({
+    required VoidCallback? onPressed,
+    required String text,
+  }) {
+    final theme = Theme.of(context);
+
+    if (_isLoading) {
+      return Center(
+        child: isIOSPlatform
+            ? const CupertinoActivityIndicator()
+            : const CircularProgressIndicator(),
+      );
+    }
+
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          onPressed: onPressed,
+          disabledColor: CupertinoColors.quaternarySystemFill,
+          // Use Theme Primary Color
+          borderRadius: BorderRadius.circular(8),
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    } else {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          child: Text(text),
+        ),
+      );
+    }
+  }
+
+  Widget _buildPlatformTextButton({
+    required VoidCallback onPressed,
+    required String text,
+  }) {
+    if (isIOSPlatform) {
+      return CupertinoButton(
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        minSize: 0,
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Theme.of(context).primaryColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    } else {
+      return TextButton(onPressed: onPressed, child: Text(text));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(20.0),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Please sign in to continue',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+            Center(
+              child: Text(
+                'Please sign in to continue',
+                style: isIOSPlatform
+                    ? theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      )
+                    : theme.textTheme.titleMedium,
               ),
+            ),
+            const SizedBox(height: 20),
+            _buildPlatformTextField(
+              controller: _emailController,
+              label: 'Email',
+              keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
             ),
-            const SizedBox(height: 12),
-            TextField(
+            const SizedBox(height: 16),
+            _buildPlatformTextField(
               controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
+              label: 'Password',
+              isPassword: true,
               autofillHints: const [AutofillHints.password],
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _signIn,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Sign in'),
-              ),
+            const SizedBox(height: 24),
+            _buildPlatformButton(
+              onPressed: _isLoading ? null : _signIn,
+              text: 'Sign in',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('No account?'),
-                TextButton(
+                Text('No account? ', style: TextStyle(color: theme.hintColor)),
+                _buildPlatformTextButton(
                   onPressed: () {
-                    // Navigate to SignUpPage if available in app
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const SignUpPage()),
                     );
                   },
-                  child: const Text('Create one'),
+                  text: 'Create one',
                 ),
               ],
             ),
@@ -185,17 +332,30 @@ class PaymentGatewayPage extends StatefulWidget {
 
 class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
   final TextEditingController _addressController = TextEditingController();
-  bool needsDelivery = false;
+
+  bool needsDelivery = true;
   double deliveryCharge = 50.0;
   bool isPlacingOrder = false;
   bool _isLoadingAddress = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  String? name;
+  String? surname;
+  String? email;
+
+  // Store seller info to notify them later
+  // Note: If you have multiple sellers in one cart, this simple logic
+  // only notifies the last one processed in the loop.
+  // Ideally, you should group items by seller.
+  String? sellerName;
+  String? sellerSurname;
+  String? sellerEmail;
+
   @override
   void initState() {
     super.initState();
-    _initializeAddress();
+    _fetchUserAddressFromFirestore();
   }
 
   @override
@@ -204,126 +364,58 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     super.dispose();
   }
 
-  String? name;
-  String? surname;
-  String? email;
-  String? sellerName;
-  String? sellerSurname;
-  String? sellerEmail;
-  void _initializeAddress() async {
+  Future<void> _fetchUserAddressFromFirestore() async {
+    User? currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
     setState(() {
       _isLoadingAddress = true;
       _addressController.text = 'Loading address...';
     });
 
-    User? currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
+    try {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
 
-        if (userDoc.exists && userDoc.data() != null) {
-          Map<String, dynamic>? userData =
-              userDoc.data() as Map<String, dynamic>?;
+      if (userDoc.exists && userDoc.data() != null) {
+        Map<String, dynamic>? userData =
+            userDoc.data() as Map<String, dynamic>?;
+
+        setState(() {
+          name = userData?['name'];
+          surname = userData?['surname'];
+          email = userData?['email'];
+
           String? storedAddress = userData?['address'];
           if (storedAddress != null && storedAddress.isNotEmpty) {
             _addressController.text = storedAddress;
-            setState(() {
-              name = userData?['name'];
-              surname = userData?['surname'];
-              email = userData?['email'];
-              _isLoadingAddress = false;
-            });
-            return;
+          } else {
+            _addressController.text = '';
           }
-        }
-      } catch (e) {
-        print("Error fetching user address from Firestore: $e");
-      }
-    }
-
-    await _getCurrentLocation();
-  }
-
-  Future<void> _getCurrentLocation() async {
-    // FIX: Guard against running location services on web, where they often fail or are disallowed.
-    if (mounted && kIsWeb) {
-      _addressController.text =
-          'Please enter your address manually (Location access restricted on web)';
-      setState(() {
-        _isLoadingAddress = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _addressController.text = 'Fetching your current location...';
-    });
-
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _showLocationError('Location services are disabled.');
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _showLocationError('Location permissions are denied.');
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      _showLocationError('Location permissions are permanently denied.');
-      return;
-    }
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15),
-      );
-
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks.first;
-        String address =
-            "${place.street}, ${place.subLocality}, ${place.locality}, ${place.postalCode}, ${place.country}";
-        _addressController.text = address;
-      } else {
-        _addressController.text = 'Could not determine address from location.';
+        });
       }
     } catch (e) {
-      print("Error getting current location: $e");
-      _showLocationError(
-        'Failed to get current location. Please enter your address manually.',
-      );
+      print("Error fetching user address from Firestore: $e");
+      _addressController.text = '';
     } finally {
-      setState(() {
-        _isLoadingAddress = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingAddress = false;
+        });
+      }
     }
   }
 
-  void _showLocationError(String message) {
-    setState(() {
-      _isLoadingAddress = false;
-      _addressController.text = '';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
-    );
+  String _getPickupInfo() {
+    StringBuffer buffer = StringBuffer();
+    for (var item in widget.cartProducts) {
+      String productName = item['productName'] ?? 'Item';
+      String location = item['location'] ?? 'Contact seller for location';
+      buffer.writeln("• $productName: $location");
+    }
+    return buffer.toString().trim();
   }
 
   double _calculateSubtotal() {
@@ -344,40 +436,100 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     return total;
   }
 
-  // NEW: Function to show the conditional login prompt
+  // --- NEW HELPER: Generate Detailed HTML Email ---
+  String _generateOrderHtml({
+    required String orderId,
+    required bool isForSeller,
+  }) {
+    final total = _calculateTotal().toStringAsFixed(2);
+    final subtotal = _calculateSubtotal().toStringAsFixed(2);
+    final delivery = needsDelivery
+        ? "R${deliveryCharge.toStringAsFixed(2)}"
+        : "Collection (Free)";
+    final address = needsDelivery
+        ? _addressController.text
+        : "Customer will collect from: ${_getPickupInfo()}";
+
+    StringBuffer itemsHtml = StringBuffer();
+    itemsHtml.write('<table style="width:100%; border-collapse: collapse;">');
+    itemsHtml.write(
+      '<tr style="background-color: #f2f2f2;"><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>',
+    );
+
+    for (var p in widget.cartProducts) {
+      final pName = p['productName'] ?? 'Item';
+      final pQty = p['quantity'] ?? 1;
+      final pPrice = (p['price'] as num?)?.toDouble() ?? 0.0;
+      final pTotal = (pPrice * pQty).toStringAsFixed(2);
+
+      itemsHtml.write('<tr>');
+      itemsHtml.write(
+        '<td style="border: 1px solid #ddd; padding: 8px;">$pName</td>',
+      );
+      itemsHtml.write(
+        '<td style="border: 1px solid #ddd; padding: 8px;">$pQty</td>',
+      );
+      itemsHtml.write(
+        '<td style="border: 1px solid #ddd; padding: 8px;">R$pPrice</td>',
+      );
+      itemsHtml.write(
+        '<td style="border: 1px solid #ddd; padding: 8px;">R$pTotal</td>',
+      );
+      itemsHtml.write('</tr>');
+    }
+    itemsHtml.write('</table>');
+
+    String title = isForSeller ? "New Order Received" : "Order Confirmation";
+    String intro = isForSeller
+        ? "You have received a new order. Please prepare the following items:"
+        : "Thank you for your purchase! Here are your order details:";
+
+    return '''
+      <h2>$title</h2>
+      <p><strong>Order ID:</strong> $orderId</p>
+      <p>$intro</p>
+      <br>
+      ${itemsHtml.toString()}
+      <br>
+      <p><strong>Subtotal:</strong> R$subtotal</p>
+      <p><strong>Delivery:</strong> $delivery</p>
+      <h3 style="color: green;">Total Paid: R$total</h3>
+      <hr>
+      <h3>Delivery/Collection Details:</h3>
+      <p>$address</p>
+    ''';
+  }
+
   void _showLoginPrompt() {
     final loginForm = InlineLoginForm(
       onSuccess: () {
-        // Upon successful login, close the prompt and retry payment
-        if (kIsWeb) {
-          Navigator.pop(context); // Close dialog
-        } else {
-          Navigator.pop(context); // Close bottom sheet
-        }
-        // Retry the payment process with the now-logged-in user
-        _payWithPaystack();
+        Navigator.pop(context); // Close dialog/sheet
+        _fetchUserAddressFromFirestore();
+        Api().showMessage(
+          context,
+          'Logged in successfully.',
+          'Success',
+          Colors.green,
+        );
       },
     );
 
     if (kIsWeb) {
-      // Web: Show as a centered dialog
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
           contentPadding: EdgeInsets.zero,
           content: Container(
             width: 400,
-            height: 550, // Constrain size for desktop visibility
-            child: loginForm,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               color: Theme.of(context).scaffoldBackgroundColor,
             ),
+            child: loginForm,
           ),
         ),
       );
     } else {
-      // Mobile: Show as a bottom sheet
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -396,13 +548,12 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
 
   Future<void> _payWithPaystack() async {
     final user = FirebaseAuth.instance.currentUser;
+
     if (user == null) {
-      // Redirect to the new login prompt
       _showLoginPrompt();
       return;
     }
 
-    // --- Existing Payment Validation and Logic ---
     if (widget.cartProducts.isEmpty) {
       Api().showMessage(
         context,
@@ -412,7 +563,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       );
       return;
     }
-    if (_addressController.text.isEmpty) {
+
+    if (needsDelivery && _addressController.text.trim().isEmpty) {
       Api().showMessage(
         context,
         'Please provide a delivery address.',
@@ -430,99 +582,89 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     StreamSubscription<DocumentSnapshot>? subscription;
 
     try {
-      // 1. CREATE PENDING ORDER IN FIRESTORE
       final orderDoc = FirebaseFirestore.instance.collection('orders').doc();
       createdOrderReference = orderDoc.id;
+
+      final String finalAddressToSave = needsDelivery
+          ? _addressController.text.trim()
+          : _getPickupInfo();
+
+      // Prepare products and capture seller info
+      final productsList = widget.cartProducts.map((p) {
+        // Note: This overwrites sellerEmail if multiple sellers exist.
+        // It captures the last one in the list.
+        sellerEmail = p['sellerEmail'];
+        sellerName = p['sellerName'];
+        sellerSurname = p['sellerSurname'];
+
+        return {
+          'productName': p['productName'],
+          'price': p['price'],
+          'quantity': p['quantity'] ?? 1,
+          'imageUrl': p['imageUrl'],
+          'sellerId': p['sellerId'],
+          'subaccountCode': p['subaccountCode'],
+          'selectedColor': p['selectedColor'],
+          'selectedSize': p['selectedSize'],
+          'pickupLocation': p['location'] ?? 'N/A',
+          'itemTotalPrice': (p['price'] as num) * (p['quantity'] as num),
+        };
+      }).toList();
 
       final orderData = {
         'orderId': createdOrderReference,
         'userId': user.uid,
-        'products': widget.cartProducts.map((p) {
-          setState(() {
-            sellerEmail = p['sellerEmail'];
-            sellerName = p['sellerName'];
-            sellerSurname = p['sellerSurname'];
-          });
-          return {
-            'productName': p['productName'],
-            'price': p['price'],
-            'quantity': p['quantity'] ?? 1,
-            'imageUrl': p['imageUrl'],
-            'sellerId': p['sellerId'],
-            'subaccountCode': p['subaccountCode'],
-            'selectedColor': p['selectedColor'],
-            'selectedSize': p['selectedSize'],
-            'itemTotalPrice': (p['price'] as num) * (p['quantity'] as num),
-          };
-        }).toList(),
-        'address': _addressController.text,
+        'products': productsList,
+        'email': email ?? user.email,
+        'address': finalAddressToSave,
         'needsDelivery': needsDelivery,
         'deliveryCharge': needsDelivery ? deliveryCharge : 0.0,
         'paymentMethod': 'Paystack',
         'status': 'pending_payment',
         'createdAt': FieldValue.serverTimestamp(),
-        'customerEmail': email ?? 'no_email@example.com',
+        'customerEmail': email ?? user.email,
         'totalPaidAmount': _calculateTotal(),
       };
 
       await orderDoc.set(orderData);
 
-      // 2. LISTEN FOR STATUS CHANGES ON THE ORDER DOCUMENT
       subscription = orderDoc.snapshots().listen((DocumentSnapshot snapshot) {
         if (snapshot.exists) {
           final orderData = snapshot.data() as Map<String, dynamic>;
           final newStatus = orderData['status'];
 
           if (newStatus == 'paid') {
-            subscription?.cancel(); // Stop listening
+            subscription?.cancel();
 
-            Api().sendEmail(
-              email!, // recipient: the buyer
-              "Payment Successful – Check Your Order",
-              """
-  <p>Dear ${name} ${surname},</p>
+            // --- UPDATED EMAIL SENDING LOGIC ---
+            final buyerEmail = email ?? user.email;
 
-  <p>Thank you for your purchase on <strong>Dankie Mobile (TACT)</strong>!</p>
+            // 1. Email to Buyer (Safe check)
+            if (buyerEmail != null && buyerEmail.isNotEmpty) {
+              Api().sendEmail(
+                buyerEmail,
+                "Payment Successful – Order #${createdOrderReference!}",
+                _generateOrderHtml(
+                  orderId: createdOrderReference,
+                  isForSeller: false,
+                ),
+                context,
+              );
+            }
 
-  <p>We have successfully received your payment. You can now visit your <strong>Order Page</strong> to view the status of your order and track any updates.</p>
+            // 2. Email to Seller (Safe check)
+            if (sellerEmail != null && sellerEmail!.isNotEmpty) {
+              Api().sendEmail(
+                sellerEmail!,
+                "New Order Received - #${createdOrderReference!}",
+                _generateOrderHtml(
+                  orderId: createdOrderReference,
+                  isForSeller: true,
+                ),
+                context,
+              );
+            }
 
-  <p>If you did not make this purchase or notice any issues, please contact our support team immediately.</p>
-
-  <br>
-  <p>Best regards,<br>
-  Dankie Mobile Support Team</p>
-  <a href="https://dankie-website.web.app/">Dankie Mobile</a>
-  """,
-              context,
-            );
-            Api().sendEmail(
-              sellerEmail!, // the seller's email
-              "New Order Received – Customer Purchase",
-              """
-  <p>Dear ${sellerName},</p>
-
-  <p>You have received a new order on <strong>Dankie Mobile (TACT)</strong>!</p>
-
-  <ul>
-    <li>Customer: ${name} ${surname}</li>
-    <li>Email: ${email}</li> 
-    <li>Purchased At: ${DateTime.now().toLocal()}</li>
-    <li>Total Amount: R${_calculateTotal()}</li>
-  </ul>
-
-  <p>Please check your <strong>Orders Page</strong> to view and process this order.</p>
-
-  <p>If there are any issues, contact the support team immediately.</p>
-
-  <br>
-  <p>Best regards,<br>
-  Dankie Mobile Support Team</p>
-  <a href="https://dankie-website.web.app/">Dankie Mobile</a>
-  """,
-              context,
-            );
-
-            // FIX: Clear the local cart storage upon successful payment
             CartHelper.clearCart();
             Navigator.pushReplacementNamed(context, '/orders');
             Api().showMessage(
@@ -535,7 +677,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         }
       });
 
-      // 3. PREPARE PAYLOAD AND CALL BACKEND
       List<Map<String, dynamic>> productsForPaystack = widget.cartProducts.map((
         p,
       ) {
@@ -551,7 +692,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         Uri.parse('$YOUR_BACKEND_BASE_URL/create-payment-link'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'email': email ?? 'no_email@example.com',
+          'email': email ?? user.email,
           'products': productsForPaystack,
           'orderReference': createdOrderReference,
         }),
@@ -561,7 +702,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       if (data['paymentLink'] != null) {
         final url = Uri.parse(data['paymentLink']);
         if (await canLaunchUrl(url)) {
-          // Launch the URL
           await launchUrl(url, mode: LaunchMode.inAppBrowserView);
         } else {
           throw 'Could not open payment link';
@@ -577,11 +717,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         Theme.of(context).primaryColor,
       );
     } catch (e) {
-      print('An error occurred while processing your payment: $e');
-      subscription?.cancel(); // Cancel subscription on error
+      print('Payment Error: $e');
+      subscription?.cancel();
       Api().showMessage(
         context,
-        'An error occurred while processing your payment: $e',
+        'An error occurred: $e',
         'Payment Error',
         Colors.red,
       );
@@ -592,18 +732,209 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     }
   }
 
+  // --- BUILDERS FOR PAYMENT PAGE ---
+
+  Widget _buildDeliveryMethodSelector() {
+    final theme = Theme.of(context);
+
+    if (isIOSPlatform) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: SizedBox(
+          width: double.infinity,
+          child: CupertinoSlidingSegmentedControl<bool>(
+            thumbColor: theme.primaryColor,
+            backgroundColor: CupertinoColors.systemGrey5,
+            groupValue: needsDelivery,
+            children: {
+              false: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Collect',
+                  style: TextStyle(
+                    color: !needsDelivery
+                        ? Colors.white
+                        : theme.textTheme.bodyMedium?.color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              true: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Delivery',
+                  style: TextStyle(
+                    color: needsDelivery
+                        ? Colors.white
+                        : theme.textTheme.bodyMedium?.color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            },
+            onValueChanged: (bool? value) {
+              if (value != null) {
+                setState(() {
+                  needsDelivery = value;
+                });
+              }
+            },
+          ),
+        ),
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 50,
+              child: RadioListTile<bool>(
+                title: const Text('Collect', style: TextStyle(fontSize: 14)),
+                secondary: const Icon(Icons.store),
+                value: false,
+                groupValue: needsDelivery,
+                onChanged: (val) {
+                  setState(() {
+                    needsDelivery = val ?? false;
+                  });
+                },
+              ),
+            ),
+          ),
+          Expanded(
+            child: SizedBox(
+              height: 50,
+              child: RadioListTile<bool>(
+                title: const Text('Delivery', style: TextStyle(fontSize: 14)),
+                secondary: const Icon(Icons.delivery_dining),
+                value: true,
+                groupValue: needsDelivery,
+                onChanged: (val) {
+                  setState(() {
+                    needsDelivery = val ?? false;
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
+  Widget _buildAddressInput() {
+    final theme = Theme.of(context);
+    if (isIOSPlatform) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CupertinoTextField(
+            controller: _addressController,
+            placeholder: _isLoadingAddress
+                ? 'Fetching profile address...'
+                : 'Enter Delivery Address or Pexi Code',
+            enabled: !_isLoadingAddress,
+            padding: const EdgeInsets.all(12),
+            style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            suffix: _isLoadingAddress
+                ? const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CupertinoActivityIndicator(),
+                  )
+                : null,
+          ),
+        ],
+      );
+    } else {
+      return TextField(
+        controller: _addressController,
+        maxLines: 3,
+        enabled: !_isLoadingAddress,
+        decoration: InputDecoration(
+          hintText: _isLoadingAddress
+              ? 'Fetching profile address...'
+              : 'Enter Delivery Address or Pexi Code',
+          border: const OutlineInputBorder(),
+          suffixIcon: _isLoadingAddress
+              ? const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : null,
+        ),
+      );
+    }
+  }
+
+  Widget _buildPaymentButton() {
+    if (isPlacingOrder) {
+      return Center(
+        child: isIOSPlatform
+            ? const CupertinoActivityIndicator()
+            : const CircularProgressIndicator(),
+      );
+    }
+
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          onPressed: _payWithPaystack,
+          color: Theme.of(context).primaryColor,
+          disabledColor: CupertinoColors.quaternarySystemFill,
+          borderRadius: BorderRadius.circular(12),
+          child: const Text(
+            'Proceed to Payment',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    } else {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _payWithPaystack,
+          icon: const Icon(Icons.payment),
+          label: const Text(
+            'Proceed to Payment',
+            style: TextStyle(fontSize: 18),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
+    // FIX: Removed ! to prevent null check crash
+    final currentUser = _auth.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: color.primaryColor,
-        foregroundColor: color.scaffoldBackgroundColor,
-        title: const Text('Payment & Delivery'),
-        centerTitle: true,
-      ),
-      // FIX: Center and constrain content for web/desktop
+      appBar: isIOSPlatform
+          ? CupertinoNavigationBar(
+              middle: const Text('Payment & Delivery'),
+              backgroundColor: color.primaryColor,
+            )
+          : AppBar(
+              backgroundColor: color.primaryColor,
+              foregroundColor: color.scaffoldBackgroundColor,
+              title: const Text('Payment & Delivery'),
+              centerTitle: true,
+            ),
       body: Center(
         child: Container(
           constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
@@ -612,63 +943,8 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- Address Card ---
-                Card(
-                  // Use theme colors for card background
-                  color: color.scaffoldBackgroundColor.withOpacity(0.9),
-                  elevation: 5,
-                  margin: const EdgeInsets.only(bottom: 16.0),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.location_on, color: color.primaryColor),
-                            const SizedBox(width: 8.0),
-                            const Text(
-                              'Delivery Address',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Divider(),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _addressController,
-                          maxLines: 3,
-                          readOnly: _isLoadingAddress,
-                          decoration: InputDecoration(
-                            hintText: _isLoadingAddress
-                                ? 'Fetching address...'
-                                : 'Enter an Address',
-                            border: const OutlineInputBorder(),
-                            suffixIcon: _isLoadingAddress
-                                ? const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : IconButton(
-                                    icon: const Icon(Icons.my_location),
-                                    onPressed: _getCurrentLocation,
-                                    tooltip: 'Get current location',
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
                 // --- Delivery Option Card ---
                 Card(
-                  // Use theme colors for card background
                   color: color.scaffoldBackgroundColor.withOpacity(0.9),
                   elevation: 5,
                   margin: const EdgeInsets.only(bottom: 16.0),
@@ -685,7 +961,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                             ),
                             const SizedBox(width: 8.0),
                             const Text(
-                              'Delivery Option',
+                              'Delivery Method',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -695,59 +971,9 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                         ),
                         const Divider(),
                         const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height:
-                                    50, // FIX: Give space to prevent collapsing
-                                child: RadioListTile<bool>(
-                                  title: const Text(
-                                    'Collect',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                    ), // Slightly larger font
-                                  ),
-                                  secondary: const Icon(Icons.store),
-                                  value: false,
-                                  groupValue: needsDelivery,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      needsDelivery = val ?? false;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: SizedBox(
-                                height:
-                                    50, // FIX: Give space to prevent collapsing
-                                child: RadioListTile<bool>(
-                                  contentPadding: const EdgeInsets.all(10),
-                                  title: const Text(
-                                    'Delivery',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                    ), // Slightly larger font
-                                  ),
-                                  secondary: const Icon(Icons.delivery_dining),
-                                  value: true,
-                                  groupValue: needsDelivery,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      needsDelivery = val ?? false;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+
+                        _buildDeliveryMethodSelector(),
+
                         if (needsDelivery)
                           Padding(
                             padding: const EdgeInsets.only(
@@ -759,8 +985,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w500,
                                 fontSize: 16,
-                                color: color
-                                    .hintColor, // Use hintColor for detail text
+                                color: color.hintColor,
                               ),
                             ),
                           ),
@@ -769,9 +994,149 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                   ),
                 ),
 
+                // --- Address / Pickup Card ---
+                Card(
+                  color: color.scaffoldBackgroundColor.withOpacity(0.9),
+                  elevation: 5,
+                  margin: const EdgeInsets.only(bottom: 16.0),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              needsDelivery
+                                  ? Icons.location_on
+                                  : Icons.store_mall_directory,
+                              color: color.primaryColor,
+                            ),
+                            const SizedBox(width: 8.0),
+                            Text(
+                              needsDelivery
+                                  ? 'Delivery Address or Pexi Code'
+                                  : 'Pickup Point(s)',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 10),
+
+                        if (needsDelivery) ...[
+                          _buildAddressInput(),
+
+                          // FIX: Safe null check on currentUser
+                          if (currentUser == null)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                "Sign in to load saved address or enter a new one.",
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+
+                          // FIX: Safe null check on currentUser
+                          if (currentUser != null)
+                            Row(
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    "Please provide your pexi code for accurate delivery. ",
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.only(top: 8.0),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      launchUrl(
+                                        Uri.parse(
+                                          'https://www.paxi.co.za/paxi-points',
+                                        ),
+                                        mode: LaunchMode.inAppBrowserView,
+                                      );
+                                    },
+                                    child: Text(
+                                      "Click here",
+                                      style: TextStyle(
+                                        color: Theme.of(context).primaryColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    " to find your pexi code.",
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ] else ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: color.hintColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: color.hintColor.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "You will collect the items from:",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _getPickupInfo(),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: color.textTheme.bodyMedium?.color,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  "Please contact the seller to arrange a time.",
+                                  style: TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
                 // --- Order Summary Card ---
                 Card(
-                  // Use theme colors for card background
                   color: color.scaffoldBackgroundColor.withOpacity(0.9),
                   elevation: 5,
                   margin: const EdgeInsets.only(bottom: 20.0),
@@ -794,7 +1159,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        // List of Products
                         ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -802,15 +1166,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                           itemBuilder: (context, index) {
                             final product = widget.cartProducts[index];
                             final productName =
-                                product['productName'] ?? 'Unknown Product';
+                                product['productName'] ?? 'Product';
                             final productPrice =
                                 (product['price'] as num?)?.toDouble() ?? 0.0;
                             final productQuantity =
                                 (product['quantity'] as int?) ?? 1;
-                            final selectedColor =
-                                product['selectedColor'] ?? 'N/A';
-                            final selectedSize =
-                                product['selectedSize'] ?? 'N/A';
                             final subtotal = productPrice * productQuantity;
                             final imageUrl =
                                 product['imageUrl']?.toString() ?? '';
@@ -822,7 +1182,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Product Image
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8.0),
                                     child: imageUrl.isNotEmpty
@@ -852,21 +1211,10 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         Text(
-                                          'R${productPrice.toStringAsFixed(2)} x ${productQuantity}',
+                                          'R${productPrice.toStringAsFixed(2)} x $productQuantity',
                                           style: TextStyle(
                                             fontSize: 13,
-                                            color: color
-                                                .hintColor, // Use hintColor
-                                          ),
-                                        ),
-                                        Text(
-                                          'Color: $selectedColor, Size: $selectedSize',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontStyle: FontStyle.italic,
-                                            color: color.hintColor.withOpacity(
-                                              0.7,
-                                            ), // Use hintColor
+                                            color: color.hintColor,
                                           ),
                                         ),
                                       ],
@@ -884,8 +1232,6 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                             );
                           },
                         ),
-
-                        // Totals and Final Price
                         const Divider(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -943,36 +1289,10 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
                   ),
                 ),
 
-                // --- Proceed to Payment Button ---
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: isPlacingOrder ? null : _payWithPaystack,
-                    icon: isPlacingOrder
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.payment),
-                    label: Text(
-                      isPlacingOrder ? 'Processing...' : 'Proceed to Payment',
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.primaryColor,
-                      foregroundColor: color.scaffoldBackgroundColor,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 20),
+                // --- PLATFORM SPECIFIC PAYMENT BUTTON ---
+                _buildPaymentButton(),
+
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -981,12 +1301,11 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
     );
   }
 
-  // Helper to build image placeholder
   Widget _buildPlaceholderImage(ThemeData color) {
     return Container(
       width: 40,
       height: 40,
-      color: color.hintColor.withOpacity(0.2), // Use theme hintColor
+      color: color.hintColor.withOpacity(0.2),
       child: Icon(Icons.image, color: color.hintColor, size: 20),
     );
   }

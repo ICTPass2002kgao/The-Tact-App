@@ -13,10 +13,27 @@ import 'package:flutter/foundation.dart';
 // FIX: Use io.File alias for platform safety
 import 'dart:io' as io show File;
 
+// Assuming CustomOutlinedButton is defined, but we will use local platform builders for buttons
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Components/ViewApplicationsBottomSheet.dart';
 
-// --- LOGIN BOTTOM SHEET (Unchanged, remains separate) ---
+// --- PLATFORM UTILITIES ---
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+bool get isAndroidPlatform {
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
+
+final FirebaseAuth _auth = FirebaseAuth.instance;
+final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+final FirebaseStorage _storage = FirebaseStorage.instance;
+
+// --- LOGIN BOTTOM SHEET ---
 class _LoginBottomSheet extends StatefulWidget {
   final VoidCallback onLoginSuccess;
   const _LoginBottomSheet({required this.onLoginSuccess});
@@ -30,60 +47,101 @@ class _LoginBottomSheetState extends State<_LoginBottomSheet> {
   final TextEditingController passwordController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  Widget _buildPlatformTextField({
+    required TextEditingController controller,
+    required String placeholder,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    if (isIOSPlatform) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: CupertinoTextField(
+          controller: controller,
+          placeholder: placeholder,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          prefix: Padding(
+            padding: const EdgeInsets.only(left: 8.0),
+            child: Icon(icon, color: CupertinoColors.systemGrey),
+          ),
+          padding: const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            border: Border.all(color: CupertinoColors.systemGrey4),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: TextField(
+          controller: controller,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            labelText: placeholder,
+            prefixIcon: Icon(icon),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildPlatformButton({
+    required VoidCallback onPressed,
+    required String text,
+    required Color backgroundColor,
+  }) {
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          onPressed: onPressed,
+          disabledColor: CupertinoColors.quaternarySystemFill,
+          child: Text(text, style: TextStyle(color: CupertinoColors.white)),
+          color: backgroundColor,
+        ),
+      );
+    } else {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: backgroundColor,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+          ),
+          child: Text(text, style: const TextStyle(color: Colors.white)),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
-      ),
+      padding: EdgeInsets.only(bottom: 20, left: 16, right: 16, top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: CupertinoTextField(
-              controller: emailController,
-              placeholder: 'Enter your email',
-              keyboardType: TextInputType.emailAddress,
-              decoration: BoxDecoration(
-                border: Border.all(color: CupertinoColors.systemGrey),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-              padding: const EdgeInsets.all(12.0),
-              prefix: const Padding(
-                padding: EdgeInsets.only(left: 8.0),
-                child: Icon(
-                  CupertinoIcons.mail,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-            ),
+          _buildPlatformTextField(
+            controller: emailController,
+            placeholder: 'Enter your email',
+            icon: isIOSPlatform ? CupertinoIcons.mail : Icons.email,
+            keyboardType: TextInputType.emailAddress,
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: CupertinoTextField(
-              controller: passwordController,
-              placeholder: 'Password',
-              obscureText: true,
-              decoration: BoxDecoration(
-                border: Border.all(color: CupertinoColors.systemGrey),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-              padding: const EdgeInsets.all(12.0),
-              prefix: const Padding(
-                padding: EdgeInsets.only(left: 8.0),
-                child: Icon(
-                  CupertinoIcons.lock,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-            ),
+          _buildPlatformTextField(
+            controller: passwordController,
+            placeholder: 'Password',
+            icon: isIOSPlatform ? CupertinoIcons.lock : Icons.lock,
+            obscureText: true,
           ),
-          CustomOutlinedButton(
+          const SizedBox(height: 16),
+          _buildPlatformButton(
             onPressed: () async {
               try {
                 await _auth.signInWithEmailAndPassword(
@@ -109,8 +167,6 @@ class _LoginBottomSheetState extends State<_LoginBottomSheet> {
             },
             text: "Login",
             backgroundColor: color.primaryColor,
-            foregroundColor: color.scaffoldBackgroundColor,
-            width: double.infinity,
           ),
           SizedBox(height: 60),
         ],
@@ -120,9 +176,6 @@ class _LoginBottomSheetState extends State<_LoginBottomSheet> {
 }
 
 // --- MAIN APPLICATION SCREEN ---
-final FirebaseAuth _auth = FirebaseAuth.instance;
-final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-final FirebaseStorage _storage = FirebaseStorage.instance;
 
 class UniversityApplicationScreen extends StatefulWidget {
   final Map<String, dynamic> universityData;
@@ -149,7 +202,7 @@ class _UniversityApplicationScreenState
 
   final _formKey = GlobalKey<FormState>();
 
-  // FIX: Change File? state variables to dynamic to store XFile/PlatformFile on web
+  // Files
   dynamic _idPassportFile;
   dynamic _schoolResultsFile;
   dynamic _proofOfRegistrationFile;
@@ -159,11 +212,9 @@ class _UniversityApplicationScreenState
   // Stored URLs
   String? _idPassportUrl;
   String? _schoolResultsUrl;
-  String? _passportPhotoUrl;
 
   // Controllers
   final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _idPassportController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _physicalAddressController =
@@ -179,8 +230,6 @@ class _UniversityApplicationScreenState
       TextEditingController();
   final TextEditingController _parent2NameController = TextEditingController();
   final TextEditingController _parent2OccupationController =
-      TextEditingController();
-  final TextEditingController _parent2IncomeController =
       TextEditingController();
   final TextEditingController _otherPrimaryProgramController =
       TextEditingController();
@@ -205,8 +254,8 @@ class _UniversityApplicationScreenState
 
   @override
   void dispose() {
+    // Dispose controllers
     _fullNameController.dispose();
-    _idPassportController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _physicalAddressController.dispose();
@@ -217,7 +266,6 @@ class _UniversityApplicationScreenState
     _parent1IncomeController.dispose();
     _parent2NameController.dispose();
     _parent2OccupationController.dispose();
-    _parent2IncomeController.dispose();
     _otherPrimaryProgramController.dispose();
     _otherSecondChoiceProgramController.dispose();
     _otherThirdChoiceProgramController.dispose();
@@ -265,8 +313,6 @@ class _UniversityApplicationScreenState
           .get();
       if (userDoc.exists) {
         Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
-
-        // Pre-fill essential profile details (read-only in form)
         _fullNameController.text =
             '${userData['name'] ?? ''} ${userData['surname'] ?? ''}';
         _emailController.text = userData['email'] ?? '';
@@ -285,9 +331,6 @@ class _UniversityApplicationScreenState
           .get();
       if (userDoc.exists) {
         Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
-
-        // Pre-fill fields that can be edited if it's NOT the first application
-        _idPassportController.text = userData['idPassport'] ?? '';
         _previousSchoolsController.text = userData['previousSchools'] ?? '';
         _yearCompletionController.text = userData['yearOfCompletion'] ?? '';
         _parent1NameController.text = userData['parent1Name'] ?? '';
@@ -295,13 +338,11 @@ class _UniversityApplicationScreenState
         _parent1IncomeController.text = userData['parent1Income'] ?? '';
         _parent2NameController.text = userData['parent2Name'] ?? '';
         _parent2OccupationController.text = userData['parent2Occupation'] ?? '';
-        _parent2IncomeController.text = userData['parent2Income'] ?? '';
 
         final Map<String, dynamic>? profileDocs = userData['profileDocuments'];
         if (profileDocs != null) {
           _idPassportUrl = profileDocs['idPassportUrl'];
           _schoolResultsUrl = profileDocs['schoolResultsUrl'];
-          _passportPhotoUrl = profileDocs['passportPhotoUrl'];
         }
 
         setState(() {
@@ -335,6 +376,7 @@ class _UniversityApplicationScreenState
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (context) => _LoginBottomSheet(
         onLoginSuccess: () {
           Navigator.pop(context);
@@ -348,40 +390,16 @@ class _UniversityApplicationScreenState
     });
   }
 
-  // --- FIX: Platform-Agnostic File Picking ---
-
-  Future<void> _pickImage(
-    ImageSource source,
-    Function(dynamic) onPicked,
-  ) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source);
-    if (pickedFile != null) {
-      if (kIsWeb) {
-        // Web: Return the XFile instance directly for byte reading later
-        onPicked(pickedFile);
-      } else {
-        // Native: Return dart:io.File
-        onPicked(io.File(pickedFile.path));
-      }
-    } else {
-      onPicked(null);
-    }
-    setState(() {});
-  }
-
   Future<void> _pickFile(Function(dynamic) onPicked) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-      withData: true, // <-- THIS IS THE FIX
+      withData: true,
     );
     if (result != null) {
       if (kIsWeb) {
-        // Web: Return the PlatformFile instance (which contains bytes)
         onPicked(result.files.first);
       } else {
-        // Native: Return dart:io.File
         onPicked(io.File(result.files.single.path!));
       }
     } else {
@@ -390,50 +408,22 @@ class _UniversityApplicationScreenState
     setState(() {});
   }
 
-  Future<void> _pickMultipleFiles(Function(List<dynamic>) onPicked) async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-      withData: true, // <-- THIS IS THE FIX
-    );
-    if (result != null) {
-      if (kIsWeb) {
-        // Web: Return PlatformFile list
-        onPicked(result.files.toList());
-      } else {
-        // Native: Return dart:io.File list
-        onPicked(result.files.map((file) => io.File(file.path!)).toList());
-      }
-    } else {
-      onPicked([]);
-    }
-    setState(() {});
-  }
-
-  // --- Firebase Upload Logic (Unified) ---
   Future<String?> _uploadFile(dynamic file, String path) async {
     if (file == null) return null;
-
     try {
       UploadTask uploadTask;
-
       if (file is io.File) {
-        // Mobile/Desktop Upload
         uploadTask = _storage.ref(path).putFile(file);
       } else if (file is XFile) {
-        // Web (ImagePicker on Web returns XFile)
         final bytes = await file.readAsBytes();
         uploadTask = _storage.ref(path).putData(bytes);
       } else if (file is PlatformFile) {
-        // Web (FilePicker on Web returns PlatformFile)
         final bytes = file.bytes;
         if (bytes == null) throw Exception("File data is missing.");
         uploadTask = _storage.ref(path).putData(bytes);
       } else {
         throw Exception("Unsupported file type for upload.");
       }
-
       TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
@@ -443,7 +433,6 @@ class _UniversityApplicationScreenState
   }
 
   Future<void> _submitApplication() async {
-    // Manual validation for required fields
     if (_fullNameController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _emailController.text.isEmpty ||
@@ -451,8 +440,7 @@ class _UniversityApplicationScreenState
         _yearCompletionController.text.isEmpty ||
         _highestQualification == null ||
         _primaryProgram == null ||
-        _primaryProgram == 'Other' &&
-            _otherPrimaryProgramController.text.isEmpty) {
+        _primaryProgram == 'Other') {
       Api().showMessage(
         context,
         'Please fill all required fields.',
@@ -461,7 +449,6 @@ class _UniversityApplicationScreenState
       );
       return;
     }
-    // Basic file validation
     if (_idPassportFile == null && _idPassportUrl == null) {
       Api().showMessage(
         context,
@@ -475,15 +462,6 @@ class _UniversityApplicationScreenState
       Api().showMessage(
         context,
         'Please upload your latest school or final Grade 12 results.',
-        '',
-        Theme.of(context).primaryColorDark,
-      );
-      return;
-    }
-    if (_passportPhotoFile == null && _passportPhotoUrl == null) {
-      Api().showMessage(
-        context,
-        'Please upload a passport-sized photo.',
         '',
         Theme.of(context).primaryColorDark,
       );
@@ -508,9 +486,7 @@ class _UniversityApplicationScreenState
     Api().showLoading(context);
 
     try {
-      // 1. Upload documents
       String storagePathPrefix = 'applications/${_fullNameController.text}/';
-
       String? idPassportUrl =
           _idPassportUrl ??
           await _uploadFile(
@@ -523,13 +499,6 @@ class _UniversityApplicationScreenState
             _schoolResultsFile,
             '${storagePathPrefix}school_results.pdf',
           );
-      String? passportPhotoUrl =
-          _passportPhotoUrl ??
-          await _uploadFile(
-            _passportPhotoFile,
-            '${storagePathPrefix}passport_photo.jpg',
-          );
-
       String? proofOfRegistrationUrl = _proofOfRegistrationFile != null
           ? await _uploadFile(
               _proofOfRegistrationFile,
@@ -546,10 +515,8 @@ class _UniversityApplicationScreenState
         if (url != null) otherQualificationUrls.add(url);
       }
 
-      // 1.1 Save user's personal and academic data to their main profile
       await _firestore.collection('users').doc(_currentUser!.uid).set({
         'fullName': _fullNameController.text,
-        'idPassport': _idPassportController.text,
         'phone': _phoneController.text,
         'email': _emailController.text,
         'physicalAddress': _physicalAddressController.text,
@@ -561,11 +528,9 @@ class _UniversityApplicationScreenState
         'parent1Income': _parent1IncomeController.text,
         'parent2Name': _parent2NameController.text,
         'parent2Occupation': _parent2OccupationController.text,
-        'parent2Income': _parent2IncomeController.text,
         'profileDocuments': {
           'idPassportUrl': idPassportUrl,
           'schoolResultsUrl': schoolResultsUrl,
-          'passportPhotoUrl': passportPhotoUrl,
         },
         'isFirstApplication': false,
       }, SetOptions(merge: true));
@@ -584,7 +549,7 @@ class _UniversityApplicationScreenState
       if (uid == null) {
         Api().showMessage(
           context,
-          'Error: University UID not found for this application.',
+          'Error: University UID not found.',
           'Please ensure the university data passed has a "uid" field.',
           Theme.of(context).primaryColorDark,
         );
@@ -612,17 +577,15 @@ class _UniversityApplicationScreenState
         'parent1Income': _parent1IncomeController.text,
         'parent2Name': _parent2NameController.text,
         'parent2Occupation': _parent2OccupationController.text,
-        'parent2Income': _parent2IncomeController.text,
         'documents': {
           'idPassportUrl': idPassportUrl,
           'schoolResultsUrl': schoolResultsUrl,
           'proofOfRegistrationUrl': proofOfRegistrationUrl,
           'otherQualificationUrls': otherQualificationUrls,
-          'passportPhotoUrl': passportPhotoUrl,
         },
         'submissionDate': FieldValue.serverTimestamp(),
-        'status': 'Submitted', // Initial status for user's record
-        'uid': uid, // Use university's UID here
+        'status': 'Submitted',
+        'uid': uid,
         'selectedUniversity': widget.selectedCampus,
       };
 
@@ -675,6 +638,20 @@ class _UniversityApplicationScreenState
         'Your application for ${widget.universityData['name'] ?? 'the university'} has been sent.',
         Theme.of(context).splashColor,
       );
+
+      Api().sendEmail(
+        _emailController.text,
+        "Application Submitted Successfully! ✅",
+        "<p>Dear Applicant,</p><p>We are pleased to inform you that your application has been successfully submitted.</p>",
+        context,
+      );
+      Api().sendEmail(
+        widget.selectedCampus?['email'] ?? '',
+        "New Application Received 📥",
+        "<p>A new application has just been submitted.</p>",
+        context,
+      );
+
       setState(() {
         _hasExistingApplication = true;
       });
@@ -683,7 +660,7 @@ class _UniversityApplicationScreenState
       Navigator.pop(context);
       Api().showMessage(
         context,
-        'Error submitting your application: ${e.toString()}',
+        'Error submitting your application: $e',
         '',
         Theme.of(context).primaryColorDark,
       );
@@ -691,7 +668,8 @@ class _UniversityApplicationScreenState
     }
   }
 
-  // Helper widgets (keep these as private methods of your State class)
+  // --- HELPERS: Platform-Aware Builders ---
+
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -706,7 +684,7 @@ class _UniversityApplicationScreenState
     );
   }
 
-  Widget _buildCupertinoTextField({
+  Widget _buildPlatformTextField({
     required TextEditingController controller,
     required String placeholder,
     IconData? prefixIcon,
@@ -714,29 +692,83 @@ class _UniversityApplicationScreenState
     bool obscureText = false,
     bool readOnly = false,
     int? maxLines = 1,
+    IconData? icon,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: CupertinoTextField(
-        controller: controller,
-        placeholder: placeholder,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        readOnly: readOnly,
-        maxLines: maxLines,
-        decoration: BoxDecoration(
-          border: Border.all(color: CupertinoColors.systemGrey4),
-          borderRadius: BorderRadius.circular(8.0),
+    if (isIOSPlatform) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: CupertinoTextField(
+          controller: controller,
+          placeholder: placeholder,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          readOnly: readOnly,
+          maxLines: maxLines,
+          decoration: BoxDecoration(
+            border: Border.all(color: CupertinoColors.systemGrey4),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          padding: const EdgeInsets.all(12.0),
+          prefix: prefixIcon != null
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+                )
+              : null,
         ),
-        padding: const EdgeInsets.all(12.0),
-        prefix: prefixIcon != null
-            ? Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
-              )
-            : null,
-      ),
-    );
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          readOnly: readOnly,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            labelText: placeholder,
+            prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 12,
+              horizontal: 12,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildPlatformButton({
+    required VoidCallback onPressed,
+    required String text,
+    required Color backgroundColor,
+    required Color foregroundColor,
+  }) {
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          color: backgroundColor,
+          onPressed: onPressed,
+          disabledColor: Theme.of(context).splashColor,
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    } else {
+      // Android Material
+      return CustomOutlinedButton(
+        onPressed: onPressed,
+        text: text,
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor,
+        width: double.infinity,
+      );
+    }
   }
 
   Widget _buildExpansionTile({
@@ -744,7 +776,9 @@ class _UniversityApplicationScreenState
     required List<Widget> children,
     required String? currentValue,
   }) {
+    // Keeps original layout but content inside will be adaptive
     return Card(
+      color: Theme.of(context).scaffoldBackgroundColor,
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       elevation: 2,
       child: ExpansionTile(
@@ -785,51 +819,41 @@ class _UniversityApplicationScreenState
       subtitleText = hasFile ? 'File uploaded' : 'No file selected';
     }
 
+    final icon = hasFile
+        ? (isIOSPlatform
+              ? CupertinoIcons.check_mark_circled_solid
+              : Icons.check_circle)
+        : (isIOSPlatform ? CupertinoIcons.paperclip : Icons.attach_file);
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
-      elevation: 2,
-      child: CupertinoListTile(
+
+      color: Theme.of(context).scaffoldBackgroundColor,
+      elevation: 10,
+      child: ListTile(
         title: Text(title + (isOptional ? ' (Optional)' : '')),
         subtitle: Text(
           subtitleText,
-          style: TextStyle(
-            color: hasFile
-                ? CupertinoColors.activeGreen
-                : CupertinoColors.systemGrey,
-          ),
+          style: TextStyle(color: hasFile ? Colors.green : Colors.grey),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              hasFile
-                  ? CupertinoIcons.check_mark_circled_solid
-                  : CupertinoIcons.paperclip,
-              color: hasFile
-                  ? CupertinoColors.activeGreen
-                  : CupertinoColors.systemGrey,
-            ),
+            Icon(icon, color: hasFile ? Colors.green : Colors.grey),
             SizedBox(width: 8),
             GestureDetector(
-              onTap: () {
-                // If already uploaded, show view option (or allow replacing)
-                if (hasFile) {
-                  onPick(null); // Clear existing file
-                } else {
-                  onPick(null); // Trigger picker
-                }
-              },
+              onTap: () => onPick(null),
               child: Text(
                 hasFile ? 'REPLACE' : 'PICK FILE',
-                style: TextStyle(color: Theme.of(context).primaryColor),
+                style: TextStyle(
+                  color: Theme.of(context).primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
         ),
-        onTap: () async {
-          // Trigger file picker
-          await onPick(null);
-        },
+        onTap: () => onPick(null),
       ),
     );
   }
@@ -842,23 +866,19 @@ class _UniversityApplicationScreenState
   }) {
     final bool hasFiles = files.isNotEmpty;
     return Card(
+      color: Theme.of(context).scaffoldBackgroundColor,
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       elevation: 2,
-      child: CupertinoListTile(
+      child: ListTile(
         title: Text(title + (isOptional ? ' (Optional)' : '')),
         subtitle: Text(
           hasFiles ? '${files.length} file(s) selected' : 'No files selected',
-          style: TextStyle(
-            color: hasFiles
-                ? CupertinoColors.activeGreen
-                : CupertinoColors.systemGrey,
-          ),
+          style: TextStyle(color: hasFiles ? Colors.green : Colors.grey),
         ),
-        trailing: const Icon(CupertinoIcons.collections),
-        onTap: () async {
-          // Trigger file picker
-          await onPick([]);
-        },
+        trailing: Icon(
+          isIOSPlatform ? CupertinoIcons.collections : Icons.library_books,
+        ),
+        onTap: () => onPick([]),
       ),
     );
   }
@@ -870,9 +890,7 @@ class _UniversityApplicationScreenState
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        final double screenWidth = MediaQuery.of(context).size.width;
-        final double maxWidth = 600; // Constrain view modal for desktop
-
+        final double maxWidth = 600;
         return Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
@@ -892,14 +910,13 @@ class _UniversityApplicationScreenState
     );
   }
 
-  // --- Reusable Widget Builders ---
-
   Widget _buildCardSection({
     required String title,
-    required ThemeData color,
+    required Color color,
     required List<Widget> children,
   }) {
     return Card(
+      color: color,
       elevation: 5,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -944,7 +961,6 @@ class _UniversityApplicationScreenState
     }
 
     final bool canEditForm = _isFirstApplication;
-
     return DropdownButtonFormField<String>(
       value: currentValue,
       hint: Text('Select Program'),
@@ -966,6 +982,10 @@ class _UniversityApplicationScreenState
       validator: type == 'primary'
           ? (value) => value == null ? 'Required' : null
           : null,
+      decoration: InputDecoration(
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
@@ -979,39 +999,34 @@ class _UniversityApplicationScreenState
     // --- Column 1 Widgets ---
     final Widget personalInfoCard = _buildCardSection(
       title: '1. Personal & Contact Information',
-      color: color,
+      color: color.scaffoldBackgroundColor,
       children: [
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _fullNameController,
           placeholder: 'Full Name',
-          prefixIcon: CupertinoIcons.person,
+          icon: isIOSPlatform ? CupertinoIcons.person : Icons.person,
           readOnly: !canEditForm,
         ),
-        _buildCupertinoTextField(
-          controller: _idPassportController,
-          placeholder: 'ID/Passport Number',
-          prefixIcon: CupertinoIcons.creditcard,
-          readOnly: !canEditForm,
-          keyboardType: TextInputType.number,
-        ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _phoneController,
           placeholder: 'Phone Number',
-          prefixIcon: CupertinoIcons.phone,
+          icon: isIOSPlatform ? CupertinoIcons.phone : Icons.phone,
           keyboardType: TextInputType.phone,
           readOnly: !canEditForm,
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _emailController,
           placeholder: 'Email',
-          prefixIcon: CupertinoIcons.mail,
+          icon: isIOSPlatform ? CupertinoIcons.mail : Icons.email,
           keyboardType: TextInputType.emailAddress,
           readOnly: true,
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _physicalAddressController,
           placeholder: 'Physical & Postal Address',
-          prefixIcon: CupertinoIcons.location_solid,
+          icon: isIOSPlatform
+              ? CupertinoIcons.location_solid
+              : Icons.location_on,
           maxLines: 3,
           readOnly: !canEditForm,
         ),
@@ -1020,7 +1035,7 @@ class _UniversityApplicationScreenState
 
     final Widget academicHistoryCard = _buildCardSection(
       title: '2. Academic History',
-      color: color,
+      color: color.scaffoldBackgroundColor,
       children: [
         _buildExpansionTile(
           title: 'Highest Qualification',
@@ -1046,20 +1061,25 @@ class _UniversityApplicationScreenState
               onChanged: canEditForm
                   ? (value) => setState(() => _highestQualification = value)
                   : null,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
             ),
           ],
           currentValue: _highestQualification,
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _previousSchoolsController,
           placeholder: 'Previous School(s) Attended',
-          prefixIcon: CupertinoIcons.building_2_fill,
+          icon: isIOSPlatform ? CupertinoIcons.building_2_fill : Icons.school,
           readOnly: !canEditForm,
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _yearCompletionController,
           placeholder: 'Year of Completion of Last Qualification',
-          prefixIcon: CupertinoIcons.calendar,
+          icon: isIOSPlatform ? CupertinoIcons.calendar : Icons.calendar_today,
           keyboardType: TextInputType.number,
           readOnly: !canEditForm,
         ),
@@ -1069,32 +1089,25 @@ class _UniversityApplicationScreenState
     // --- Column 2 Widgets ---
     final Widget supportingDocumentsCard = _buildCardSection(
       title: '3. Supporting Documents',
-      color: color,
+      color: color.scaffoldBackgroundColor,
       children: [
         _buildFilePickerTile(
           title: 'Certified Copy of ID or Passport',
           file: _idPassportFile,
           url: _idPassportUrl,
-          onPick: (file) => setState(() => _idPassportFile = file),
+          onPick: (file) => _pickFile((p0) => _idPassportFile = p0),
         ),
         _buildFilePickerTile(
           title: 'Latest School Results or Final Grade 12 Results',
           file: _schoolResultsFile,
           url: _schoolResultsUrl,
-          onPick: (file) => setState(() => _schoolResultsFile = file),
-        ),
-        _buildFilePickerTile(
-          title: 'Passport-sized Photo',
-          file: _passportPhotoFile,
-          url: _passportPhotoUrl,
-          onPick: (file) =>
-              _pickImage(ImageSource.gallery, (p0) => _passportPhotoFile = p0),
+          onPick: (file) => _pickFile((p0) => _schoolResultsFile = p0),
         ),
         _buildFilePickerTile(
           title: 'Proof of Registration (if transferring)',
           file: _proofOfRegistrationFile,
           url: null,
-          onPick: (file) => setState(() => _proofOfRegistrationFile = file),
+          onPick: (file) => _pickFile((p0) => _proofOfRegistrationFile = p0),
           isOptional: true,
         ),
         _buildMultipleFilePickerTile(
@@ -1108,7 +1121,7 @@ class _UniversityApplicationScreenState
 
     final Widget programSelectionCard = _buildCardSection(
       title: '4. Program Selection',
-      color: color,
+      color: color.scaffoldBackgroundColor,
       children: [
         _buildExpansionTile(
           title: 'Primary Course/Program',
@@ -1116,75 +1129,83 @@ class _UniversityApplicationScreenState
           currentValue: _primaryProgram,
         ),
         if (_primaryProgram == 'Other')
-          _buildCupertinoTextField(
+          _buildPlatformTextField(
             controller: _otherPrimaryProgramController,
             placeholder: 'Enter Primary Course Name',
-            prefixIcon: CupertinoIcons.text_cursor,
+            icon: isIOSPlatform
+                ? CupertinoIcons.text_cursor
+                : Icons.text_fields,
           ),
-
         _buildExpansionTile(
           title: 'Second Choice of Course (Optional)',
           children: [_buildProgramDropdown('second')],
           currentValue: _secondChoiceProgram,
         ),
         if (_secondChoiceProgram == 'Other')
-          _buildCupertinoTextField(
+          _buildPlatformTextField(
             controller: _otherSecondChoiceProgramController,
             placeholder: 'Enter Second Choice Course Name',
-            prefixIcon: CupertinoIcons.text_cursor,
+            icon: isIOSPlatform
+                ? CupertinoIcons.text_cursor
+                : Icons.text_fields,
           ),
-
         _buildExpansionTile(
           title: 'Third Choice of Course (Optional)',
           children: [_buildProgramDropdown('third')],
           currentValue: _thirdChoiceProgram,
         ),
         if (_thirdChoiceProgram == 'Other')
-          _buildCupertinoTextField(
+          _buildPlatformTextField(
             controller: _otherThirdChoiceProgramController,
             placeholder: 'Enter Third Choice Course Name',
-            prefixIcon: CupertinoIcons.text_cursor,
+            icon: isIOSPlatform
+                ? CupertinoIcons.text_cursor
+                : Icons.text_fields,
           ),
       ],
     );
 
     final Widget financialDetailsCard = _buildCardSection(
       title: '5. Financial & Residence Details',
-      color: color,
+      color: color.scaffoldBackgroundColor,
       children: [
-        CupertinoListTile(
+        ListTile(
           title: const Text('Applying for Residence?'),
-          trailing: CupertinoSwitch(
+          trailing: Switch.adaptive(
             value: _applyingForResidence,
             onChanged: (bool value) =>
                 setState(() => _applyingForResidence = value),
+            activeColor: color.primaryColor,
           ),
         ),
-        CupertinoListTile(
+        ListTile(
           title: const Text('Applying for Funding/Bursary?'),
-          trailing: CupertinoSwitch(
+          trailing: Switch.adaptive(
             value: _applyingForFunding,
             onChanged: (bool value) =>
                 setState(() => _applyingForFunding = value),
+            activeColor: color.primaryColor,
           ),
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _parent1NameController,
           placeholder: 'Parent/Guardian 1 Full Name',
-          prefixIcon: CupertinoIcons.person_solid,
+          icon: isIOSPlatform ? CupertinoIcons.person_solid : Icons.person,
           readOnly: !canEditForm,
         ),
-        _buildCupertinoTextField(
+        _buildPlatformTextField(
           controller: _parent1OccupationController,
           placeholder: 'Parent/Guardian 1 Occupation',
-          prefixIcon: CupertinoIcons.bag_fill,
+          icon: isIOSPlatform ? CupertinoIcons.bag_fill : Icons.work,
           readOnly: !canEditForm,
         ),
         if (_applyingForFunding)
-          _buildCupertinoTextField(
+          _buildPlatformTextField(
             controller: _parent1IncomeController,
             placeholder: 'Parent/Guardian 1 Annual Income',
-            prefixIcon: CupertinoIcons.money_dollar_circle_fill,
+            icon: isIOSPlatform
+                ? CupertinoIcons.money_dollar_circle_fill
+                : Icons.attach_money,
             keyboardType: TextInputType.number,
             readOnly: !canEditForm,
           ),
@@ -1192,21 +1213,48 @@ class _UniversityApplicationScreenState
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          children: [
-            const Text('New University Application at'),
-            Text(widget.selectedCampus?['campusName'] ?? 'Selected Campus'),
-          ],
-        ),
-        backgroundColor: color.primaryColor,
-        foregroundColor: color.scaffoldBackgroundColor,
-      ),
+      appBar: isIOSPlatform
+          ? CupertinoNavigationBar(
+                  middle: Column(
+                    children: [
+                      const Text(
+                        'New University Application at',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      Text(
+                        widget.selectedCampus?['campusName'] ??
+                            'Selected Campus',
+                      ),
+                    ],
+                  ),
+                  backgroundColor: color.primaryColor,
+                )
+                as PreferredSizeWidget
+          : AppBar(
+              title: Column(
+                children: [
+                  const Text(
+                    'New University Application at',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  Text(
+                    widget.selectedCampus?['campusName'] ?? 'Selected Campus',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+              backgroundColor: color.primaryColor,
+              foregroundColor: color.scaffoldBackgroundColor,
+            ),
       body: Center(
         child: Container(
           constraints: BoxConstraints(maxWidth: constrainedWidth),
           child: _isLoadingAuth
-              ? const Center(child: CupertinoActivityIndicator())
+              ? Center(
+                  child: isIOSPlatform
+                      ? const CupertinoActivityIndicator()
+                      : const CircularProgressIndicator(),
+                )
               : _isLoggedIn
               ? _hasExistingApplication
                     ? Center(
@@ -1216,9 +1264,11 @@ class _UniversityApplicationScreenState
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                CupertinoIcons.check_mark_circled_solid,
+                                isIOSPlatform
+                                    ? CupertinoIcons.check_mark_circled_solid
+                                    : Icons.check_circle,
                                 size: 80,
-                                color: CupertinoColors.activeGreen,
+                                color: Colors.green,
                               ),
                               SizedBox(height: 20),
                               Text(
@@ -1226,13 +1276,15 @@ class _UniversityApplicationScreenState
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 18,
-                                  color: color.textTheme.bodyLarge?.color,
+                                  color: color.cardColor,
                                 ),
                               ),
                               const SizedBox(height: 20),
-                              CupertinoButton.filled(
+                              _buildPlatformButton(
                                 onPressed: _showApplicationDetailsSheet,
-                                child: const Text('View My Application'),
+                                text: 'View My Application',
+                                backgroundColor: color.primaryColor,
+                                foregroundColor: color.cardColor,
                               ),
                             ],
                           ),
@@ -1245,13 +1297,12 @@ class _UniversityApplicationScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // FIX: Responsive Layout Switch
+                              // Responsive Layout Switch
                               isDesktop
                                   ? Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        // Left Column: Personal & Academic
                                         Expanded(
                                           child: Column(
                                             children: [
@@ -1261,7 +1312,6 @@ class _UniversityApplicationScreenState
                                           ),
                                         ),
                                         SizedBox(width: 16),
-                                        // Right Column: Documents, Program, Financial
                                         Expanded(
                                           child: Column(
                                             children: [
@@ -1273,7 +1323,6 @@ class _UniversityApplicationScreenState
                                         ),
                                       ],
                                     )
-                                  // Mobile/Default Vertical Layout
                                   : Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -1287,14 +1336,11 @@ class _UniversityApplicationScreenState
                                     ),
 
                               const SizedBox(height: 20),
-
-                              // Submit Button
-                              CustomOutlinedButton(
+                              _buildPlatformButton(
                                 onPressed: _submitApplication,
                                 text: 'Submit Application',
                                 backgroundColor: color.primaryColor,
-                                foregroundColor: color.scaffoldBackgroundColor,
-                                width: double.infinity,
+                                foregroundColor: color.cardColor,
                               ),
                               const SizedBox(height: 40),
                             ],
@@ -1313,9 +1359,11 @@ class _UniversityApplicationScreenState
                           style: TextStyle(fontSize: 18),
                         ),
                         const SizedBox(height: 20),
-                        CupertinoButton.filled(
+                        _buildPlatformButton(
                           onPressed: _showLoginBottomSheet,
-                          child: const Text('Login'),
+                          text: 'Login',
+                          backgroundColor: color.primaryColor,
+                          foregroundColor: color.cardColor,
                         ),
                       ],
                     ),

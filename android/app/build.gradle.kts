@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException // Ensure this is imported for safety
 
 fun getKeystoreProperties(key: String): String {
     val keystorePropertiesFile = rootProject.file("key.properties")
@@ -40,13 +41,19 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.0.20"
+        versionCode = 30
+        versionName = "1.0.30"
         
-        // FIXED: Kotlin DSL syntax for manifestPlaceholders
+        // Kotlin DSL syntax for manifestPlaceholders
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
+
+        // 👇 FIXED KOTLIN DSL SYNTAX 👇
+        // abiFilters is a Set in Kotlin DSL, so we use .add()
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
- 
+    
     // --- START: CUSTOM CODE FOR RELEASE SIGNING ---
     signingConfigs {
         create("release") {
@@ -76,6 +83,6 @@ flutter {
 }
 
 dependencies { 
-    // FIXED: Kotlin DSL syntax for dependencies
+    // Kotlin DSL syntax for dependencies
     implementation("com.google.android.gms:play-services-ads:22.6.0")
 }

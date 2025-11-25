@@ -1,22 +1,24 @@
 // ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, use_build_context_synchronously, avoid_print, unused_import, unnecessary_null_comparison
 
-// --- PLATFORM SAFETY IMPORTS ---
 import 'package:flutter/foundation.dart'; // REQUIRED for kIsWeb
-import 'dart:io' as io show File; // Alias dart:io for native File access
-
-// Import necessary core libraries
+import 'dart:io' as io show File;
 import 'dart:async';
+import 'package:flutter/cupertino.dart'; // Import Cupertino
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart'; // XFile support
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:ttact/Components/API.dart';
 
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 700.0;
-// --------------------------
+
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
 
 class PortalAddFeed extends StatefulWidget {
   const PortalAddFeed({super.key});
@@ -27,7 +29,6 @@ class PortalAddFeed extends StatefulWidget {
 
 class _PortalAddFeedState extends State<PortalAddFeed>
     with SingleTickerProviderStateMixin {
-  // Tab Controller
   late TabController _tabController;
   final bool _isWeb = kIsWeb;
 
@@ -35,7 +36,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   DateTime? _selectedDate;
-  // FIX 1: Change File? to XFile? for platform safety
   XFile? _pickedPoster;
   String? _selectedProvince;
 
@@ -44,10 +44,8 @@ class _PortalAddFeedState extends State<PortalAddFeed>
       TextEditingController();
   final TextEditingController _liveStreamLinkController =
       TextEditingController();
-  // FIX 2: Change File? to XFile? for platform safety
   XFile? _editPickedPoster;
 
-  // List of South African Provinces
   final List<String> _southAfricanProvinces = [
     'Eastern Cape',
     'Free State',
@@ -63,6 +61,9 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   List<Map<String, dynamic>> _filteredEvents = [];
   bool _isLoadingEvents = true;
 
+  // Helper to track segmented control index for iOS
+  int _currentSegment = 0;
+
   @override
   void initState() {
     super.initState();
@@ -72,6 +73,9 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   }
 
   void _handleTabSelection() {
+    setState(() {
+      _currentSegment = _tabController.index;
+    });
     if (_tabController.index == 0) {
       _fetchAndFilterEvents();
     }
@@ -88,7 +92,307 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     super.dispose();
   }
 
-  // --- Platform-Safe File Upload Helper ---
+  // --- PLATFORM BUILDER HELPERS ---
+
+  Widget _buildPlatformLoader() {
+    return Center(
+      child: isIOSPlatform
+          ? const CupertinoActivityIndicator()
+          : const CircularProgressIndicator(),
+    );
+  }
+
+  Widget _buildPlatformButton({
+    required VoidCallback onPressed,
+    required String text,
+    required IconData icon,
+    Color? color,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+    if (isIOSPlatform) {
+      return SizedBox(
+        width: double.infinity,
+        child: CupertinoButton.filled(
+          onPressed: onPressed,
+          disabledColor: CupertinoColors.quaternarySystemFill,
+          borderRadius: BorderRadius.circular(10),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          // Use provided color or default primary
+          minSize: 45,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: textColor ?? Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                text,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: textColor ?? Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(text),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 50),
+          backgroundColor: color ?? theme.primaryColor,
+          foregroundColor: textColor ?? Colors.white,
+        ),
+      );
+    }
+  }
+
+  Widget _buildPlatformTextField({
+    required TextEditingController controller,
+    required String label,
+    int maxLines = 1,
+    int? minLines,
+    TextInputType keyboardType = TextInputType.text,
+    IconData? prefixIcon,
+  }) {
+    if (isIOSPlatform) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: CupertinoColors.systemGrey,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          CupertinoTextField(
+            controller: controller,
+            placeholder: 'Enter $label',
+            maxLines: maxLines,
+            minLines: minLines,
+            keyboardType: keyboardType,
+            padding: const EdgeInsets.all(12),
+            prefix: prefixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+                  )
+                : null,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ],
+      );
+    } else {
+      return TextField(
+        controller: controller,
+        maxLines: maxLines,
+        minLines: minLines,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+          border: OutlineInputBorder(),
+          alignLabelWithHint: maxLines > 1,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleDateSelection() async {
+    final now = DateTime.now();
+    if (isIOSPlatform) {
+      showCupertinoModalPopup(
+        context: context,
+        builder: (ctx) => Container(
+          height: 250,
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 180,
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: _selectedDate ?? now,
+                  minimumDate: now,
+                  maximumDate: DateTime(now.year + 5),
+                  onDateTimeChanged: (newDate) {
+                    setState(() => _selectedDate = newDate);
+                  },
+                ),
+              ),
+              CupertinoButton(
+                child: const Text('Done'),
+                onPressed: () => Navigator.pop(ctx),
+              )
+            ],
+          ),
+        ),
+      );
+    } else {
+      final DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: _selectedDate ?? now,
+        firstDate: now,
+        lastDate: DateTime(now.year + 5),
+      );
+      if (picked != null && picked != _selectedDate) {
+        setState(() => _selectedDate = picked);
+      }
+    }
+  }
+
+  Widget _buildPlatformDatePickerSelector() {
+    final text = _selectedDate == null
+        ? 'Select Date'
+        : DateFormat('dd MMM yyyy').format(_selectedDate!);
+    final icon = isIOSPlatform ? CupertinoIcons.calendar : Icons.calendar_today;
+
+    if (isIOSPlatform) {
+      return GestureDetector(
+        onTap: _handleDateSelection,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: CupertinoColors.systemGrey4),
+            borderRadius: BorderRadius.circular(8),
+            color: CupertinoColors.systemBackground,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                text,
+                style: TextStyle(
+                  color: _selectedDate == null
+                      ? CupertinoColors.placeholderText
+                      : CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+              Icon(icon, color: CupertinoColors.systemGrey),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return InkWell(
+        onTap: _handleDateSelection,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Select Date',
+            border: OutlineInputBorder(),
+            suffixIcon: Icon(icon),
+          ),
+          child: Text(
+            text,
+            style: _selectedDate == null
+                ? const TextStyle(color: Colors.grey)
+                : null,
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildPlatformDropdown() {
+    if (isIOSPlatform) {
+      return GestureDetector(
+        onTap: () {
+          showCupertinoModalPopup(
+            context: context,
+            builder: (ctx) => Container(
+              height: 250,
+              color: CupertinoColors.systemBackground.resolveFrom(context),
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 180,
+                    child: CupertinoPicker(
+                      itemExtent: 32,
+                      onSelectedItemChanged: (int index) {
+                        setState(() {
+                          _selectedProvince = _southAfricanProvinces[index];
+                        });
+                      },
+                      children: _southAfricanProvinces
+                          .map((e) => Center(child: Text(e)))
+                          .toList(),
+                    ),
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () => Navigator.pop(ctx),
+                  )
+                ],
+              ),
+            ),
+          );
+          // Set default if null when opening
+          if (_selectedProvince == null) {
+            setState(() {
+              _selectedProvince = _southAfricanProvinces[0];
+            });
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: CupertinoColors.systemGrey4),
+            borderRadius: BorderRadius.circular(8),
+            color: CupertinoColors.systemBackground,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _selectedProvince ?? 'Select Province',
+                style: TextStyle(
+                  color: _selectedProvince == null
+                      ? CupertinoColors.placeholderText
+                      : CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+              const Icon(CupertinoIcons.chevron_down,
+                  size: 16, color: CupertinoColors.systemGrey),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return DropdownButtonFormField<String>(
+        value: _selectedProvince,
+        decoration: const InputDecoration(
+          labelText: 'Province',
+          border: OutlineInputBorder(),
+        ),
+        hint: const Text('Select Province'),
+        items: _southAfricanProvinces
+            .map(
+              (String province) => DropdownMenuItem<String>(
+                value: province,
+                child: Text(province),
+              ),
+            )
+            .toList(),
+        onChanged: (String? newValue) =>
+            setState(() => _selectedProvince = newValue),
+      );
+    }
+  }
+
+  // --- CORE FUNCTIONALITY (Unchanged Logic) ---
+
   Future<String> _uploadFile(XFile file, String path) async {
     final ref = FirebaseStorage.instance.ref(path);
     UploadTask uploadTask;
@@ -100,15 +404,12 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         SettableMetadata(contentType: 'image/jpeg'),
       );
     } else {
-      // Native: Use dart:io.File
       uploadTask = ref.putFile(io.File(file.path));
     }
 
     final snapshot = await uploadTask;
     return await snapshot.ref.getDownloadURL();
   }
-
-  // --- Firestore Operations (Simplified) ---
 
   Future<void> _fetchAndFilterEvents() async {
     setState(() {
@@ -188,10 +489,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
       if (_pickedPoster != null) {
         final String fileName =
             'event_posters/${DateTime.now().millisecondsSinceEpoch}_${_titleController.text.replaceAll(' ', '_')}.jpg';
-        posterUrl = await _uploadFile(
-          _pickedPoster!,
-          fileName,
-        ); // Use platform-safe upload
+        posterUrl = await _uploadFile(_pickedPoster!, fileName);
       }
 
       await FirebaseFirestore.instance.collection('upcoming_events').add({
@@ -207,7 +505,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      Navigator.pop(context); // Pop loading dialog
+      Navigator.pop(context);
       Api().showMessage(
         context,
         "Event added successfully!",
@@ -215,7 +513,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         Theme.of(context).splashColor,
       );
 
-      // Clear form fields
       _titleController.clear();
       _descriptionController.clear();
       setState(() {
@@ -224,12 +521,17 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         _selectedProvince = null;
       });
 
-      _tabController.animateTo(
-        0,
-      ); // Switch to Upcoming Events tab to see the new event
+      // Platform aware tab switching
+      if (isIOSPlatform) {
+        setState(() {
+          _currentSegment = 0;
+        });
+        _tabController.animateTo(0);
+      } else {
+        _tabController.animateTo(0);
+      }
     } catch (e) {
-      print('Error adding event: $e');
-      Navigator.pop(context); // Pop loading dialog
+      Navigator.pop(context);
       Api().showMessage(
         context,
         "Failed to add event: ${e.toString()}",
@@ -239,12 +541,11 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     }
   }
 
-  // --- NEW: Update Event Details ---
   Future<void> _updateEventDetails({
     required String documentId,
     required String newDescription,
     required String newLink,
-    required XFile? newPosterFile, // Use XFile?
+    required XFile? newPosterFile,
     required String? currentPosterUrl,
   }) async {
     Api().showLoading(context);
@@ -252,16 +553,11 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     try {
       String updatedPosterUrl = currentPosterUrl ?? '';
 
-      // 1. Handle Poster Upload/Update
       if (newPosterFile != null) {
         final String fileName =
             'event_posters/${documentId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        updatedPosterUrl = await _uploadFile(
-          newPosterFile,
-          fileName,
-        ); // Use platform-safe upload
+        updatedPosterUrl = await _uploadFile(newPosterFile, fileName);
 
-        // 2. Delete old poster from storage
         if (currentPosterUrl != null && currentPosterUrl.isNotEmpty) {
           try {
             await FirebaseStorage.instance
@@ -273,7 +569,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         }
       }
 
-      // 3. Update Firestore Document
       await FirebaseFirestore.instance
           .collection('upcoming_events')
           .doc(documentId)
@@ -284,8 +579,8 @@ class _PortalAddFeedState extends State<PortalAddFeed>
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-      Navigator.pop(context); // Pop loading dialog
-      Navigator.pop(context); // Pop the bottom sheet
+      Navigator.pop(context);
+      Navigator.pop(context);
 
       Api().showMessage(
         context,
@@ -294,10 +589,9 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         Theme.of(context).splashColor,
       );
 
-      _fetchAndFilterEvents(); // Refresh the list
+      _fetchAndFilterEvents();
     } catch (e) {
-      print('Error updating event: $e');
-      Navigator.pop(context); // Pop loading dialog
+      Navigator.pop(context);
       Api().showMessage(
         context,
         "Failed to update event: ${e.toString()}",
@@ -307,27 +601,25 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     }
   }
 
-  // --- NEW: Edit Event Bottom Sheet UI ---
+  // --- EDIT SHEET (Adaptive) ---
   void _showEditEventSheet(Map<String, dynamic> event) {
     final String documentId = event['id'] as String;
     final String currentPosterUrl = event['posterUrl'] as String? ?? '';
     final String currentTitle = event['title'] as String? ?? 'N/A';
 
-    // Initialize controllers with current values
     _editDescriptionController.text = event['description'] as String? ?? '';
     _liveStreamLinkController.text = event['liveStreamLink'] as String? ?? '';
-    _editPickedPoster = null; // Clear local picked file before opening
+    _editPickedPoster = null;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: isIOSPlatform ? Colors.transparent : null,
       builder: (context) {
         final color = Theme.of(context);
-        return Center(
+        final childContent = Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 600,
-            ), // Constraint for web/desktop modal
+            constraints: BoxConstraints(maxWidth: 600),
             child: StatefulBuilder(
               builder: (BuildContext context, StateSetter setModalState) {
                 return Padding(
@@ -342,48 +634,55 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Drag handle for iOS style
+                        if (isIOSPlatform)
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              margin: const EdgeInsets.only(bottom: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+
                         Text(
-                          'Edit Details for: ${currentTitle}',
+                          'Edit Details for: $currentTitle',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: color.primaryColor,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                         const Divider(),
                         const SizedBox(height: 16),
 
-                        // Description Update
-                        TextField(
+                        _buildPlatformTextField(
                           controller: _editDescriptionController,
-                          decoration: const InputDecoration(
-                            labelText: 'Update Description',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
+                          label: 'Update Description',
                           maxLines: 5,
                           minLines: 3,
                           keyboardType: TextInputType.multiline,
                         ),
                         const SizedBox(height: 16),
 
-                        // Live Stream Link Update
-                        TextField(
+                        _buildPlatformTextField(
                           controller: _liveStreamLinkController,
-                          decoration: const InputDecoration(
-                            labelText: 'Live Stream/URL Link (Optional)',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.link),
-                          ),
+                          label: 'Live Stream/URL Link (Optional)',
+                          prefixIcon:
+                              isIOSPlatform ? CupertinoIcons.link : Icons.link,
                           keyboardType: TextInputType.url,
                         ),
                         const SizedBox(height: 24),
 
-                        // Poster Management Section
+                        // Poster Management
                         Row(
                           children: [
                             Expanded(
-                              child: ElevatedButton.icon(
+                              child: _buildPlatformButton(
                                 onPressed: () async {
                                   final ImagePicker picker = ImagePicker();
                                   final XFile? image = await picker.pickImage(
@@ -391,41 +690,44 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                                   );
                                   if (image != null) {
                                     setModalState(() {
-                                      _editPickedPoster =
-                                          image; // Store XFile directly
+                                      _editPickedPoster = image;
                                     });
                                   }
                                 },
-                                icon: const Icon(Icons.image),
-                                label: Text(
-                                  _editPickedPoster == null
-                                      ? 'Pick New Poster'
-                                      : 'Poster Selected',
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: color.splashColor,
-                                  foregroundColor: Colors.white,
-                                ),
+                                text: _editPickedPoster == null
+                                    ? 'Pick New Poster'
+                                    : 'Poster Selected',
+                                icon: isIOSPlatform
+                                    ? CupertinoIcons.photo
+                                    : Icons.image,
+                                color: color.splashColor,
                               ),
                             ),
                             if (currentPosterUrl.isNotEmpty ||
                                 _editPickedPoster != null) ...[
                               const SizedBox(width: 8),
-                              TextButton(
-                                onPressed: () {
-                                  setModalState(() {
-                                    _editPickedPoster = null;
-                                  });
-                                  // NOTE: Old URL deletion happens in the _updateEventDetails function only if a *new* file is selected.
-                                },
-                                child: const Text('Clear New Pick'),
-                              ),
+                              isIOSPlatform
+                                  ? CupertinoButton(
+                                      child: const Text('Clear'),
+                                      onPressed: () {
+                                        setModalState(() {
+                                          _editPickedPoster = null;
+                                        });
+                                      },
+                                    )
+                                  : TextButton(
+                                      onPressed: () {
+                                        setModalState(() {
+                                          _editPickedPoster = null;
+                                        });
+                                      },
+                                      child: const Text('Clear New Pick'),
+                                    ),
                             ],
                           ],
                         ),
 
                         const SizedBox(height: 16),
-                        // Display Current or New Poster
                         if (_editPickedPoster != null)
                           _buildImagePreview(
                             _editPickedPoster!,
@@ -436,8 +738,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                           _buildNetworkImagePreview(currentPosterUrl),
                         const SizedBox(height: 24),
 
-                        // Update Button
-                        ElevatedButton.icon(
+                        _buildPlatformButton(
                           onPressed: () {
                             if (_editDescriptionController.text.isEmpty) {
                               Api().showMessage(
@@ -456,19 +757,22 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                               currentPosterUrl: currentPosterUrl,
                             );
                           },
-                          icon: const Icon(Icons.save),
-                          label: const Text('Save Updates'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            backgroundColor: Theme.of(context).primaryColor,
-                            foregroundColor: Colors.white,
-                          ),
+                          text: 'Save Updates',
+                          icon: isIOSPlatform
+                              ? CupertinoIcons.floppy_disk
+                              : Icons.save,
                         ),
                         const SizedBox(height: 8),
-                        OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
-                        ),
+                        if (isIOSPlatform)
+                          CupertinoButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          )
+                        else
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
                       ],
                     ),
                   ),
@@ -477,32 +781,41 @@ class _PortalAddFeedState extends State<PortalAddFeed>
             ),
           ),
         );
+
+        if (isIOSPlatform) {
+          return Container(
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground.resolveFrom(context),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+            ),
+            child: childContent,
+          );
+        } else {
+          return childContent;
+        }
       },
     );
   }
 
-  // Helper widget for platform-safe image preview (newly picked file)
   Widget _buildImagePreview(
     XFile file,
     double height,
     StateSetter setModalState,
   ) {
     if (_isWeb) {
-      // Web preview: Cannot use io.File. Must use asset/network methods.
-      // Since it's a recently picked file, we display a placeholder.
       return Container(
         height: height,
         color: Colors.grey.shade200,
-        child: Center(
+        child: const Center(
           child: Text(
-            "Image Ready for Upload (Web Preview Unavailable)",
+            "Image Ready (Web Preview Unavailable)",
             style: TextStyle(color: Colors.grey),
           ),
         ),
       );
     }
-
-    // Native preview: Use io.File
     return ClipRRect(
       borderRadius: BorderRadius.circular(8.0),
       child: Image.file(
@@ -514,7 +827,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     );
   }
 
-  // Helper widget for network image preview (current poster)
   Widget _buildNetworkImagePreview(String url) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8.0),
@@ -546,14 +858,12 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     );
   }
 
-  // --- UI Widgets ---
-
   Widget _buildUpcomingEventsTab() {
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
         child: _isLoadingEvents
-            ? const Center(child: CircularProgressIndicator())
+            ? _buildPlatformLoader()
             : _filteredEvents.isEmpty
             ? const Center(child: Text('No upcoming events found.'))
             : ListView.builder(
@@ -598,15 +908,18 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                                 color: Colors.black87,
                               ),
                             ),
-
-                            // Live Link Indicator
                             if (event['liveStreamLink'] != null &&
                                 (event['liveStreamLink'] as String)
                                     .isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  const Icon(Icons.link, size: 16),
+                                  Icon(
+                                    isIOSPlatform
+                                        ? CupertinoIcons.link
+                                        : Icons.link,
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -622,12 +935,15 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                                 ],
                               ),
                             ],
-
-                            // Date and Location
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                const Icon(Icons.calendar_today, size: 16),
+                                Icon(
+                                  isIOSPlatform
+                                      ? CupertinoIcons.calendar
+                                      : Icons.calendar_today,
+                                  size: 16,
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   dayMonthYear.isNotEmpty
@@ -645,7 +961,12 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  const Icon(Icons.location_on, size: 16),
+                                  Icon(
+                                    isIOSPlatform
+                                        ? CupertinoIcons.location_solid
+                                        : Icons.location_on,
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     event['province'] as String,
@@ -657,8 +978,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                                 ],
                               ),
                             ],
-
-                            // Poster Preview
                             if (posterUrl != null && posterUrl.isNotEmpty) ...[
                               const SizedBox(height: 12),
                               _buildNetworkImagePreview(posterUrl),
@@ -701,80 +1020,33 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).primaryColor,
+                  decoration: TextDecoration.none,
                 ),
               ),
-              Divider(height: 20),
-              TextField(
+              const Divider(height: 20),
+              _buildPlatformTextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Event Name',
-                  border: OutlineInputBorder(),
-                ),
+                label: 'Event Name',
               ),
               const SizedBox(height: 16),
-              TextField(
+              _buildPlatformTextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
+                label: 'Description',
                 maxLines: 5,
                 minLines: 3,
                 keyboardType: TextInputType.multiline,
               ),
               const SizedBox(height: 16),
-              // Date Picker
-              InkWell(
-                onTap: () async {
-                  final DateTime? picked = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate ?? DateTime.now(),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(DateTime.now().year + 5),
-                  );
-                  if (picked != null && picked != _selectedDate)
-                    setState(() => _selectedDate = picked);
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Select Date',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  child: Text(
-                    _selectedDate == null
-                        ? 'No date selected'
-                        : DateFormat('dd MMM yyyy').format(_selectedDate!),
-                    style: _selectedDate == null
-                        ? const TextStyle(color: Colors.grey)
-                        : null,
-                  ),
-                ),
-              ),
+              // Platform Adaptive Date Picker
+              _buildPlatformDatePickerSelector(),
+
               const SizedBox(height: 16),
-              // Province Dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedProvince,
-                decoration: const InputDecoration(
-                  labelText: 'Province',
-                  border: OutlineInputBorder(),
-                ),
-                hint: const Text('Select Province'),
-                items: _southAfricanProvinces
-                    .map(
-                      (String province) => DropdownMenuItem<String>(
-                        value: province,
-                        child: Text(province),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (String? newValue) =>
-                    setState(() => _selectedProvince = newValue),
-              ),
+              // Platform Adaptive Dropdown
+              _buildPlatformDropdown(),
+
               const SizedBox(height: 16),
-              // Poster Upload
-              ElevatedButton.icon(
+              // Platform Adaptive Poster Button
+              _buildPlatformButton(
                 onPressed: () async {
                   final ImagePicker picker = ImagePicker();
                   final XFile? image = await picker.pickImage(
@@ -782,36 +1054,34 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                   );
                   if (image != null) setState(() => _pickedPoster = image);
                 },
-                icon: const Icon(Icons.image),
-                label: Text(
-                  _pickedPoster == null
-                      ? 'Pick Poster (Optional)'
-                      : 'Poster Selected',
-                ),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                ),
+                text: _pickedPoster == null
+                    ? 'Pick Poster (Optional)'
+                    : 'Poster Selected',
+                icon: isIOSPlatform ? CupertinoIcons.photo : Icons.image,
+                color: Theme.of(context).scaffoldBackgroundColor,
+                textColor: Theme.of(context).primaryColor,
               ),
+
               if (_pickedPoster != null) ...[
                 const SizedBox(height: 10),
-                // PLATFORM-SAFE Image Preview
                 _buildImagePreview(_pickedPoster!, 150, (_) {}),
                 const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () => setState(() => _pickedPoster = null),
-                  child: const Text('Remove Poster'),
-                ),
+                if (isIOSPlatform)
+                  CupertinoButton(
+                    onPressed: () => setState(() => _pickedPoster = null),
+                    child: const Text('Remove Poster'),
+                  )
+                else
+                  TextButton(
+                    onPressed: () => setState(() => _pickedPoster = null),
+                    child: const Text('Remove Poster'),
+                  ),
               ],
               const SizedBox(height: 24),
-              ElevatedButton.icon(
+              _buildPlatformButton(
                 onPressed: _addEvent,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Event'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                ),
+                text: 'Add Event',
+                icon: isIOSPlatform ? CupertinoIcons.add : Icons.add,
               ),
               const SizedBox(height: 40),
             ],
@@ -823,34 +1093,76 @@ class _PortalAddFeedState extends State<PortalAddFeed>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Upcoming Events', icon: Icon(Icons.event)),
-            Tab(text: 'Add Event', icon: Icon(Icons.add_circle)),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
+    // iOS uses Segmented Control instead of TabBar for better UX
+    if (isIOSPlatform) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: CupertinoSegmentedControl<int>(
+                children: {
+                  0: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("Upcoming Events"),
+                  ),
+                  1: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("Add Event"),
+                  ),
+                },
+                onValueChanged: (int val) {
+                  setState(() {
+                    _currentSegment = val;
+                    _tabController.animateTo(val);
+                  });
+                  if (val == 0) _fetchAndFilterEvents();
+                },
+                groupValue: _currentSegment,
+                // Using system colors for native look
+                borderColor: Theme.of(context).primaryColor,
+                selectedColor: Theme.of(context).primaryColor,
+                pressedColor:
+                    Theme.of(context).primaryColor.withOpacity(0.2),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _currentSegment == 0
+                ? _buildUpcomingEventsTab()
+                : _buildAddEventTab(),
+          ),
+        ],
+      );
+    } else {
+      // Android / Web / Windows Standard TabBar
+      return Column(
+        children: [
+          TabBar(
             controller: _tabController,
-            children: [
-              _buildUpcomingEventsTab(), // Content for "Upcoming Events"
-              _buildAddEventTab(), // Content for "Add Event"
+            tabs: const [
+              Tab(text: 'Upcoming Events', icon: Icon(Icons.event)),
+              Tab(text: 'Add Event', icon: Icon(Icons.add_circle)),
             ],
           ),
-        ),
-      ],
-    );
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildUpcomingEventsTab(),
+                _buildAddEventTab(),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
   }
-
-  // --- Helper Functions for Date Parsing and Filtering (Kept original logic) ---
 
   static DateTime? _parseEventStartDate(Map<String, dynamic> event) {
     final now = DateTime.now();
     final currentYear = now.year;
-
     String? dayPart = event['day'];
     String? monthPart = event['month'];
 

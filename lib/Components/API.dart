@@ -8,6 +8,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 
@@ -29,6 +31,27 @@ import 'package:ttact/Components/song.dart';
 import 'CustomOutlinedButton.dart';
 
 class Api {
+  // --- PLATFORM UTILITIES ---
+  bool get isMobileNative =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  // UPDATED: This logic now checks the OS, even on the web.
+  bool get isIOSPlatform {
+    // Checks for iOS or macOS (which iPads/Macs report in browsers)
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
+  // UPDATED: This logic now checks the OS, even on the web.
+  bool get isAndroidPlatform {
+    // Checks for Android, Linux, or Fuchsia to default to Material style.
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.fuchsia;
+  }
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -421,9 +444,21 @@ class Api {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
 
       builder: (context) =>
           Center(child: CircularProgressIndicator(color: color.primaryColor)),
+    );
+  }
+
+  void showIosLoading(BuildContext context) {
+    final color = Theme.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          Center(child: CupertinoActivityIndicator(color: color.primaryColor)),
     );
   }
 

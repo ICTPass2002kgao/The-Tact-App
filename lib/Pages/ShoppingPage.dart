@@ -1,6 +1,8 @@
 // ignore_for_file: prefer_const_constructors, sized_box_for_whitespace, prefer_const_literals_to_create_immutables
 
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:badges/badges.dart' as badges;
@@ -18,6 +20,21 @@ const double _desktopBreakpoint = 1000.0;
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= _desktopBreakpoint;
 // --------------------------
+
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
+// ------------------------
 
 class CartHelper {
   static const String _cartKey = 'cart';
@@ -421,7 +438,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
                       _currentUserId == product['sellerId'];
 
                   // Highlight selected product on desktop
-                  final bool isSelected = isDesktop &&
+                  final bool isSelected =
+                      isDesktop &&
                       _selectedProductDetails?['productId'] ==
                           product['productId'] &&
                       _selectedProductDetails?['sellerId'] ==
@@ -524,8 +542,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
     final int desktopCrossAxisCount = _isDetailsPanelVisible
         ? 3
         : 4; // Grid shrinks when panel is visible
-    final int crossAxisCount =
-        isDesktop ? desktopCrossAxisCount : baseCrossAxisCount;
+    final int crossAxisCount = isDesktop
+        ? desktopCrossAxisCount
+        : baseCrossAxisCount;
 
     // Calculate widths
     final double horizontalPadding = isDesktop ? 20.0 : 10.0;
@@ -555,116 +574,16 @@ class _ShoppingPageState extends State<ShoppingPage> {
         (availableWidth - ((crossAxisCount - 1) * spacing));
     final double cardWidth =
         calculatedCardWidth.isFinite && calculatedCardWidth > 0
-            ? calculatedCardWidth / crossAxisCount
-            : (screenWidth / crossAxisCount) - spacing;
+        ? calculatedCardWidth / crossAxisCount
+        : (screenWidth / crossAxisCount) - spacing;
 
     Widget content;
 
     if (_isLoading) {
       // Shimmer Loading (Always top-aligned)
-      content = Align(
-        alignment: Alignment.topCenter,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Shimmer.fromColors(
-            baseColor: theme.scaffoldBackgroundColor
-                .withOpacity(0.7)
-                .withOpacity(
-                  0.3,
-                ), // Using scaffoldBackgroundColor.withOpacity(0.7) for shimmer
-            highlightColor: theme.scaffoldBackgroundColor
-                .withOpacity(0.7)
-                .withOpacity(0.1),
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(horizontalPadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Shimmer for Search/Tabs/Filter
-                  Container(
-                    height: 40,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: theme.scaffoldBackgroundColor.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    margin: const EdgeInsets.only(bottom: 10),
-                  ),
-                  Container(
-                    height: 40,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: theme.scaffoldBackgroundColor.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    margin: const EdgeInsets.only(bottom: 20),
-                  ),
-                  Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    alignment: WrapAlignment.start,
-                    children: List.generate(
-                      8,
-                      (index) => SizedBox(
-                        width: cardWidth,
-                        child: Card(
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                height: 200,
-                                decoration: BoxDecoration(
-                                  color: theme.scaffoldBackgroundColor
-                                      .withOpacity(0.7),
-                                  borderRadius: BorderRadius.vertical(
-                                    top: Radius.circular(10),
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      height: 14,
-                                      width: double.infinity,
-                                      color: theme.scaffoldBackgroundColor
-                                          .withOpacity(0.7),
-                                      margin: const EdgeInsets.only(bottom: 5),
-                                    ),
-                                    Container(
-                                      height: 12,
-                                      width: 80,
-                                      color: theme.scaffoldBackgroundColor
-                                          .withOpacity(0.7),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Container(
-                                      height: 16,
-                                      width: 100,
-                                      color: theme.scaffoldBackgroundColor
-                                          .withOpacity(0.7),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      isIOSPlatform
+          ? content = Center(child: CupertinoActivityIndicator())
+          : content = Center(child: CircularProgressIndicator());
     } else if (products.isEmpty) {
       // Empty state (centered for full-screen impact)
       content = Center(

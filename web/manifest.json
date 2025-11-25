@@ -1,11 +1,11 @@
 {
-    "name": "ttact",
-    "short_name": "ttact",
+    "name": "Dankie",
+    "short_name": "Dankie",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#hexcode",
-    "theme_color": "#hexcode",
-    "description": "A new Flutter project.",
+    "theme_color": "#007BFF", 
+    "background_color": "#FFFFFF",
+    "description": "The TACT church system for members to sell and buy products and services and listen to music.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

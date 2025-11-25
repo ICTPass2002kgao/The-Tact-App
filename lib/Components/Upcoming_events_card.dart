@@ -1,6 +1,31 @@
-// ... previous code
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print, use_key_in_widget_constructors
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/CustomOutlinedButton.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+// --- PLATFORM IMPORTS ---
+import 'package:flutter/foundation.dart'; // For kIsWeb and defaultTargetPlatform
+import 'package:flutter/cupertino.dart'; // For Cupertino widgets
+
+// --- PLATFORM UTILITIES ---
+// This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
+// ------------------------
 
 class UpcomingEventsCard extends StatelessWidget {
   final String date;
@@ -38,7 +63,7 @@ class UpcomingEventsCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: color.scaffoldBackgroundColor,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: color.primaryColor, width: 0.5),
+                      border: Border.all(color: color.primaryColor, width: 2),
                     ),
                     child: Center(
                       child: Padding(
@@ -46,14 +71,16 @@ class UpcomingEventsCard extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              date,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: color.primaryColor,
+                            Expanded(
+                              child: Text(
+                                date,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: color.primaryColor,
+                                ),
                               ),
                             ),
                             Text(
@@ -85,7 +112,7 @@ class UpcomingEventsCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(15),
                         border: Border.all(
                           color: color.primaryColor,
-                          width: 0.5,
+                          width: 1.5,
                         ),
                       ),
                       child: Padding(
@@ -104,15 +131,17 @@ class UpcomingEventsCard extends StatelessWidget {
                               ),
                             ),
                             SizedBox(height: 5),
-                            Text(
-                              eventDescription,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w300,
-                                fontStyle: FontStyle.italic,
-                                color: color.primaryColor.withOpacity(0.6),
+                            Expanded(
+                              child: Text(
+                                eventDescription,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w300,
+                                  fontStyle: FontStyle.italic,
+                                  color: color.primaryColor.withOpacity(0.6),
+                                ),
                               ),
                             ),
                           ],
@@ -123,26 +152,36 @@ class UpcomingEventsCard extends StatelessWidget {
                 ),
 
                 if (posterUrl != null)
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: color.primaryColor, width: 2),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Image.network(
-                        posterUrl!,
-                        width: 68,
-                        height: 68,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 70,
-                            height: 70,
-                            color: Colors.grey[300],
-                            child: Icon(Icons.error, color: Colors.grey),
-                          );
-                        },
+                  Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: color.primaryColor, width: 2),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Image.network(
+                          posterUrl!,
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 70,
+                              height: 70,
+                              color: Colors.grey[300],
+                              // --- PLATFORM AWARE ICON ---
+                              child: Icon(
+                                isIOSPlatform
+                                    ? CupertinoIcons.exclamationmark_circle
+                                    : Icons.error,
+                                color: Colors.grey,
+                              ),
+                              // --- END PLATFORM AWARE ICON ---
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),

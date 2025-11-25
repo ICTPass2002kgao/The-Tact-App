@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 800.0;
 bool isLargeScreen(BuildContext context) =>
-    MediaQuery.of(context).size.width >= 800; 
+    MediaQuery.of(context).size.width >= 800;
 // --------------------------
 
 class EventsPage extends StatefulWidget {
@@ -118,7 +118,7 @@ class _EventsPageState extends State<EventsPage> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(1.0),
           child: Text(
             'Organizational Calendar',
             style: TextStyle(
@@ -141,7 +141,9 @@ class _EventsPageState extends State<EventsPage> {
 
                   bool isPast = eventDate != null && eventDate.isBefore(now);
                   bool isNextUpcoming = index == firstUpcomingIndex;
-                  bool isConfirmed = event['day']?.toLowerCase().contains('to be confirmed') == false;
+                  bool isConfirmed =
+                      event['day']?.toLowerCase().contains('to be confirmed') ==
+                      false;
 
                   Color highlightColor;
                   IconData icon;
@@ -159,7 +161,9 @@ class _EventsPageState extends State<EventsPage> {
                     iconColor = Colors.red;
                     cardElevation = 0;
                   } else if (isNextUpcoming) {
-                    highlightColor = color.splashColor.withOpacity(0.2); // Brighter highlight
+                    highlightColor = color.splashColor.withOpacity(
+                      0.2,
+                    ); // Brighter highlight
                     icon = Icons.star;
                     iconColor = color.splashColor;
                     cardElevation = 8; // Higher elevation for focus
@@ -176,18 +180,24 @@ class _EventsPageState extends State<EventsPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                            color: isNextUpcoming ? color.primaryColor : Colors.transparent, 
+                            color: isNextUpcoming
+                                ? color.primaryColor
+                                : Colors.transparent,
                             width: isNextUpcoming ? 2 : 0,
                           ),
                         ),
                         elevation: cardElevation,
                         color: color.scaffoldBackgroundColor,
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         child: UpcomingEventsCard(
                           date: event['day'] ?? '',
                           eventMonth: event['month'] ?? '',
                           eventTitle: event['title'] ?? '',
-                          eventDescription: 'Details for ${event['title'] ?? ''}',
+                          eventDescription:
+                              'Details for ${event['title'] ?? ''}',
                           highlightColor: highlightColor,
                         ),
                       ),

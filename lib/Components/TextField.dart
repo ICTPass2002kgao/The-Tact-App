@@ -25,7 +25,7 @@ class AuthTextField extends StatelessWidget {
     final color = Theme.of(context);
 
     // Determine the text color for inside the field (should contrast with fillColor)
-    final inputTextColor = color.scaffoldBackgroundColor;
+    final inputTextColor = Colors.white;
 
     // Determine the icon/hint text color (should be visible but soft)
     final secondaryColor = color.scaffoldBackgroundColor.withOpacity(0.7);

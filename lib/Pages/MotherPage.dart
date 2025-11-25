@@ -3,9 +3,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart'; // Import for Cupertino widgets
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Pages/MyProfile.dart';
 import 'package:ttact/Pages/Rate.dart';
@@ -16,19 +18,50 @@ import 'Events.dart';
 import 'HistoryPage.dart';
 import 'HomePage.dart';
 
-// Import foundation for kIsWeb and defaultTargetPlatform checks
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 
 // --- PLATFORM UTILITIES ---
-// Define breakpoints and checks for responsiveness
 const double _desktopBreakpoint = 1000.0;
 
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+bool get isAndroidPlatform {
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
+// ------------------------
+
+// --- COPIED HELPERS (Platform Aware Message) ---
+void _showPlatformMessage(
+  BuildContext context,
+  String title,
+  String message,
+  Color backgroundColor,
+) {
+  Api().showMessage(context, message, title, backgroundColor);
+}
+// --- END COPIED HELPERS ---
+
 class MotherPage extends StatefulWidget {
   final Function(bool) onToggleTheme;
-  const MotherPage({super.key, required this.onToggleTheme});
+  final int initialIndex;
+
+  const MotherPage({
+    super.key,
+    required this.onToggleTheme,
+    this.initialIndex = 0,
+  });
+
+  static final ValueNotifier<String?> deepLinkSongIdNotifier =
+      ValueNotifier<String?>(null);
 
   @override
   State<MotherPage> createState() => _MotherPageState();
@@ -36,19 +69,56 @@ class MotherPage extends StatefulWidget {
 
 class _MotherPageState extends State<MotherPage>
     with SingleTickerProviderStateMixin {
-  int _currentIndex = 0;
+  late int _currentIndex;
   bool _isSeller = false;
+  late AppLinks _appLinks;
 
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
     fetchUserData();
+    _initDeepLinks();
+  }
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+    final uri = await _appLinks.getInitialLink();
+    if (uri != null) {
+      _handleDeepLink(uri);
+    }
+    _appLinks.uriLinkStream.listen((Uri? uri) {
+      if (uri != null) {
+        _handleDeepLink(uri);
+      }
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.path.contains('/song')) {
+      final songUrl = uri.queryParameters['url'];
+      if (songUrl != null) {
+        setState(() {
+          _currentIndex = 0;
+        });
+        Future.delayed(Duration(milliseconds: 100), () {
+          MotherPage.deepLinkSongIdNotifier.value = songUrl;
+        });
+      }
+    }
   }
 
   final userId = FirebaseAuth.instance.currentUser?.uid;
-
   Map<String, dynamic> _userData = {};
+
   void fetchUserData() async {
+    if (userId == null) {
+      setState(() {
+        _isSeller = false;
+      });
+      return;
+    }
+
     final snapshots = await FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
@@ -59,113 +129,257 @@ class _MotherPageState extends State<MotherPage>
       setState(() {
         _userData = data;
         _isSeller = _userData['role'] == 'Seller';
-
-        // Ensure index is valid after setting role
         if (_isSeller) {
-          // Seller has 5 pages (index 0-4)
-          if (_currentIndex > 4) {
-            _currentIndex = 4; // Default to My Shop if index is out of bounds
-          }
+          if (_currentIndex > 4) _currentIndex = 4;
         } else {
-          // Standard user has 4 pages (index 0-3)
-          if (_currentIndex > 3) {
-            _currentIndex = 0; // Default to Home if index is out of bounds
-          }
+          if (_currentIndex > 3) _currentIndex = 0;
         }
+      });
+    } else {
+      setState(() {
+        _isSeller = false;
+        _currentIndex = 0;
       });
     }
   }
 
-  void _showHelpDialog() {
-    final TextEditingController subjectController = TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        // Use a constrained dialog width for desktop/web
-        return Dialog(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 500),
-            child: AlertDialog(
-              title: Text('Report an Issue / Get Help'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: subjectController,
-                      decoration: InputDecoration(
-                        labelText: 'Subject',
-                        hintText: 'e.g., App Crash, Order Problem',
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: descriptionController,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        labelText: 'Describe your issue',
-                        hintText: 'Provide as much detail as possible...',
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (subjectController.text.isNotEmpty &&
-                        descriptionController.text.isNotEmpty) {
-                      await FirebaseFirestore.instance.collection('UserHelp').add(
-                        {
-                          'userId': userId,
-                          'userEmail':
-                              FirebaseAuth.instance.currentUser?.email ?? 'N/A',
-                          'subject': subjectController.text,
-                          'description': descriptionController.text,
-                          'timestamp': FieldValue.serverTimestamp(),
-                          'status':
-                              'open', // e.g., 'open', 'in_progress', 'resolved'
-                        },
-                      );
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Your issue has been submitted. We will get back to you!',
-                          ),
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Please fill in both subject and description.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: Text('Submit'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  void _handleThemeChange(bool isDark) async {
+    widget.onToggleTheme(isDark);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isDarkMode', isDark);
+    } catch (e) {
+      print("Error saving theme preference: $e");
+    }
   }
 
-  // Helper function to build the common navigation items
+  // ⭐️ UPDATED: Logic for submitting the help form
+  Future<void> _submitHelpForm(
+    BuildContext context,
+    TextEditingController subjectController,
+    TextEditingController descriptionController,
+  ) async {
+    if (subjectController.text.isNotEmpty &&
+        descriptionController.text.isNotEmpty) {
+      // Close the Bottom Sheet first
+      Navigator.pop(context);
+
+      Api().sendEmail(
+        'kgaogelodeveloper@gmail.com',
+        '${subjectController.text}',
+        """
+      <p>Gooday admin</p>
+      
+      <p>You have received issue from a user</p>
+       
+      
+      <hr />
+      <p><strong>Message:</strong></p>
+      <blockquote style="background: #f9f9f9; border-left: 5px solid #ccc; margin: 1.5em 10px; padding: 0.5em 10px;">
+        ${descriptionController.text}
+      </blockquote>
+      <hr />
+      
+      <p>Please respond to the user as soon as possible.</p>
+      
+      <br>
+      <p>Regards,<br>
+      Dankie Mobile Support System</p>
+      """,
+        context,
+      );
+
+      await FirebaseFirestore.instance.collection('UserHelp').add({
+        'userId': userId ?? 'guest',
+        'userEmail': FirebaseAuth.instance.currentUser?.email ?? 'N/A',
+        'subject': subjectController.text,
+        'description': descriptionController.text,
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'open',
+      });
+
+      _showPlatformMessage(
+        context,
+        'Success',
+        'Your issue has been submitted. We will get back to you!',
+        Theme.of(context).splashColor,
+      );
+    } else {
+      _showPlatformMessage(
+        context,
+        'Error',
+        'Please fill in both subject and description.',
+        Theme.of(context).primaryColorDark,
+      );
+    }
+  }
+
+  // ⭐️ UPDATED: Beautiful Platform-Aware Bottom Sheet
+  void _showHelpBottomSheet() {
+    final TextEditingController subjectController = TextEditingController();
+    final TextEditingController descriptionController = TextEditingController();
+    final theme = Theme.of(context);
+
+    // Helper to build the content so we don't duplicate code for both platforms
+    Widget buildSheetContent(BuildContext context) {
+      return Padding(
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 20,
+          right: 20,
+          // Critical: Moves sheet up when keyboard opens
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag Handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isIOSPlatform
+                      ? CupertinoColors.systemGrey4
+                      : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+
+            // Title
+            Text(
+              'Report an Issue',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: isIOSPlatform
+                    ? CupertinoColors.label.resolveFrom(context)
+                    : theme.primaryColor,
+                decoration: TextDecoration.none,
+              ),
+            ),
+            SizedBox(height: 20),
+
+            // Subject Input
+            if (isIOSPlatform)
+              CupertinoTextField(
+                controller: subjectController,
+                placeholder: 'Subject (e.g., App Crash)',
+                padding: EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: CupertinoColors.systemGrey4),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              )
+            else
+              TextField(
+                controller: subjectController,
+                decoration: InputDecoration(
+                  labelText: 'Subject',
+                  hintText: 'e.g., App Crash',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+            SizedBox(height: 15),
+
+            // Description Input
+            if (isIOSPlatform)
+              CupertinoTextField(
+                controller: descriptionController,
+                placeholder: 'Describe your issue...',
+                maxLines: 4,
+                padding: EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: CupertinoColors.systemGrey4),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              )
+            else
+              TextField(
+                controller: descriptionController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Describe your issue...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignLabelWithHint: true,
+                ),
+              ),
+
+            SizedBox(height: 25),
+
+            // Submit Button
+            SizedBox(
+              width: double.infinity,
+              child: isIOSPlatform
+                  ? CupertinoButton.filled(
+                      color: theme.primaryColor,
+                      child: Text('Submit'),
+                      onPressed: () => _submitHelpForm(
+                        context,
+                        subjectController,
+                        descriptionController,
+                      ),
+                    )
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.primaryColor,
+                        foregroundColor: theme.scaffoldBackgroundColor,
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => _submitHelpForm(
+                        context,
+                        subjectController,
+                        descriptionController,
+                      ),
+                      child: Text(
+                        'Submit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isIOSPlatform) {
+      showCupertinoModalPopup(
+        context: context,
+        builder: (context) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(top: false, child: buildSheetContent(context)),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => buildSheetContent(context),
+      );
+    }
+  }
+
   List<SalomonBottomBarItem> _buildBottomBarItems(ThemeData theme) {
     return [
       SalomonBottomBarItem(
@@ -192,8 +406,6 @@ class _MotherPageState extends State<MotherPage>
     ];
   }
 
-  // Helper to determine if we are in a 'mobile web' scenario
-  // This is TRUE if it's the web platform AND the screen size is NOT large/desktop.
   bool _isMobileWeb(BuildContext context) {
     return kIsWeb && !isLargeScreen(context);
   }
@@ -201,10 +413,9 @@ class _MotherPageState extends State<MotherPage>
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context);
-    final isDesktop = isLargeScreen(context); // Check screen size
-    final isMobileWeb = _isMobileWeb(context); // Check for mobile web
+    final isDesktop = isLargeScreen(context);
+    final isMobileWeb = _isMobileWeb(context);
 
-    // Page list is defined here, based on role
     List<Widget> pages = [
       HomePage(),
       EventsPage(),
@@ -215,29 +426,19 @@ class _MotherPageState extends State<MotherPage>
 
     if (isDesktop) {
       return Scaffold(
-        // Desktop/Web Layout: NavigationRail (Sidebar)
         body: Row(
           children: [
             _buildNavigationRail(color),
-
-            // Vertical Divider for separation
             VerticalDivider(
               thickness: 1,
               width: 1,
               color: color.dividerColor.withOpacity(0.5),
             ),
-
-            // Main Content Area
             Expanded(
               child: Column(
                 children: [
-                  // Use AppBar for title/actions on desktop as well
                   _buildAppBar(color),
-
-                  // Main page content
                   Expanded(child: pages[_currentIndex]),
-
-                  // Optional: Ad Banner at the bottom of the content
                   AdManager().bannerAdWidget(),
                 ],
               ),
@@ -247,21 +448,15 @@ class _MotherPageState extends State<MotherPage>
       );
     } else {
       return Scaffold(
-        // Mobile Layout (App or Mobile Web): AppBar, Drawer
         appBar: _buildAppBar(color),
-        // Pass the flag to the drawer so it can show navigation items if needed
         drawer: _buildDrawer(color, isMobileWeb: isMobileWeb),
         body: pages[_currentIndex],
-
-        // **CRITICAL CHANGE**: Only show Bottom Bar if NOT Mobile Web
         bottomNavigationBar: isMobileWeb ? null : _buildSalomonBottomBar(color),
       );
     }
   }
 
-  // --- WIDGET BUILDERS ---
-
-  AppBar _buildAppBar(ThemeData color) {
+  PreferredSizeWidget _buildAppBar(ThemeData color) {
     return AppBar(
       centerTitle: true,
       automaticallyImplyLeading:
@@ -280,28 +475,26 @@ class _MotherPageState extends State<MotherPage>
             },
             icon: Icon(Icons.delivery_dining_outlined),
           ),
-
-        // Only show theme toggle button on AppBar for desktop view
         if (isLargeScreen(context))
           Switch(
             value: Theme.of(context).brightness == Brightness.dark,
-            onChanged: (value) => widget.onToggleTheme(value),
+            onChanged: _handleThemeChange,
             activeColor: color.colorScheme.secondary,
           ),
       ],
     );
   }
 
-  // Modified to accept a flag to determine if navigation items should be added
   Widget _buildDrawer(ThemeData color, {bool isMobileWeb = false}) {
     return Drawer(
-      // Constrain drawer width for tablets/smaller desktops
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(2)),
+      ),
       width: MediaQuery.of(context).size.width > 350 ? 350 : null,
       backgroundColor: color.primaryColor,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Top Section: Logo and Navigation Items
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -318,7 +511,6 @@ class _MotherPageState extends State<MotherPage>
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  // **NEW: Navigation Items for Mobile Web**
                   if (isMobileWeb) ...[
                     ..._buildBottomBarItems(color).asMap().entries.map((entry) {
                       int index = entry.key;
@@ -338,11 +530,8 @@ class _MotherPageState extends State<MotherPage>
                               setState(() {
                                 _currentIndex = index;
                               });
-                              Navigator.pop(
-                                context,
-                              ); // Close drawer after selection
+                              Navigator.pop(context);
                             },
-                            // Highlight the selected item
                             isSelected: _currentIndex == index,
                           ),
                           Divider(color: color.scaffoldBackgroundColor),
@@ -351,13 +540,12 @@ class _MotherPageState extends State<MotherPage>
                     }).toList(),
                   ],
 
-                  // Existing Drawer Items (Profile, About, etc.)
                   _buildDrawerListTile(
                     color,
                     'Profile',
                     Ionicons.person_outline,
                     () {
-                      Navigator.pop(context); // Close drawer before navigating
+                      Navigator.pop(context);
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => MyProfile()),
@@ -366,55 +554,57 @@ class _MotherPageState extends State<MotherPage>
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  // Dark/Light Mode Switch
-                  SwitchListTile(
-                    title: Text(
-                      'Light/Dark Mode',
-                      style: TextStyle(color: color.scaffoldBackgroundColor),
-                    ),
-                    secondary: Icon(
-                      Icons.brightness_2,
-                      color: color.scaffoldBackgroundColor,
-                    ),
-                    value: Theme.of(context).brightness == Brightness.dark,
-                    onChanged: (value) => widget.onToggleTheme(value),
-                    activeColor: color.colorScheme.secondary,
-                    inactiveThumbColor: color.hintColor,
-                    inactiveTrackColor: color.hintColor.withOpacity(0.5),
-                  ),
+                  isIOSPlatform
+                      ? CupertinoListTile(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18.0,
+                            vertical: 8.0,
+                          ),
+                          leading: Icon(
+                            CupertinoIcons.brightness,
+                            color: color.scaffoldBackgroundColor,
+                          ),
+                          title: Text(
+                            'Light/Dark Mode',
+                            style: TextStyle(
+                              color: color.scaffoldBackgroundColor,
+                            ),
+                          ),
+                          trailing: CupertinoSwitch(
+                            value:
+                                Theme.of(context).brightness == Brightness.dark,
+                            onChanged: _handleThemeChange,
+                            activeColor: color.colorScheme.secondary,
+                          ),
+                        )
+                      : SwitchListTile(
+                          title: Text(
+                            'Light/Dark Mode',
+                            style: TextStyle(
+                              color: color.scaffoldBackgroundColor,
+                            ),
+                          ),
+                          secondary: Icon(
+                            Icons.brightness_2,
+                            color: color.scaffoldBackgroundColor,
+                          ),
+                          value:
+                              Theme.of(context).brightness == Brightness.dark,
+                          onChanged: _handleThemeChange,
+                          activeColor: color.colorScheme.secondary,
+                          inactiveThumbColor: color.hintColor,
+                          inactiveTrackColor: color.hintColor.withOpacity(0.5),
+                        ),
                   Divider(color: color.scaffoldBackgroundColor),
 
-                  // _buildDrawerListTile(
-                  //   color,
-                  //   'About',
-                  //   Icons.info_outline,
-                  //   () {},
-                  // ),
-                  Divider(color: color.scaffoldBackgroundColor),
-
-                  // _buildDrawerListTile(
-                  //   color,
-                  //   'Rate the App',
-                  //   Icons.star_rate_outlined,
-                  //   () {
-                  //     Navigator.pop(context); // Close drawer before navigating
-                  //     Navigator.push(
-                  //       context,
-                  //       MaterialPageRoute(builder: (context) => RateUsDialog()),
-                  //     );
-                  //   },
-                  // ),
-                  Divider(color: color.scaffoldBackgroundColor),
-
+                  // ⭐️ UPDATED: Calls the new bottom sheet method
                   _buildDrawerListTile(
                     color,
                     'Help / Report Issue',
                     Icons.help_outline,
                     () {
-                      Navigator.pop(
-                        context,
-                      ); // Close drawer before showing dialog
-                      _showHelpDialog();
+                      Navigator.pop(context);
+                      _showHelpBottomSheet(); // <-- CHANGED
                     },
                   ),
                   Divider(color: color.scaffoldBackgroundColor),
@@ -423,21 +613,25 @@ class _MotherPageState extends State<MotherPage>
             ),
           ),
 
-          // Bottom Section: Ad Banner and Login/Logout
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               AdManager().bannerAdWidget(),
               Padding(
                 padding: const EdgeInsets.all(18.0),
-                child: ListTile(
-                  onTap: () async {
+                child: _buildDrawerListTile(
+                  color,
+                  userId == null ? 'Login' : 'Logout',
+                  isIOSPlatform
+                      ? CupertinoIcons.square_arrow_right
+                      : Icons.logout,
+                  () async {
                     final isGuest =
                         FirebaseAuth.instance.currentUser?.uid == null;
                     if (isGuest) {
                       Navigator.pushNamed(context, '/login');
                     } else {
-                      FirebaseAuth.instance.signOut();
+                      await FirebaseAuth.instance.signOut();
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.remove('authToken');
                       Navigator.pushNamedAndRemoveUntil(
@@ -447,10 +641,6 @@ class _MotherPageState extends State<MotherPage>
                       );
                     }
                   },
-                  textColor: color.scaffoldBackgroundColor,
-                  iconColor: color.scaffoldBackgroundColor,
-                  title: Text(userId == null ? 'Login' : 'Logout'),
-                  leading: Icon(Icons.logout),
                 ),
               ),
             ],
@@ -460,30 +650,49 @@ class _MotherPageState extends State<MotherPage>
     );
   }
 
-  // Modified to handle selection state
   Widget _buildDrawerListTile(
     ThemeData color,
     String title,
     IconData icon,
     VoidCallback onTap, {
-    bool isSelected = false, // New parameter for highlighting
+    bool isSelected = false,
   }) {
     final itemColor = isSelected
         ? color.colorScheme.secondary
         : color.scaffoldBackgroundColor;
-    return ListTile(
-      onTap: onTap,
-      // Use the calculated itemColor for text and icon
-      textColor: itemColor,
-      iconColor: itemColor,
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+
+    if (isIOSPlatform) {
+      return CupertinoListTile(
+        padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
+        leading: Icon(icon, color: itemColor),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: itemColor,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
-      ),
-      leading: Icon(icon),
-    );
+        onTap: onTap,
+        backgroundColor: isSelected
+            ? color.primaryColor.withOpacity(0.5)
+            : null,
+      );
+    } else {
+      return ListTile(
+        onTap: onTap,
+        textColor: itemColor,
+        iconColor: itemColor,
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        leading: Icon(icon),
+        selected: isSelected,
+        selectedTileColor: color.primaryColor.withOpacity(0.5),
+      );
+    }
   }
 
   Widget _buildSalomonBottomBar(ThemeData color) {
@@ -509,7 +718,6 @@ class _MotherPageState extends State<MotherPage>
   }
 
   Widget _buildNavigationRail(ThemeData color) {
-    // Determine which icons to display based on the user role
     final destinations = _buildBottomBarItems(color)
         .map(
           (item) =>
@@ -518,11 +726,9 @@ class _MotherPageState extends State<MotherPage>
         .toList();
 
     return Container(
-      // Ensure the navigation area has a distinct background (e.g., primary color)
       color: color.primaryColor,
       child: Column(
         children: [
-          // Logo or Header for the top of the sidebar
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20.0),
             child: ClipRRect(
@@ -536,7 +742,6 @@ class _MotherPageState extends State<MotherPage>
             ),
           ),
 
-          // Main Navigation Rail
           Expanded(
             child: NavigationRail(
               backgroundColor: color.primaryColor,
@@ -559,10 +764,10 @@ class _MotherPageState extends State<MotherPage>
             ),
           ),
 
-          // Utility/User Actions at the bottom of the sidebar
           Padding(
             padding: const EdgeInsets.only(bottom: 10.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   icon: Icon(
@@ -575,13 +780,14 @@ class _MotherPageState extends State<MotherPage>
                     MaterialPageRoute(builder: (context) => MyProfile()),
                   ),
                 ),
+                // ⭐️ UPDATED: Calls the new bottom sheet method
                 IconButton(
                   icon: Icon(
                     Icons.help_outline,
                     color: color.scaffoldBackgroundColor,
                   ),
                   tooltip: 'Help / Report Issue',
-                  onPressed: _showHelpDialog,
+                  onPressed: _showHelpBottomSheet, // <-- CHANGED
                 ),
                 IconButton(
                   icon: Icon(
@@ -589,13 +795,15 @@ class _MotherPageState extends State<MotherPage>
                     color: color.scaffoldBackgroundColor,
                   ),
                   tooltip: userId == null ? 'Login' : 'Logout',
-                  onPressed: () {
+                  onPressed: () async {
                     final isGuest =
                         FirebaseAuth.instance.currentUser?.uid == null;
                     if (isGuest) {
                       Navigator.pushNamed(context, '/login');
                     } else {
-                      FirebaseAuth.instance.signOut();
+                      await FirebaseAuth.instance.signOut();
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('authToken');
                       Navigator.pushNamedAndRemoveUntil(
                         context,
                         '/login',

@@ -9,12 +9,186 @@ import 'package:ttact/Components/API.dart';
 
 // Import foundation for kIsWeb check (safe practice)
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart'; // Import for Cupertino widgets
 
 // --- PLATFORM UTILITIES ---
 const double _desktopBreakpoint = 900.0;
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= _desktopBreakpoint;
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 // ------------------------
+
+// --- COPIED HELPERS FROM SIGNUPPAGE ---
+
+// Custom platform-aware TextField Builder
+Widget _buildPlatformTextField({
+  required TextEditingController controller,
+  required String placeholder,
+  IconData? prefixIcon,
+  TextInputType keyboardType = TextInputType.text,
+  bool obscureText = false,
+  bool readOnly = false,
+  int? maxLines = 1,
+  String? Function(String?)? validator,
+  Widget? suffixIcon,
+  required BuildContext context,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8.0),
+    child: isIOSPlatform
+        ? CupertinoTextField(
+            style: TextStyle(color: Theme.of(context).cardColor),
+            controller: controller,
+            placeholder: placeholder,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(12.0),
+            prefix: prefixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+                  )
+                : null,
+            suffixMode: OverlayVisibilityMode.editing,
+            suffix: suffixIcon,
+          )
+        : TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: InputDecoration(
+              hintText: placeholder,
+              prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+              suffixIcon: suffixIcon,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 16.0,
+              ),
+            ),
+            validator: validator,
+          ),
+  );
+}
+
+// Custom platform-aware ListTile Builder
+Widget _buildListTile({
+  required String title,
+  required String trailingText,
+  required VoidCallback onTap,
+  required BuildContext context,
+}) {
+  if (isIOSPlatform) {
+    return CupertinoListTile(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText),
+          const Icon(CupertinoIcons.chevron_right),
+        ],
+      ),
+      onTap: onTap,
+    );
+  } else {
+    return ListTile(
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText),
+          const Icon(Icons.arrow_forward_ios, size: 16),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+// Custom platform-aware Action Sheet Builder
+void _buildActionSheet({
+  required BuildContext context,
+  required String title,
+  required List<String> actions,
+  required ValueChanged<String> onSelected,
+}) {
+  if (isIOSPlatform) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: Text(title),
+        actions: actions.map((item) {
+          return CupertinoActionSheetAction(
+            child: Text(item),
+            onPressed: () {
+              onSelected(item);
+              Navigator.pop(context);
+            },
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  } else {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) => Container(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, textAlign: TextAlign.center),
+              const Divider(),
+              ...actions.map((item) {
+                return ListTile(
+                  title: Text(item),
+                  onTap: () {
+                    onSelected(item);
+                    Navigator.pop(context);
+                  },
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+// --- END COPIED HELPERS ---
 
 class SellerProductPage extends StatefulWidget {
   const SellerProductPage({super.key});
@@ -26,6 +200,8 @@ class SellerProductPage extends StatefulWidget {
 class _SellerProductPageState extends State<SellerProductPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  int _currentSegment = 0; // For CupertinoSegmentedControl
+
   final priceController = TextEditingController();
   final locationController = TextEditingController();
   final suitSizeController = TextEditingController();
@@ -112,12 +288,72 @@ class _SellerProductPageState extends State<SellerProductPage>
 
   late int _randomDisplayPercentage;
 
+  // Map for CupertinoSegmentedControl
+  final Map<int, Widget> _tabs = const {
+    0: Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.dashboard),
+          SizedBox(height: 4),
+          Text("Dashboard"),
+        ],
+      ),
+    ),
+    1: Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inventory),
+          SizedBox(height: 4),
+          Text("My Products"),
+        ],
+      ),
+    ),
+    2: Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.add_shopping_cart),
+          SizedBox(height: 4),
+          Text("Add Product"),
+        ],
+      ),
+    ),
+    3: Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.local_shipping),
+          SizedBox(height: 4),
+          Text("Orders"),
+        ],
+      ),
+    ),
+  };
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(
+      _handleTabSelection,
+    ); // Sync controller to segment
     _generateRandomDisplayDiscount();
     fetchCurrentUser();
+  }
+
+  void _handleTabSelection() {
+    // Sync TabController index with CupertinoSegmentedControl
+    if (_tabController.index != _currentSegment) {
+      setState(() {
+        _currentSegment = _tabController.index;
+      });
+    }
   }
 
   void _generateRandomDisplayDiscount() {
@@ -127,6 +363,7 @@ class _SellerProductPageState extends State<SellerProductPage>
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     priceController.dispose();
     locationController.dispose();
@@ -314,6 +551,7 @@ class _SellerProductPageState extends State<SellerProductPage>
       await FirebaseFirestore.instance.collection('orders').doc(orderId).update(
         {'status': newStatus},
       );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -505,8 +743,13 @@ class _SellerProductPageState extends State<SellerProductPage>
 
     return Card(
       elevation: 4,
+      color: Theme.of(context).scaffoldBackgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(width: 0.4, color: Theme.of(context).hintColor),
+        ),
         width: cardWidth,
         padding: const EdgeInsets.all(16.0),
         child: Row(
@@ -553,7 +796,11 @@ class _SellerProductPageState extends State<SellerProductPage>
           .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(
+            child: isIOSPlatform
+                ? CupertinoActivityIndicator()
+                : CircularProgressIndicator(),
+          );
         }
         if (snapshot.hasError) {
           return Center(child: Text("Error: ${snapshot.error}"));
@@ -636,71 +883,15 @@ class _SellerProductPageState extends State<SellerProductPage>
                     ),
                     trailing: IconButton(
                       icon: Icon(
-                        Icons.edit,
+                        isIOSPlatform ? CupertinoIcons.pencil : Icons.edit,
                         color: Theme.of(context).primaryColor,
                       ),
                       onPressed: () {
-                        final TextEditingController newPriceController =
-                            TextEditingController(
-                              text: currentPrice.toStringAsFixed(2),
-                            );
-                        showDialog(
-                          context: context,
-                          builder: (context) {
-                            return AlertDialog(
-                              title: Text("Update Price for $productName"),
-                              content: TextField(
-                                controller: newPriceController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                decoration: const InputDecoration(
-                                  labelText: "New Price (R)",
-                                  hintText: "e.g., 175.50",
-                                ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                  child: const Text("Cancel"),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final double? updatedPrice =
-                                        double.tryParse(
-                                          newPriceController.text,
-                                        );
-                                    if (updatedPrice != null &&
-                                        updatedPrice >= 0) {
-                                      await updateSellerProductPrice(
-                                        docId,
-                                        updatedPrice,
-                                      );
-                                      if (mounted) {
-                                        Navigator.pop(context);
-                                      }
-                                    } else {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Please enter a valid positive number for price.',
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  child: const Text("Update"),
-                                ),
-                              ],
-                            );
-                          },
+                        // UPDATED: Call new helper
+                        _showUpdatePriceDialog(
+                          docId,
+                          productName,
+                          currentPrice,
                         );
                       },
                     ),
@@ -714,6 +905,119 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
   // --- END MY PRODUCTS TAB ---
+
+  // --- NEW: Platform-Aware Price Update Dialog ---
+  void _showUpdatePriceDialog(
+    String docId,
+    String productName,
+    double currentPrice,
+  ) {
+    final TextEditingController newPriceController = TextEditingController(
+      text: currentPrice.toStringAsFixed(2),
+    );
+
+    final content = _buildPlatformTextField(
+      context: context,
+      controller: newPriceController,
+      placeholder: "e.g., 175.50",
+      keyboardType: TextInputType.numberWithOptions(decimal: true),
+      prefixIcon: isIOSPlatform
+          ? CupertinoIcons.money_dollar
+          : Icons.attach_money,
+    );
+
+    if (isIOSPlatform) {
+      showCupertinoDialog(
+        context: context,
+        builder: (context) {
+          return CupertinoAlertDialog(
+            title: Text("Update Price for $productName"),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: Material(
+                color: Colors.transparent,
+                child: content,
+              ), // Material wrapper
+            ),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text("Cancel"),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                child: const Text("Update"),
+                onPressed: () async {
+                  final double? updatedPrice = double.tryParse(
+                    newPriceController.text,
+                  );
+                  if (updatedPrice != null && updatedPrice >= 0) {
+                    await updateSellerProductPrice(docId, updatedPrice);
+                    if (mounted) {
+                      Navigator.pop(context);
+                    }
+                  } else {
+                    // Show error
+                    Api().showMessage(
+                      context,
+                      "Please enter a valid positive number.",
+                      "Invalid Price",
+                      Colors.red,
+                    );
+                  }
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text("Update Price for $productName"),
+            content: content,
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final double? updatedPrice = double.tryParse(
+                    newPriceController.text,
+                  );
+                  if (updatedPrice != null && updatedPrice >= 0) {
+                    await updateSellerProductPrice(docId, updatedPrice);
+                    if (mounted) {
+                      Navigator.pop(context);
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please enter a valid positive number for price.',
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text("Update"),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+  // --- END Price Update Dialog ---
 
   // --- ADD PRODUCT TAB (Modal Constrained) ---
   Widget addProductTab() {
@@ -740,7 +1044,11 @@ class _SellerProductPageState extends State<SellerProductPage>
       builder: (context, existingProductIdsSnapshot) {
         if (existingProductIdsSnapshot.connectionState ==
             ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(
+            child: isIOSPlatform
+                ? CupertinoActivityIndicator()
+                : CircularProgressIndicator(),
+          );
         }
         if (existingProductIdsSnapshot.hasError) {
           return Center(
@@ -758,7 +1066,11 @@ class _SellerProductPageState extends State<SellerProductPage>
           builder: (context, allProductsSnapshot) {
             if (allProductsSnapshot.connectionState ==
                 ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: isIOSPlatform
+                    ? CupertinoActivityIndicator()
+                    : CircularProgressIndicator(),
+              );
             }
             if (allProductsSnapshot.hasError) {
               return Center(child: Text("Error: ${allProductsSnapshot.error}"));
@@ -953,34 +1265,32 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                         ),
                                                       ),
                                                     ),
-                                                    TextField(
+                                                    // --- PLATFORM AWARE ---
+                                                    _buildPlatformTextField(
+                                                      context: context,
                                                       controller:
                                                           priceController,
+                                                      placeholder: "Price (R)",
                                                       keyboardType:
                                                           TextInputType.number,
-                                                      decoration:
-                                                          const InputDecoration(
-                                                            labelText:
-                                                                "Price (R)",
-                                                            hintText:
-                                                                "e.g., 150.00",
-                                                            border:
-                                                                OutlineInputBorder(),
-                                                          ),
+                                                      prefixIcon: isIOSPlatform
+                                                          ? CupertinoIcons
+                                                                .money_dollar
+                                                          : Icons.attach_money,
                                                     ),
                                                     const SizedBox(height: 10),
-                                                    TextField(
+                                                    _buildPlatformTextField(
+                                                      context: context,
                                                       controller:
                                                           locationController,
-                                                      decoration: const InputDecoration(
-                                                        labelText:
-                                                            "Location (e.g., Shop A12, Market St)",
-                                                        hintText:
-                                                            "e.g., My Store Front, City",
-                                                        border:
-                                                            OutlineInputBorder(),
-                                                      ),
+                                                      placeholder:
+                                                          "Location (e.g., Shop A12, Market St)",
+                                                      prefixIcon: isIOSPlatform
+                                                          ? CupertinoIcons
+                                                                .location_solid
+                                                          : Icons.location_on,
                                                     ),
+                                                    // --- END PLATFORM AWARE ---
                                                     const SizedBox(height: 20),
                                                     const Divider(),
                                                     Text(
@@ -1061,44 +1371,36 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                       ),
                                                     ),
                                                     const SizedBox(height: 8),
-                                                    DropdownButtonFormField<
-                                                      String
-                                                    >(
-                                                      value: _selectedSizeType,
-                                                      hint: const Text(
-                                                        'Choose a size type',
-                                                      ),
-                                                      decoration: const InputDecoration(
-                                                        border:
-                                                            OutlineInputBorder(),
-                                                        contentPadding:
-                                                            EdgeInsets.symmetric(
-                                                              horizontal: 10,
-                                                            ),
-                                                      ),
-                                                      items: _availableSizeTypes
-                                                          .map((type) {
-                                                            return DropdownMenuItem<
-                                                              String
-                                                            >(
-                                                              value: type,
-                                                              child: Text(type),
-                                                            );
-                                                          })
-                                                          .toList(),
-                                                      onChanged: (value) {
-                                                        setModalState(() {
-                                                          _selectedSizeType =
-                                                              value;
-                                                          _selectedStandardSizes
-                                                              .clear();
-                                                          _selectedNumericSizes
-                                                              .clear();
-                                                          _selectedSuitSizes
-                                                              .clear();
-                                                        });
+                                                    // --- PLATFORM AWARE ---
+                                                    _buildListTile(
+                                                      context: context,
+                                                      title: "Select Size Type",
+                                                      trailingText:
+                                                          _selectedSizeType ??
+                                                          "Choose type",
+                                                      onTap: () {
+                                                        _buildActionSheet(
+                                                          context: context,
+                                                          title:
+                                                              "Choose a size type",
+                                                          actions:
+                                                              _availableSizeTypes,
+                                                          onSelected: (value) {
+                                                            setModalState(() {
+                                                              _selectedSizeType =
+                                                                  value;
+                                                              _selectedStandardSizes
+                                                                  .clear();
+                                                              _selectedNumericSizes
+                                                                  .clear();
+                                                              _selectedSuitSizes
+                                                                  .clear();
+                                                            });
+                                                          },
+                                                        );
                                                       },
                                                     ),
+                                                    // --- END PLATFORM AWARE ---
                                                     const SizedBox(height: 20),
                                                     if (_selectedSizeType !=
                                                         null) ...[
@@ -1132,120 +1434,67 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                         height: 20,
                                                       ),
                                                     ],
+                                                    // --- PLATFORM AWARE ---
                                                     Row(
                                                       mainAxisAlignment:
                                                           MainAxisAlignment.end,
                                                       children: [
-                                                        TextButton(
-                                                          onPressed: () {
-                                                            Navigator.pop(
-                                                              context,
-                                                            );
-                                                          },
-                                                          child: const Text(
-                                                            "Cancel",
-                                                          ),
-                                                        ),
+                                                        isIOSPlatform
+                                                            ? CupertinoButton(
+                                                                child:
+                                                                    const Text(
+                                                                      "Cancel",
+                                                                    ),
+                                                                onPressed: () =>
+                                                                    Navigator.pop(
+                                                                      context,
+                                                                    ),
+                                                              )
+                                                            : TextButton(
+                                                                onPressed: () =>
+                                                                    Navigator.pop(
+                                                                      context,
+                                                                    ),
+                                                                child:
+                                                                    const Text(
+                                                                      "Cancel",
+                                                                    ),
+                                                              ),
                                                         const SizedBox(
                                                           width: 8,
                                                         ),
-                                                        ElevatedButton(
-                                                          onPressed: () async {
-                                                            List<String>
-                                                            sizesToSave = [];
-                                                            if (_selectedSizeType ==
-                                                                'Standard/Missy Sizes') {
-                                                              sizesToSave =
-                                                                  _selectedStandardSizes;
-                                                            } else if (_selectedSizeType ==
-                                                                'Numeric Sizes (US/UK)') {
-                                                              sizesToSave =
-                                                                  _selectedNumericSizes;
-                                                            } else if (_selectedSizeType ==
-                                                                'Suit Sizes') {
-                                                              sizesToSave =
-                                                                  _selectedSuitSizes;
-                                                            }
-
-                                                            if (priceController
-                                                                    .text
-                                                                    .isEmpty ||
-                                                                locationController
-                                                                    .text
-                                                                    .isEmpty ||
-                                                                _selectedColors
-                                                                    .isEmpty ||
-                                                                sizesToSave
-                                                                    .isEmpty) {
-                                                              if (mounted) {
-                                                                ScaffoldMessenger.of(
-                                                                  context,
-                                                                ).showSnackBar(
-                                                                  const SnackBar(
-                                                                    content: Text(
-                                                                      'Please fill in all fields: price, location, colors, and at least one size.',
+                                                        isIOSPlatform
+                                                            ? CupertinoButton.filled(
+                                                                child:
+                                                                    const Text(
+                                                                      "Submit",
                                                                     ),
-                                                                  ),
-                                                                );
-                                                              }
-                                                              return;
-                                                            }
-
-                                                            try {
-                                                              Api().showLoading(
-                                                                context,
-                                                              );
-                                                              if (!isVerified) {
-                                                                Api().showMessage(
-                                                                  context,
-                                                                  "You account is not yet verified as a seller",
-                                                                  "Warning",
-                                                                  Colors.red,
-                                                                );
-                                                                Navigator.of(
-                                                                  context,
-                                                                ).pop(); // Pop loading
-                                                                return;
-                                                              }
-                                                              await addSellerProduct(
-                                                                prod.id,
-                                                                adminProductName,
-                                                                adminProductDescription,
-                                                                adminProductImageUrl,
-                                                                _selectedColors,
-                                                                sizesToSave,
-                                                              );
-                                                              if (mounted) {
-                                                                Navigator.pop(
-                                                                  context,
-                                                                ); // Dismiss loading
-                                                                Navigator.pop(
-                                                                  context,
-                                                                ); // Dismiss modal
-                                                              }
-                                                            } catch (e) {
-                                                              if (mounted) {
-                                                                Navigator.pop(
-                                                                  context,
-                                                                );
-                                                                ScaffoldMessenger.of(
-                                                                  context,
-                                                                ).showSnackBar(
-                                                                  SnackBar(
-                                                                    content: Text(
-                                                                      'Error adding product: $e',
+                                                                onPressed: () async {
+                                                                  _handleSubmitProduct(
+                                                                    prod.id,
+                                                                    adminProductName,
+                                                                    adminProductDescription,
+                                                                    adminProductImageUrl,
+                                                                  );
+                                                                },
+                                                              )
+                                                            : ElevatedButton(
+                                                                onPressed: () async {
+                                                                  _handleSubmitProduct(
+                                                                    prod.id,
+                                                                    adminProductName,
+                                                                    adminProductDescription,
+                                                                    adminProductImageUrl,
+                                                                  );
+                                                                },
+                                                                child:
+                                                                    const Text(
+                                                                      "Submit",
                                                                     ),
-                                                                  ),
-                                                                );
-                                                              }
-                                                            }
-                                                          },
-                                                          child: const Text(
-                                                            "Submit",
-                                                          ),
-                                                        ),
+                                                              ),
                                                       ],
                                                     ),
+                                                    // --- END PLATFORM AWARE ---
                                                     const SizedBox(height: 10),
                                                   ],
                                                 ),
@@ -1271,6 +1520,73 @@ class _SellerProductPageState extends State<SellerProductPage>
     );
   }
   // --- END ADD PRODUCT TAB ---
+
+  // --- NEW: Helper for Submit Logic ---
+  void _handleSubmitProduct(
+    String productId,
+    String adminProductName,
+    String adminProductDescription,
+    dynamic adminProductImageUrl,
+  ) async {
+    List<String> sizesToSave = [];
+    if (_selectedSizeType == 'Standard/Missy Sizes') {
+      sizesToSave = _selectedStandardSizes;
+    } else if (_selectedSizeType == 'Numeric Sizes (US/UK)') {
+      sizesToSave = _selectedNumericSizes;
+    } else if (_selectedSizeType == 'Suit Sizes') {
+      sizesToSave = _selectedSuitSizes;
+    }
+
+    if (priceController.text.isEmpty ||
+        locationController.text.isEmpty ||
+        _selectedColors.isEmpty ||
+        sizesToSave.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please fill in all fields: price, location, colors, and at least one size.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      Api().showLoading(context);
+      if (!isVerified) {
+        Api().showMessage(
+          context,
+          "You account is not yet verified as a seller",
+          "Warning",
+          Colors.red,
+        );
+        Navigator.of(context).pop(); // Pop loading
+        return;
+      }
+      await addSellerProduct(
+        productId,
+        adminProductName,
+        adminProductDescription,
+        adminProductImageUrl,
+        _selectedColors,
+        sizesToSave,
+      );
+      if (mounted) {
+        Navigator.pop(context); // Dismiss loading
+        Navigator.pop(context); // Dismiss modal
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error adding product: $e')));
+      }
+    }
+  }
+  // --- END Submit Logic Helper ---
 
   // --- ⭐️ ADD THIS NEW WIDGET ⭐️ ---
   Widget _buildNotVerifiedWidget() {
@@ -1317,7 +1633,11 @@ class _SellerProductPageState extends State<SellerProductPage>
               .get(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: isIOSPlatform
+                    ? CupertinoActivityIndicator()
+                    : CircularProgressIndicator(),
+              );
             }
             if (snapshot.hasError) {
               return Center(child: Text("Error: ${snapshot.error}"));
@@ -1343,8 +1663,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                 final orderData = orderDoc.data() as Map<String, dynamic>;
                 final orderId = orderDoc.id;
 
-                // ⭐️ FIX: Changed from 'userId' to 'buyerId' to match your order creation logic
-                final customerId = orderData['buyerId'] as String;
+                final customerId = orderData['userId'] as dynamic;
 
                 final orderRef =
                     orderData['orderReference'] ??
@@ -1360,6 +1679,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                       .get(),
                   builder: (context, customerSnapshot) {
                     String customerName = 'Unknown Customer';
+                    String customerEmail = '';
                     if (customerSnapshot.connectionState ==
                             ConnectionState.done &&
                         customerSnapshot.hasData) {
@@ -1370,11 +1690,11 @@ class _SellerProductPageState extends State<SellerProductPage>
                           customerData.containsKey('name')) {
                         customerName =
                             customerData['name'] ?? 'Unknown Customer';
+                        customerEmail = customerData['email'] ?? '';
                       }
                     }
-
                     return Card(
-                      color: Theme.of(context).cardColor,
+                      color: Theme.of(context).scaffoldBackgroundColor,
                       elevation: 4,
                       margin: const EdgeInsets.symmetric(
                         horizontal: 0,
@@ -1740,26 +2060,53 @@ class _SellerProductPageState extends State<SellerProductPage>
             );
           }).toList(),
           const SizedBox(height: 16),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  _showStatusUpdateDialog(
-                    context,
-                    orderId,
-                    orderData['status'] ?? 'pending',
-                    orderStatuses,
-                    updateOrderStatus,
-                  );
-                },
-                icon: const Icon(Icons.edit),
-                label: const Text("Update Status"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+              // --- PLATFORM AWARE ---
+              isIOSPlatform
+                  ? CupertinoButton.filled(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(CupertinoIcons.pencil, size: 18),
+                          SizedBox(width: 6),
+                          Text("Update Status"),
+                        ],
+                      ),
+                      onPressed: () {
+                        _showStatusUpdateDialog(
+                          context,
+                          orderId,
+                          orderData['status'] ?? 'pending',
+                          orderStatuses,
+                          updateOrderStatus,
+                        );
+                      },
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: () {
+                        _showStatusUpdateDialog(
+                          context,
+                          orderId,
+                          orderData['status'] ?? 'pending',
+                          orderStatuses,
+                          updateOrderStatus,
+                        );
+                      },
+                      icon: const Icon(Icons.edit),
+                      label: const Text("Update Status"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+              // --- END PLATFORM AWARE ---
             ],
           ),
         ],
@@ -1775,65 +2122,108 @@ class _SellerProductPageState extends State<SellerProductPage>
     Function(String, String) updateOrderStatus,
   ) {
     String? tempSelectedStatus = currentStatus;
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text("Update Order Status"),
-              // Constrain width of alert dialog for desktop
-              content: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 400),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: orderStatuses.map((status) {
-                      return RadioListTile<String>(
-                        title: Text(status.toUpperCase().replaceAll('_', ' ')),
-                        value: status,
-                        groupValue: tempSelectedStatus,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            tempSelectedStatus = value;
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    if (tempSelectedStatus != null &&
-                        tempSelectedStatus != currentStatus) {
-                      await updateOrderStatus(orderId, tempSelectedStatus!);
-                      if (context.mounted) Navigator.pop(context);
-                    } else {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('No status selected or no change.'),
-                          ),
-                        );
-                        Navigator.pop(context);
-                      }
-                    }
+
+    final content = StatefulBuilder(
+      builder: (context, setDialogState) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: orderStatuses.map((status) {
+                // Use Material RadioListTile on both platforms for simplicity
+                // as Cupertino doesn't have a direct equivalent.
+                return RadioListTile<String>(
+                  title: Text(status.toUpperCase().replaceAll('_', ' ')),
+                  value: status,
+                  groupValue: tempSelectedStatus,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      tempSelectedStatus = value;
+                    });
                   },
-                  icon: const Icon(Icons.update),
-                  label: const Text("Confirm Update"),
-                ),
-              ],
-            );
-          },
+                );
+              }).toList(),
+            ),
+          ),
         );
       },
     );
+
+    if (isIOSPlatform) {
+      showCupertinoDialog(
+        context: context,
+        builder: (context) {
+          return CupertinoAlertDialog(
+            title: const Text("Update Order Status"),
+            content: Material(color: Colors.transparent, child: content),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text("Cancel"),
+                onPressed: () => Navigator.pop(context),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                child: const Text("Confirm Update"),
+                onPressed: () async {
+                  _confirmStatusUpdate(
+                    orderId,
+                    tempSelectedStatus,
+                    currentStatus,
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Update Order Status"),
+            content: content,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  _confirmStatusUpdate(
+                    orderId,
+                    tempSelectedStatus,
+                    currentStatus,
+                  );
+                },
+                icon: const Icon(Icons.update),
+                label: const Text("Confirm Update"),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  // --- NEW: Helper for Status Update Logic ---
+  void _confirmStatusUpdate(
+    String orderId,
+    String? tempSelectedStatus,
+    String currentStatus,
+  ) async {
+    if (tempSelectedStatus != null && tempSelectedStatus != currentStatus) {
+      await updateOrderStatus(orderId, tempSelectedStatus!);
+      if (context.mounted) Navigator.pop(context);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No status selected or no change.')),
+        );
+        Navigator.pop(context);
+      }
+    }
   }
 
   @override
@@ -1851,21 +2241,44 @@ class _SellerProductPageState extends State<SellerProductPage>
           constraints: BoxConstraints(maxWidth: 1200),
           child: Column(
             children: [
-              TabBar(
-                controller: _tabController,
-                labelColor: color.primaryColor,
-                unselectedLabelColor: color.hintColor,
-                indicatorColor: color.primaryColor,
-                isScrollable: isDesktop
-                    ? false
-                    : true, // Full width tabs on desktop
-                tabs: const [
-                  Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
-                  Tab(text: "My Products", icon: Icon(Icons.inventory)),
-                  Tab(text: "Add Product", icon: Icon(Icons.add_shopping_cart)),
-                  Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
-                ],
+              // --- PLATFORM AWARE TAB BAR ---
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8.0,
+                  horizontal: 16.0,
+                ),
+                child: isIOSPlatform
+                    ? CupertinoSegmentedControl<int>(
+                        children: _tabs,
+                        groupValue: _currentSegment,
+                        onValueChanged: (int newValue) {
+                          setState(() {
+                            _currentSegment = newValue;
+                            _tabController.animateTo(newValue);
+                          });
+                        },
+                        padding: EdgeInsets.zero,
+                      )
+                    : TabBar(
+                        controller: _tabController,
+                        labelColor: color.primaryColor,
+                        unselectedLabelColor: color.hintColor,
+                        indicatorColor: color.primaryColor,
+                        isScrollable: isDesktop
+                            ? false
+                            : true, // Full width tabs on desktop
+                        tabs: const [
+                          Tab(text: "Dashboard", icon: Icon(Icons.dashboard)),
+                          Tab(text: "My Products", icon: Icon(Icons.inventory)),
+                          Tab(
+                            text: "Add Product",
+                            icon: Icon(Icons.add_shopping_cart),
+                          ),
+                          Tab(text: "Orders", icon: Icon(Icons.local_shipping)),
+                        ],
+                      ),
               ),
+              // --- END PLATFORM AWARE TAB BAR ---
               Expanded(
                 child: TabBarView(
                   controller: _tabController,

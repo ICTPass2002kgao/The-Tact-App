@@ -1,11 +1,34 @@
 // introduction_page.dart
 // ignore_for_file: prefer_const_constructs, sized_box_for_whitespace
 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/Login.dart';
 
 // --- ⭐️ 1. PulsingFeatureIcon Widget (Remains Unchanged) ---
+
+// --- PLATFORM UTILITIES ---
+bool get isMobileNative =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 
 class PulsingFeatureIcon extends StatefulWidget {
   final IconData iconData;
@@ -317,24 +340,43 @@ class _IntroductionpageState extends State<Introductionpage>
 
                     SizedBox(height: 40),
 
-                    // 3. Animated "Get Started" Button
-                    ScaleTransition(
-                      scale: _buttonScaleAnimation,
-                      child: CustomOutlinedButton(
-                        onPressed: () {
-                          widget.onGetStarted();
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => const Login_Page(),
+                    isIOSPlatform
+                        ? ScaleTransition(
+                            scale: _buttonScaleAnimation,
+
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: CupertinoButton.filled(
+                                color: color.primaryColor,
+                                onPressed: () {
+                                  widget.onGetStarted();
+                                  Navigator.of(context).pushReplacement(
+                                    CupertinoPageRoute(
+                                      builder: (context) => const Login_Page(),
+                                    ),
+                                  );
+                                },
+                                child: const Text('Get Started'),
+                              ),
                             ),
-                          );
-                        },
-                        text: 'Get Started',
-                        backgroundColor: color.primaryColor,
-                        foregroundColor: color.scaffoldBackgroundColor,
-                        width: double.infinity,
-                      ),
-                    ),
+                          )
+                        : ScaleTransition(
+                            scale: _buttonScaleAnimation,
+                            child: CustomOutlinedButton(
+                              onPressed: () {
+                                widget.onGetStarted();
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                    builder: (context) => const Login_Page(),
+                                  ),
+                                );
+                              },
+                              text: 'Get Started',
+                              backgroundColor: color.primaryColor,
+                              foregroundColor: color.scaffoldBackgroundColor,
+                              width: double.infinity,
+                            ),
+                          ),
                   ],
                 ),
               ),

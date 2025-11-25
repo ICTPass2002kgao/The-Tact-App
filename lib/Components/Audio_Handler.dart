@@ -1,88 +1,161 @@
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:rxdart/rxdart.dart'; // Import rxdart for the combineLatest stream
+import 'package:rxdart/rxdart.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
   final _player = AudioPlayer();
+  final _playlist = ConcatenatingAudioSource(children: []);
+
+  // Stream to broadcast the current playlist items
+  final _playlistItems = BehaviorSubject<List<MediaItem>>.seeded([]);
+  Stream<List<MediaItem>> get playlistItemsStream => _playlistItems.stream;
 
   MyAudioHandler() {
-    // We listen to the JustAudio streams and combine them to produce a single
-    // PlaybackState stream. This is the recommended robust pattern.
-    _listenForPlaybackStateChanges(); 
-
-    // Initialize playback state immediately
-    playbackState.add(playbackState.value.copyWith(
-        controls: [MediaControl.play, MediaControl.stop],
-        processingState: AudioProcessingState.idle,
-        playing: false, 
-      ));
+    _loadEmptyPlaylist();
+    _listenForPlaybackStateChanges();
+    _listenForMediaItemChanges();
   }
 
-  /// Combines the streams from just_audio to produce a single stream of PlaybackState.
-  void _listenForPlaybackStateChanges() {
-    // Listen to all relevant player streams
-    Rx.combineLatest4<ProcessingState, bool, Duration, Duration?, PlaybackState>(
-      _player.processingStateStream,
-      _player.playingStream,
-      _player.positionStream.throttleTime(const Duration(seconds: 1)), // Throttle position updates
-      _player.bufferedPositionStream,
-      (processingState, playing, position, bufferedPosition) {
-        // Map JustAudio's ProcessingState to AudioService's AudioProcessingState
-        final audioServiceProcessingState = const {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[processingState] ?? AudioProcessingState.idle;
-
-        // Construct the PlaybackState
-        return playbackState.value.copyWith(
-          // Use updatePosition (older audio_service) or position (newer audio_service)
-          // We use 'updatePosition' for maximum compatibility based on your error report
-          updatePosition: position, 
-          bufferedPosition: bufferedPosition ?? Duration.zero,
-          playing: playing,
-          processingState: audioServiceProcessingState, 
-          
-          controls: [
-            MediaControl.skipToPrevious,
-            playing ? MediaControl.pause : MediaControl.play,
-            MediaControl.skipToNext,
-            MediaControl.stop,
-          ],
-        );
-      },
-    ).listen((state) => playbackState.add(state));
-
-    // Also listen to duration changes separately to update the MediaItem
-    _player.durationStream.listen((duration) {
-      final media = mediaItem.value;
-      if (media != null && duration != null) {
-        mediaItem.add(media.copyWith(duration: duration));
-      }
-    });
-    
-    // Listen for completion (optional, as the state listener covers it)
-    // _player.playerStateStream.listen((playerState) {
-    //   if (playerState.processingState == ProcessingState.completed) {
-    //     // Handle next song or stop playback if PlaySong isn't managing it
-    //   }
-    // });
+  Future<void> _loadEmptyPlaylist() async {
+    try {
+      await _player.setAudioSource(_playlist);
+    } catch (e) {
+      debugPrint("⛔️ [AudioHandler] Error setting empty audio source: $e");
+    }
   }
 
-  // Custom method used by PlaySong to load and start a new song
-  Future<void> playSong(String url, String title, String artist) async {
-    final item = MediaItem(
-      id: url,
-      title: title,
-      artist: artist,
-      artUri: Uri.parse('https://cdn-icons-png.flaticon.com/512/727/727245.png'),
+  /// ⭐️ UPDATED: Handles both Online URLs and Offline File Paths
+  AudioSource _createAudioSource(MediaItem mediaItem) {
+    Uri audioUri;
+
+    // Check if it's a network URL
+    if (mediaItem.id.startsWith('http') || mediaItem.id.startsWith('https')) {
+      audioUri = Uri.parse(mediaItem.id);
+    } else {
+      // Assume it is a local file path (for downloaded songs)
+      audioUri = Uri.file(mediaItem.id);
+    }
+
+    return AudioSource.uri(audioUri, tag: mediaItem);
+  }
+
+  // --- Public API ---
+
+  @override
+  Future<void> loadPlaylist(List<MediaItem> items, int startIndex) async {
+    debugPrint("--- [AudioHandler] loadPlaylist CALLED ---");
+    debugPrint(
+      "--- [AudioHandler] Playlist size: ${items.length}, Start index: $startIndex",
     );
 
-    mediaItem.add(item); 
-    await _player.setUrl(url); 
-    await _player.play();
+    queue.add(items);
+    _playlistItems.add(items);
+
+    try {
+      await _playlist.clear();
+      await _playlist.addAll(items.map(_createAudioSource).toList());
+      debugPrint("--- [AudioHandler] Playlist cleared and new items added.");
+    } catch (e, s) {
+      debugPrint(
+        "⛔️⛔️ [AudioHandler] CRITICAL ERROR setting playlist items: $e",
+      );
+      debugPrint("Stack trace: $s");
+      return;
+    }
+    try {
+      debugPrint("--- [AudioHandler] Attempting to setAudioSource...");
+      await _player.setAudioSource(_playlist, initialIndex: startIndex);
+      debugPrint("--- [AudioHandler] setAudioSource SUCCEEDED.");
+
+      debugPrint("--- [AudioHandler] Attempting to play()...");
+      await _player.play();
+      debugPrint("--- [AudioHandler] play() command SUCCEEDED.");
+    } catch (e, s) {
+      debugPrint("⛔️⛔️ [AudioHandler] CRITICAL ERROR playing audio: $e");
+      debugPrint(
+        "--- [AudioHandler] This is often a URL, simulator, or permissions issue. ---",
+      );
+      debugPrint("Stack trace: $s");
+    }
+  }
+
+  // Add this override to support playing a single item directly if used in DownloadedSongs
+  @override
+  Future<void> playMediaItem(MediaItem mediaItem) async {
+    await loadPlaylist([mediaItem], 0);
+  }
+
+  // --- Listener Methods ---
+
+  void _listenForPlaybackStateChanges() {
+    Rx.combineLatest6<
+          ProcessingState,
+          bool,
+          Duration,
+          Duration?,
+          LoopMode,
+          bool,
+          PlaybackState
+        >(
+          _player.processingStateStream,
+          _player.playingStream,
+          _player.positionStream,
+          _player.bufferedPositionStream,
+          _player.loopModeStream,
+          _player.shuffleModeEnabledStream,
+          (
+            processingState,
+            playing,
+            position,
+            bufferedPosition,
+            loopMode,
+            shuffleModeEnabled,
+          ) {
+            final audioServiceProcessingState =
+                const {
+                  ProcessingState.idle: AudioProcessingState.idle,
+                  ProcessingState.loading: AudioProcessingState.loading,
+                  ProcessingState.buffering: AudioProcessingState.buffering,
+                  ProcessingState.ready: AudioProcessingState.ready,
+                  ProcessingState.completed: AudioProcessingState.completed,
+                }[processingState] ??
+                AudioProcessingState.idle;
+
+            return playbackState.value.copyWith(
+              updatePosition: position,
+              bufferedPosition: bufferedPosition ?? Duration.zero,
+              playing: playing,
+              processingState: audioServiceProcessingState,
+              controls: [
+                MediaControl.skipToPrevious,
+                playing ? MediaControl.pause : MediaControl.play,
+                MediaControl.skipToNext,
+                MediaControl.stop,
+              ],
+              repeatMode: _mapLoopModeToRepeatMode(loopMode),
+              shuffleMode: shuffleModeEnabled
+                  ? AudioServiceShuffleMode.all
+                  : AudioServiceShuffleMode.none,
+            );
+          },
+        )
+        .distinct()
+        .listen((state) => playbackState.add(state));
+  }
+
+  void _listenForMediaItemChanges() {
+    Rx.combineLatest2<SequenceState?, Duration?, MediaItem?>(
+      _player.sequenceStateStream,
+      _player.durationStream,
+      (sequenceState, duration) {
+        final mediaItem = sequenceState?.currentSource?.tag as MediaItem?;
+        if (mediaItem == null) return null;
+        return mediaItem.copyWith(duration: duration);
+      },
+    ).distinct().listen((mediaItem) {
+      this.mediaItem.add(mediaItem);
+    });
   }
 
   // --- BaseAudioHandler Overrides ---
@@ -94,18 +167,58 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> stop() => _player.stop();
-
-  @override
-  // Correctly uses positional argument for JustAudio's seek method.
-  Future<void> seek(Duration position) {
-    return _player.seek(position); 
+  Future<void> stop() async {
+    await _player.stop();
+    await _player.seek(Duration.zero);
+    await _loadEmptyPlaylist();
+    mediaItem.add(null);
+    playbackState.add(
+      playbackState.value.copyWith(processingState: AudioProcessingState.idle),
+    );
   }
 
-  // Skip methods remain empty as their logic is in PlaySong.dart
   @override
-  Future<void> skipToNext() async {}
+  Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> skipToPrevious() async {}
+  Future<void> skipToNext() => _player.seekToNext();
+
+  @override
+  Future<void> skipToPrevious() => _player.seekToPrevious();
+
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
+    await _player.setLoopMode(_mapRepeatModeToLoopMode(repeatMode));
+  }
+
+  @override
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
+    final enabled = shuffleMode == AudioServiceShuffleMode.all;
+    await _player.setShuffleModeEnabled(enabled);
+  }
+
+  // --- Helpers ---
+  AudioServiceRepeatMode _mapLoopModeToRepeatMode(LoopMode loopMode) {
+    switch (loopMode) {
+      case LoopMode.off:
+        return AudioServiceRepeatMode.none;
+      case LoopMode.one:
+        return AudioServiceRepeatMode.one;
+      case LoopMode.all:
+        return AudioServiceRepeatMode.all;
+    }
+  }
+
+  LoopMode _mapRepeatModeToLoopMode(AudioServiceRepeatMode repeatMode) {
+    switch (repeatMode) {
+      case AudioServiceRepeatMode.none:
+        return LoopMode.off;
+      case AudioServiceRepeatMode.one:
+        return LoopMode.one;
+      case AudioServiceRepeatMode.all:
+        return LoopMode.all;
+      case AudioServiceRepeatMode.group:
+        return LoopMode.all;
+    }
+  }
 }

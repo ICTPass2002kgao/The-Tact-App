@@ -4,17 +4,28 @@ const functions = require('firebase-functions');
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-// const fetch = require('node-fetch'); // <-- REMOVED this problematic package
 const admin = require('firebase-admin');
 const crypto = require('crypto');
  
-
 // --- ADD THESE FOR EMAIL ---
 const nodemailer = require("nodemailer");
 const cors = require("cors"); // ✅ only import 
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
-// ---------------------------
+// --- ADD FOR V2 HTTPS FUNCTIONS ---
+const { onRequest } = require("firebase-functions/v2/https");
+
+// --- ADD THESE FOR AUDIO CONVERSION ---
+const multer = require('multer');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+// Tell fluent-ffmpeg where to find the ffmpeg binary
+ffmpeg.setFfmpegPath(ffmpegPath);
+// ---------------------------------------------------
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -22,8 +33,15 @@ const db = admin.firestore();
 
 // Create an Express app
 const app = express();
+
+// --- CONFIGURE MULTER FOR FILE UPLOADS ---
+// This tells Multer to save uploaded files to the system's temp directory
+const upload = multer({ dest: os.tmpdir() });
+// ---------------------------------------------
+
 app.use(bodyParser.json());
-app.use(cors({ origin: ["https://tactapp.web.app", "https://tact-3c612.web.app"] }));
+// Apply CORS to all routes on the 'app'
+app.use(cors({ origin: ["https://tact-3c612.web.app"] }));
  
 // Now use environment variables directly:
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; 
@@ -269,6 +287,7 @@ app.post('/create-payment-link', async (req, res) => {
         });
       }
     });
+     
     const body = {
       email,
       amount: totalAmount,
@@ -430,7 +449,7 @@ app.post('/sendCustomEmail', async (req, res) => {
       console.log(`Email successfully sent to ${to}`);
       return res.status(200).send({ success: true });
 
-    } catch (error) {
+    } catch (error)      {
       console.error("Error sending email:", error);
       return res.status(500).send({ error: "Failed to send email." });
     }
@@ -438,12 +457,121 @@ app.post('/sendCustomEmail', async (req, res) => {
 
 
 // =========================================================================
-// 5. EXPORT THE 'api' FUNCTION
+// 5. NEW /extract-audio ENDPOINT
+// This is the Node.js equivalent of your Python video converter
+// We use upload.single('video_file') to handle the file upload
 // =========================================================================
-exports.api = functions.https.onRequest(app);
+// =========================================================================
+// 5. NEW /extract-audio ENDPOINT
+// This now accepts JSON (videoUrl, storagePath) instead of a file
+// =========================================================================
+
+// REMOVED: upload.single('video_file')
+app.post('/extract-audio', async (req, res) => {
+  // 1. Validate input
+  const { videoUrl, storagePath } = req.body;
+  if (!videoUrl || !storagePath) {
+    console.error("Request failed: Missing 'videoUrl' or 'storagePath'");
+    return res.status(400).json({ 
+      status: 'error', 
+      message: 'Missing videoUrl or storagePath in request body.' 
+    });
+  }
+
+  // 2. Define temporary file paths in the function's /tmp/ directory
+  const uniqueId = crypto.randomBytes(6).toString('hex');
+  const tempVideoPath = path.join(os.tmpdir(), `video_${uniqueId}.tmp`);
+  const outputFileName = `audio_${uniqueId}.mp3`;
+  const tempAudioPath = path.join(os.tmpdir(), outputFileName);
+
+  try {
+    // 3. Download the video from Firebase Storage to the function's temp disk
+    const response = await axios({
+      method: 'get',
+      url: videoUrl,
+      responseType: 'stream'
+    });
+    
+    // Create a write stream to save the file
+    const writer = fs.createWriteStream(tempVideoPath);
+    response.data.pipe(writer);
+
+    // Wait for the download to finish
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    console.log(`Successfully downloaded video to ${tempVideoPath}`);
+
+    // 4. Perform the conversion using fluent-ffmpeg
+    ffmpeg(tempVideoPath)
+      .noVideo()
+      .audioCodec('libmp3lame')
+      .toFormat('mp3')
+      .save(tempAudioPath)
+      
+      // 5. Handle success
+      .on('end', () => {
+        console.log(`Conversion finished successfully: ${outputFileName}`);
+        
+        // 6. Stream the file back
+        res.download(tempAudioPath, outputFileName, async (err) => {
+          if (err) {
+            console.error(`Error sending file ${outputFileName} to client:`, err);
+          }
+          
+          // 7. (NEW) Delete the original video from Firebase Storage
+          try {
+            const bucket = admin.storage().bucket();
+            await bucket.file(storagePath).delete();
+            console.log(`Successfully deleted original video from Storage: ${storagePath}`);
+          } catch (storageError) {
+            console.error(`Failed to delete from Storage: ${storagePath}`, storageError);
+          }
+
+          // 8. Cleanup ALL local temporary files
+          fs.unlink(tempVideoPath, (e) => e && console.error(`Error deleting temp video ${tempVideoPath}:`, e));
+          fs.unlink(tempAudioPath, (e) => e && console.error(`Error deleting temp audio ${tempAudioPath}:`, e));
+        });
+      })
+      
+      // 9. Handle errors
+      .on('error', (err) => {
+        console.error(`FFMPEG conversion error for ${tempVideoPath}:`, err.message);
+        fs.unlink(tempVideoPath, (e) => e && console.error(`Error deleting temp video ${tempVideoPath}:`, e));
+        res.status(500).json({
+          status: 'error',
+          message: `Conversion failed: ${err.message}`
+        });
+      });
+
+  } catch (e) {
+    console.error('Server error during /extract-audio setup:', e);
+    // Cleanup the video file if setup fails
+    fs.unlink(tempVideoPath, (err) => err && console.error(`Error deleting temp video ${tempVideoPath}:`, err));
+    res.status(500).json({
+      status: 'error',
+      message: `Server failed: ${e.message}`
+    });
+  }
+});
 
 // =========================================================================
-// 6. SCHEDULED SUBSCRIPTION CRON JOB (FIXED TO V1 SYNTAX)
+// 6. EXPORT THE 'api' FUNCTION (V2 SYNTAX WITH TIMEOUT)
+// We increase the timeout to 120 seconds (from 60) to allow
+// for video conversion time.
+// =========================================================================
+exports.api = onRequest({ 
+    timeoutSeconds: 120, // Keep the long timeout
+    memory: '1GiB'      // ⭐️ ADD THIS LINE
+  },// This is the v2 way to set options
+  app                       // The express app is the second argument
+);
+
+// =========================================================================
+// 7. SCHEDULED SUBSCRIPTION CRON JOB (V2 SYNTAX)
+// =========================================================================
 exports.monthlySubscriptionCharge = onSchedule(
   {
     schedule: '0 0 1 * *', // Runs at midnight UTC on the 1st of every month

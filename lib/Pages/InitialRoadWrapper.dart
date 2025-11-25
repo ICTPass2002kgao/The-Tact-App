@@ -2,8 +2,10 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Components/Upcoming_events_card.dart';
 
 class InitialRouteWrapper extends StatefulWidget {
   const InitialRouteWrapper({super.key});
@@ -48,17 +50,30 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper> {
       try {
         final overseerDoc = await FirebaseFirestore.instance
             .collection('overseers')
-            .where('uid',isEqualTo:user.uid)
+            .where('uid', isEqualTo: user.uid)
             .get();
-        print("This is the ${overseerDoc}");
-        if (overseerDoc.docs.isNotEmpty) {
+
+        final admin = await FirebaseFirestore.instance
+            .collection('users')
+            .where('role', isEqualTo: "Admin")
+            .get();
+        final tactsoBranches = await FirebaseFirestore.instance
+            .collection('tactso_branches')
+            .where('uid',isEqualTo:  user.uid)
+            .get();
+
+        print("This is the ${overseerDoc}");  
+        
+        if(tactsoBranches.docs.isNotEmpty){ 
+ 
+          targetRoute = '/tactso-branches';
+        } else if (overseerDoc.docs.isNotEmpty) {
           // ⭐️ SUCCESS: User is an overseer
           targetRoute = '/overseer';
-        } else {
-          // User is logged in but not an overseer.
-          // Add other role checks here if you have them (e.g., 'admins')
-
-          // Default to the main menu for all other logged-in users
+        } else if (admin.docs.isNotEmpty) {
+          // ⭐️ SUCCESS: User is an admin
+          targetRoute = '/admin';
+        } else{
           targetRoute = '/main-menu';
         }
       } catch (e) {
@@ -83,8 +98,9 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       // Show a loading spinner while we check everything
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return  Scaffold(body:isIOSPlatform?Center(child:CupertinoActivityIndicator() ,): Center(child: CircularProgressIndicator()));
     }
+    
 
     // We have a confirmed route. Navigate to it immediately after this
     // build is complete. This is the correct way to navigate on init.

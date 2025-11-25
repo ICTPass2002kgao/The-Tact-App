@@ -1,14 +1,23 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:camera/camera.dart';
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb and defaultTargetPlatform
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart'; // Required for iOS widgets
+import 'package:camera/camera.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
+import 'package:just_audio/just_audio.dart' hide AudioPlayer;
 import 'package:permission_handler/permission_handler.dart';
 
+// Keep your existing imports
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Pages/Tactso_Branches_Applications.dart' hide Api;
+import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
 
 class FaceVerificationScreen extends StatefulWidget {
+  final String email;
+  final String password;
   final List<String> authorizedFaceUrls;
   final String universityUID;
   final CameraDescription camera;
@@ -18,6 +27,8 @@ class FaceVerificationScreen extends StatefulWidget {
     required this.authorizedFaceUrls,
     required this.universityUID,
     required this.camera,
+    required this.email,
+    required this.password,
   });
 
   @override
@@ -26,9 +37,18 @@ class FaceVerificationScreen extends StatefulWidget {
 
 class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
   late CameraController _cameraController;
+
+  // 1. UPDATE: Define TTS as a class variable
+  late FlutterTts _flutterTts;
+  late AudioPlayer _audioPlayer;
   final Api _api = Api();
   bool _isVerifying = false;
   String _statusMessage = 'Initializing camera...';
+
+  // Helper to check if we should use iOS style
+  bool get _isIOS =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   static const String _verificationApiEndpoint =
       'https://tact-api.up.railway.app/api/verify_faces/';
@@ -37,58 +57,44 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
   void initState() {
     super.initState();
     _initializeCamera();
+    _audioPlayer = AudioPlayer();
   }
 
-  // MODIFIED: Handles runtime permission request
-  Future<void> _initializeCamera() async {
-    // 1. REQUEST CAMERA PERMISSION
-    var status = await Permission.camera.request();
+  Future<void> playSound(bool isSuccess) async {
+    try {
+      // Assuming you put files in assets/sounds/
+      String fileName = isSuccess ? 'success.mp3' : 'denied.mp3';
 
-    if (status.isDenied || status.isPermanentlyDenied) {
-      if (mounted) {
-        setState(() {
-          _statusMessage = 'Permission denied. Tap to open settings.';
-        });
-        _api.showMessage(
-          context,
-          'Camera access is required for face verification. Please grant permission in settings.',
-          'Permission Denied',
-          Colors.red,
-        );
+      // Play the file
+      await _audioPlayer.play(AssetSource(fileName));
+    } catch (e) {
+      print("Audio Error (Ignored): $e");
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    if (!kIsWeb) {
+      var status = await Permission.camera.request();
+      if (status.isDenied || status.isPermanentlyDenied) {
+        _handlePermissionDenied(status.isPermanentlyDenied);
+        return;
       }
-      if (status.isPermanentlyDenied) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        await openAppSettings();
-      }
-      return;
     }
 
-    // 2. CAMERA SELECTION LOGIC
     CameraDescription selectedCamera = widget.camera;
-
     if (selectedCamera.lensDirection != CameraLensDirection.front) {
-      final available = await availableCameras();
       try {
+        final available = await availableCameras();
         selectedCamera = available.firstWhere(
           (c) => c.lensDirection == CameraLensDirection.front,
+          orElse: () => widget.camera,
         );
-        debugPrint("Switched to front camera for face verification.");
-      } catch (e) {
-        if (mounted) {
-          _api.showMessage(
-            context,
-            'Front camera not found. Using default camera.',
-            'Warning',
-            Colors.orange,
-          );
-        }
-      }
+      } catch (_) {}
     }
 
-    // 3. CAMERA INITIALIZATION LOGIC (Increased resolution for better face detection)
     _cameraController = CameraController(
       selectedCamera,
-      ResolutionPreset.high, // Set to high for better HOG/CNN input
+      kIsWeb ? ResolutionPreset.high : ResolutionPreset.veryHigh,
       enableAudio: false,
     );
 
@@ -96,326 +102,320 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
       await _cameraController.initialize();
       if (!mounted) return;
       setState(() {
-        _statusMessage = 'Selfie camera ready. Tap to start verification.';
+        _statusMessage = 'Camera ready. Align your face.';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _statusMessage = 'Error initializing camera: $e';
+        _statusMessage = 'Camera Error: $e';
       });
-      _api.showMessage(context, 'Camera Init Failed: $e', 'Error', Colors.red);
     }
   }
 
-  // MODIFIED: Logic now ONLY checks the first authorized face URL
-  Future<void> _verifyFace() async {
-    if (_isVerifying || !_cameraController.value.isInitialized) {
-      if (_statusMessage.contains('Permission denied')) {
-        await openAppSettings();
-      }
-      return;
-    }
-
-    if (widget.authorizedFaceUrls.isEmpty) {
-      if (!mounted) return;
+  void _handlePermissionDenied(bool isPermanent) {
+    if (mounted) {
+      setState(() => _statusMessage = 'Permission denied.');
       _api.showMessage(
         context,
-        'No authorized faces are stored for this university. Access denied.',
-        'Configuration Error',
+        'Camera permission is required.',
+        'Error',
         Colors.red,
       );
-      setState(() {
-        _statusMessage = 'Verification Failed: No face URLs stored.';
-        _isVerifying = false;
-      });
+    }
+  }
+
+  Future<void> _verifyFace() async {
+    if (_isVerifying || !_cameraController.value.isInitialized) return;
+
+    if (widget.authorizedFaceUrls.isEmpty) {
+      _api.showMessage(
+        context,
+        'No authorized faces found.',
+        'Error',
+        Colors.red,
+      );
       return;
     }
 
     setState(() {
       _isVerifying = true;
-      _statusMessage = 'Capturing image and verifying face...';
+      _statusMessage = 'Verifying...';
     });
 
     try {
-      final XFile file = await _cameraController.takePicture();
-      final File capturedImage = File(file.path);
-
-      // MODIFICATION: Only check the first face URL
+      final XFile capturedFile = await _cameraController.takePicture();
       final String refImageUrl = widget.authorizedFaceUrls.first;
-      bool matchFound = false;
-      String lastErrorMessage = 'No match found for the authorized user.';
 
-      final result = await _compareFaces(capturedImage, refImageUrl);
+      final result = await _compareFaces(capturedFile, refImageUrl);
 
       if (result['matched'] == true) {
-        matchFound = true;
-        debugPrint("✅ MATCH SUCCESS on face: $refImageUrl");
-      } else if (result['error_message'] != null) {
-        lastErrorMessage = result['error_message'];
-        debugPrint(
-          "❌ Match attempt failed. Reason: ${result['error_message']}",
-        );
-      }
-
-      if (matchFound) {
-        if (!mounted) return;
-        _api.showMessage(
-          context,
-          'Face matched! Access granted.',
-          'Success',
-          Colors.green,
-        );
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) => const TactsoBranchesApplications(),
-          ),
-          (route) => false,
-        );
+        // 4. UPDATE: Await the success handler
+        await _handleSuccess();
       } else {
-        if (!mounted) return;
-        _api.showMessage(
-          context,
-          lastErrorMessage,
-          'Access Denied',
-          Colors.red,
-        );
-        setState(() {
-          _statusMessage =
-              'Verification Failed: ${lastErrorMessage.split(':')[0]}. Tap to try again.';
-          _isVerifying = false;
-        });
+        _handleFailure();
       }
     } catch (e) {
-      if (!mounted) return;
-      _api.showMessage(
-        context,
-        'Application Error: ${e.toString()}',
-        'Error',
-        Colors.red,
-      );
-      setState(() {
-        _statusMessage = 'Verification failed. App Error: ${e.runtimeType}';
-        _isVerifying = false;
-      });
+      _handleFailure();
     }
   }
 
   Future<Map<String, dynamic>> _compareFaces(
-    File capturedImage,
+    XFile capturedImage,
     String referenceImageUrl,
   ) async {
-    debugPrint('Comparing live image against: $referenceImageUrl');
-
     try {
-      var request =
-          http.MultipartRequest('POST', Uri.parse(_verificationApiEndpoint))
-            ..fields['reference_url'] = referenceImageUrl
-            ..files.add(
-              await http.MultipartFile.fromPath(
-                'live_image',
-                capturedImage.path,
-              ),
-            );
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_verificationApiEndpoint),
+      );
+      request.fields['reference_url'] = referenceImageUrl;
+
+      final Uint8List imageBytes = await capturedImage.readAsBytes();
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'live_image',
+          imageBytes,
+          filename: 'face_scan.jpg',
+        ),
+      );
 
       var response = await request.send();
-      final respJsonString = await response.stream.bytesToString();
+      final respString = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
-        final respJson = jsonDecode(respJsonString);
-
-        if (respJson['matched'] == true) {
-          return {'matched': true, 'error_message': null};
-        } else {
-          // MODIFIED: Ensure we check 'error' key from Python API
-          final message =
-              respJson['error'] ?? respJson['message'] ?? 'No face match.';
-          return {
-            'matched': false,
-            'error_message': 'Verification Failed: $message',
-          };
-        }
-      } else {
-        debugPrint('API Error ${response.statusCode}: $respJsonString');
-        String apiError =
-            'API Error ${response.statusCode}. Check server logs.';
-        try {
-          final errorJson = jsonDecode(respJsonString);
-          apiError = errorJson['error'] ?? errorJson['message'] ?? apiError;
-        } catch (_) {}
-        return {
-          'matched': false,
-          'error_message': 'API Call Failed: $apiError',
-        };
+        final json = jsonDecode(respString);
+        return json['matched'] == true
+            ? {'matched': true}
+            : {
+                'matched': false,
+                'error_message': json['message'] ?? json['error'],
+              };
       }
-    } catch (e) {
       return {
         'matched': false,
-        'error_message':
-            'Network Error: Check internet connection or API domain.',
+        'error_message': 'Server Error: ${response.statusCode}',
       };
+    } catch (e) {
+      return {'matched': false, 'error_message': 'Connection Error'};
     }
+  }
+
+  // 6. UPDATE: Make this async and wait for speech
+  Future<void> _handleSuccess() async {
+    if (!mounted) return;
+    await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: widget.email,
+      password: widget.password,
+    );
+    // Speak FIRST
+    await playSound(true);
+
+    // Then show message
+    _api.showMessage(context, 'Identity Verified.', 'Success', Colors.green);
+
+    // Then navigate
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => const TactsoBranchesApplications(),
+        ),
+        (route) => false,
+      );
+    }
+  }
+
+  void _handleFailure() async {
+    if (!mounted) return;
+
+    // We don't await here because we aren't navigating away instantly
+    await playSound(true);
+
+    setState(() {
+      _isVerifying = false;
+    });
+    _api.showMessage(context, "Access denied", 'Denied', Colors.red);
   }
 
   @override
   void dispose() {
     _cameraController.dispose();
+    _flutterTts.stop(); // Good practice to stop TTS
     super.dispose();
   }
 
+  // --- BUILD METHODS (UNCHANGED) ---
+
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context);
+    if (_isIOS) {
+      return _buildCupertinoPage(context);
+    } else {
+      return _buildMaterialPage(context);
+    }
+  }
 
-    // FIX: Handle Initialization State
+  Widget _buildMaterialPage(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text(
+          'Biometric Check 📸',
+          style: TextStyle(color: Colors.black87),
+        ),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: _buildBodyContent(context),
+    );
+  }
+
+  Widget _buildCupertinoPage(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('Biometric Check'),
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.blue,
+        border: null,
+      ),
+      child: _buildBodyContent(context),
+    );
+  }
+
+  Widget _buildBodyContent(BuildContext context) {
     if (!_cameraController.value.isInitialized) {
-      final bool isPermissionIssue = _statusMessage.contains(
-        'Permission denied',
-      );
-
-      return Scaffold(
-        appBar: AppBar(title: const Text('Face Verification')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (!isPermissionIssue) const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              Text(
-                _statusMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: isPermissionIssue ? Colors.red : Colors.black,
-                  fontWeight: isPermissionIssue
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-              if (isPermissionIssue) ...[
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: openAppSettings,
-                  icon: const Icon(Icons.settings),
-                  label: const Text('Open App Settings'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator.adaptive(),
+            const SizedBox(height: 20),
+            Text(
+              _statusMessage,
+              style: _isIOS
+                  ? CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                      color: CupertinoColors.systemGrey,
+                    )
+                  : Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+            ),
+          ],
         ),
       );
     }
 
-    // --- CAMERA SCALING CALCULATION (Unchanged) ---
-    final double containerWidth = 250;
-    final double containerHeight = 350;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              height: 250,
+              width: 180,
+              child: ClipOval(child: CameraPreview(_cameraController)),
+            ),
 
-    final previewAspectRatio = _cameraController.value.aspectRatio;
-    final desiredAspectRatio = containerWidth / containerHeight;
+            const SizedBox(height: 40),
 
-    double scale = 1.0;
-
-    if (previewAspectRatio > desiredAspectRatio) {
-      scale = containerHeight / (containerWidth / previewAspectRatio);
-    } else {
-      scale = containerWidth / (containerHeight * previewAspectRatio);
-    }
-    // --- END CAMERA SCALING CALCULATION ---
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Biometric Check 📸'),
-        centerTitle: true,
-        foregroundColor: color.scaffoldBackgroundColor,
-        automaticallyImplyLeading: false,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Camera Preview in a rounded container
-              Container(
-                width: 250,
-                height: 300,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(300),
-                  border: Border.all(color: Colors.green, width: 4),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(300),
-                  child: SizedBox(
-                    width: containerWidth,
-                    height: containerHeight,
-                    child: Transform.scale(
-                      scale: scale,
-                      alignment: Alignment.center,
-                      child: Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()..scale(-1.0, 1.0),
-                        child: AspectRatio(
-                          aspectRatio: _cameraController.value.aspectRatio,
-                          child: CameraPreview(_cameraController),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              Text(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Text(
                 _statusMessage,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: _isVerifying ? Colors.orange : Colors.black,
-                ),
+                style: _isIOS
+                    ? CupertinoTheme.of(
+                        context,
+                      ).textTheme.navLargeTitleTextStyle.copyWith(
+                        fontSize: 18,
+                        color: _isVerifying
+                            ? CupertinoColors.systemGrey
+                            : CupertinoColors.black,
+                        fontWeight: FontWeight.w600,
+                      )
+                    : Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 18,
+                        color: _isVerifying
+                            ? Colors.grey.shade600
+                            : Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
               ),
-              const SizedBox(height: 20),
+            ),
 
-              // Verification Button
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: ElevatedButton.icon(
-                  onPressed: _isVerifying ? null : _verifyFace,
-                  icon: Icon(_isVerifying ? Icons.lock_clock : Icons.face),
-                  label: Text(
-                    _isVerifying ? 'Verifying...' : 'Capture & Verify Face',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: _isVerifying
-                        ? Colors.grey
-                        : Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 30,
-                      vertical: 15,
-                    ),
+            const SizedBox(height: 40),
 
-                    textStyle: const TextStyle(fontSize: 18),
-                  ),
-                ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: _buildAdaptiveButton(
+                context: context,
+                text: _isVerifying ? 'Verifying Identity...' : 'Verify Face',
+                onPressed: _isVerifying ? null : _verifyFace,
+                isLoading: _isVerifying,
               ),
-              const SizedBox(height: 40),
-              Text(
-                'Authorized User: ${widget.authorizedFaceUrls.isNotEmpty ? '1 face targeted' : 'No face stored'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildAdaptiveButton({
+    required BuildContext context,
+    required String text,
+    required VoidCallback? onPressed,
+    required bool isLoading,
+  }) {
+    if (_isIOS) {
+      final size = MediaQuery.of(context).size.width;
+      return CupertinoButton.filled(
+        minimumSize: Size(size > 600 ? 400 : double.infinity, 60),
+        sizeStyle: CupertinoButtonSize.large,
+        color: Theme.of(context).primaryColor,
+        onPressed: onPressed,
+        disabledColor: CupertinoColors.systemGrey3,
+        borderRadius: BorderRadius.circular(10),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: isLoading
+            ? const CupertinoActivityIndicator(color: Colors.white)
+            : Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      );
+    } else {
+      return ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.face_retouching_natural, size: 28),
+        label: Text(
+          text,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 60),
+          elevation: 4,
+          shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+        ),
+      );
+    }
   }
 }

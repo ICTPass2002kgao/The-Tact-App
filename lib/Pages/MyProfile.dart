@@ -1,25 +1,208 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, prefer_typing_uninitialized_variables
 
 // --- PLATFORM IMPORTS FIX: Rerouting dart:io ---
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart'; // for kIsWeb
 
 // Import dart:io.File with an alias 'io' ONLY on non-web platforms.
-// If compiling for web (dart.library.html is true), dart:io will be replaced with dart:typed_data.
-// We must conditionally import the dart:io library only when not on web.
-
 import 'dart:io' as io show File; // <-- FIX: Imports ONLY the File class for use as io.File
 import 'package:image_picker/image_picker.dart';
 
 // --- REST OF IMPORTS ---
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; 
+import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Custom_Buttons.dart';
- 
+import 'package:ttact/Components/API.dart'; // Import API for showLoading
+
+// --- PLATFORM UTILITIES ---
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
+// ------------------------
+
+// --- COPIED HELPERS FROM SIGNUPPAGE ---
+
+// Custom platform-aware TextField Builder
+Widget _buildPlatformTextField({
+  required TextEditingController controller,
+  required String placeholder,
+  IconData? prefixIcon,
+  TextInputType keyboardType = TextInputType.text,
+  bool obscureText = false,
+  bool readOnly = false,
+  int? maxLines = 1,
+  String? Function(String?)? validator,
+  Widget? suffixIcon,
+  required BuildContext context,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8.0),
+    child: isIOSPlatform
+        ? CupertinoTextField(
+            style: TextStyle(color: Theme.of(context).cardColor),
+            controller: controller,
+            placeholder: placeholder,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(12.0),
+            prefix: prefixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+                  )
+                : null,
+            suffixMode: OverlayVisibilityMode.editing,
+            suffix: suffixIcon,
+          )
+        : TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            decoration: InputDecoration(
+              hintText: placeholder,
+              prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+              suffixIcon: suffixIcon,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 16.0,
+              ),
+            ),
+            validator: validator,
+          ),
+  );
+}
+
+// Custom platform-aware ListTile Builder
+Widget _buildListTile({
+  required String title,
+  required String trailingText,
+  required VoidCallback onTap,
+  required BuildContext context,
+  IconData? leadingIcon, // Added for flexibility
+  String? subtitle,
+}) {
+  if (isIOSPlatform) {
+    return CupertinoListTile(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle) : null,
+      leading: leadingIcon != null
+          ? Icon(leadingIcon, color: Theme.of(context).primaryColor)
+          : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText, style: TextStyle(color: Colors.grey[600])),
+          const Icon(CupertinoIcons.chevron_right),
+        ],
+      ),
+      onTap: onTap,
+    );
+  } else {
+    return ListTile(
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle) : null,
+      leading: leadingIcon != null
+          ? Icon(leadingIcon, color: Theme.of(context).primaryColor)
+          : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailingText, style: TextStyle(color: Colors.grey[600])),
+          const Icon(Icons.arrow_forward_ios, size: 16),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+// Custom platform-aware Action Sheet Builder
+void _buildActionSheet({
+  required BuildContext context,
+  required String title,
+  required List<String> actions,
+  required ValueChanged<String> onSelected,
+}) {
+  if (isIOSPlatform) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: Text(title),
+        actions: actions.map((item) {
+          return CupertinoActionSheetAction(
+            child: Text(item),
+            onPressed: () {
+              onSelected(item);
+              Navigator.pop(context);
+            },
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  } else {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) => Container(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, textAlign: TextAlign.center),
+              const Divider(),
+              ...actions.map((item) {
+                return ListTile(
+                  title: Text(item),
+                  onTap: () {
+                    onSelected(item);
+                    Navigator.pop(context);
+                  },
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+// --- END COPIED HELPERS ---
+
 class MyProfile extends StatefulWidget {
   const MyProfile({super.key});
 
@@ -33,22 +216,23 @@ class _MyProfileState extends State<MyProfile> {
   final _addressController = TextEditingController();
   final _contactNumberController = TextEditingController();
 
-  XFile? _pickedFile; 
+  XFile? _pickedFile;
   String? _currentProfileImageUrl;
 
-  final _formKey = GlobalKey<FormState>(); 
+  final _formKey = GlobalKey<FormState>();
 
   // Helper for profile image display
   ImageProvider _getProfileImage() {
     if (_pickedFile != null) {
       if (kIsWeb) {
         // Web: Use the path which is actually a data URL or blob
-        return NetworkImage(_pickedFile!.path); 
+        return NetworkImage(_pickedFile!.path);
       } else {
         // Mobile/Desktop: Use dart:io.File, referenced via alias
         return FileImage(io.File(_pickedFile!.path)); // <--- CORRECTED LINE
       }
-    } else if (_currentProfileImageUrl != null && _currentProfileImageUrl!.isNotEmpty) {
+    } else if (_currentProfileImageUrl != null &&
+        _currentProfileImageUrl!.isNotEmpty) {
       // Existing network image
       return NetworkImage(_currentProfileImageUrl!);
     } else {
@@ -56,7 +240,6 @@ class _MyProfileState extends State<MyProfile> {
       return AssetImage('assets/no_profile.png');
     }
   }
-
 
   @override
   void dispose() {
@@ -101,13 +284,13 @@ class _MyProfileState extends State<MyProfile> {
         uploadTask = storageRef.putData(bytes);
       } else {
         // Mobile/Desktop upload using dart:io.File, referenced via alias
-        uploadTask = storageRef.putFile(io.File(_pickedFile!.path)); // <--- CORRECTED LINE
+        uploadTask =
+            storageRef.putFile(io.File(_pickedFile!.path)); // <--- CORRECTED LINE
       }
 
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
       return downloadUrl;
-      
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -130,11 +313,10 @@ class _MyProfileState extends State<MyProfile> {
     }
 
     try {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Updating profile...')));
-      }
+isIOSPlatform?
+    Api().showIosLoading(context):
+ 
+    Api().showLoading(context);; // Use platform-aware loading
 
       String? newProfileUrl = await _uploadImage();
 
@@ -150,6 +332,7 @@ class _MyProfileState extends State<MyProfile> {
       }
 
       if (mounted) {
+        Navigator.pop(context); // Pop loading
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
         );
@@ -157,18 +340,21 @@ class _MyProfileState extends State<MyProfile> {
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
+        Navigator.pop(context); // Pop loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Authentication Error: ${e.message}')),
         );
       }
     } on FirebaseException catch (e) {
       if (mounted) {
+        Navigator.pop(context); // Pop loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Firestore Error: ${e.message}')),
         );
       }
     } catch (e) {
       if (mounted) {
+        Navigator.pop(context); // Pop loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('An unexpected error occurred: $e')),
         );
@@ -194,7 +380,8 @@ class _MyProfileState extends State<MyProfile> {
         // Use ConstrainedBox for a nice look on wide screens
         return Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500), // Max width for the modal
+            constraints:
+                const BoxConstraints(maxWidth: 500), // Max width for the modal
             child: StatefulBuilder(
               builder: (BuildContext context, StateSetter setModalState) {
                 return Padding(
@@ -212,7 +399,9 @@ class _MyProfileState extends State<MyProfile> {
                         children: [
                           Text(
                             'Edit Profile',
-                            style: Theme.of(context).textTheme.headlineSmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const Divider(height: 20, thickness: 1),
@@ -220,165 +409,109 @@ class _MyProfileState extends State<MyProfile> {
 
                           GestureDetector(
                             onTap: () async {
-                              await _pickImage(setModalState); // Pass setModalState
+                              await _pickImage(
+                                  setModalState); // Pass setModalState
                             },
                             child: CircleAvatar(
                               radius: 60,
-                              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                              backgroundImage: _getProfileImage(), // Use safe image getter
-                              child: 
-                                (_pickedFile == null &&
-                                    (_currentProfileImageUrl == null || _currentProfileImageUrl!.isEmpty))
-                                ? Icon(
-                                    Icons.camera_alt,
-                                    size: 40,
-                                    color: Theme.of(context).primaryColor,
-                                  )
-                                : null,
+                              backgroundColor: Theme.of(context)
+                                  .primaryColor
+                                  .withOpacity(0.1),
+                              backgroundImage:
+                                  _getProfileImage(), // Use safe image getter
+                              child: (_pickedFile == null &&
+                                      (_currentProfileImageUrl == null ||
+                                          _currentProfileImageUrl!.isEmpty))
+                                  ? Icon(
+                                      Icons.camera_alt,
+                                      size: 40,
+                                      color: Theme.of(context).primaryColor,
+                                    )
+                                  : null,
                             ),
                           ),
                           const SizedBox(height: 10),
-                          TextButton(
-                            onPressed: () async {
-                              await _pickImage(setModalState); // Pass setModalState
-                            },
-                            child: const Text('Change Profile Picture'),
-                          ),
+                          // --- PLATFORM AWARE BUTTON ---
+                          isIOSPlatform
+                              ? CupertinoButton(
+                                  child: Text('Change Profile Picture'),
+                                  onPressed: () async {
+                                    await _pickImage(setModalState);
+                                  },
+                                )
+                              : TextButton(
+                                  onPressed: () async {
+                                    await _pickImage(setModalState);
+                                  },
+                                  child: const Text('Change Profile Picture'),
+                                ),
                           const SizedBox(height: 20),
 
-                          // CupertinoTextField for Name (Fields unchanged as requested)
-                          CupertinoTextField(
+                          // --- PLATFORM AWARE TEXT FIELDS ---
+                          _buildPlatformTextField(
+                            context: context,
                             controller: _nameController,
                             placeholder: 'First Name',
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: CupertinoColors.lightBackgroundGray,
-                              ),
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            clearButtonMode: OverlayVisibilityMode.editing,
-                            prefix: const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Icon(CupertinoIcons.person),
-                            ),
-                            onChanged: (value) => _formKey.currentState?.validate(),
+                            prefixIcon: CupertinoIcons.person,
                           ),
                           const SizedBox(height: 12),
-
-                          // CupertinoTextField for Surname
-                          CupertinoTextField(
+                          _buildPlatformTextField(
+                            context: context,
                             controller: _surnameController,
                             placeholder: 'Last Name',
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: CupertinoColors.lightBackgroundGray,
-                              ),
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            clearButtonMode: OverlayVisibilityMode.editing,
-                            prefix: const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Icon(CupertinoIcons.person_alt),
-                            ),
-                            onChanged: (value) => _formKey.currentState?.validate(),
+                            prefixIcon: CupertinoIcons.person_alt,
                           ),
                           const SizedBox(height: 12),
-
-                          // CupertinoTextField for Contact Number
-                          CupertinoTextField(
+                          _buildPlatformTextField(
+                            context: context,
                             controller: _contactNumberController,
                             placeholder: 'Contact Number',
                             keyboardType: TextInputType.phone,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: CupertinoColors.lightBackgroundGray,
-                              ),
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            clearButtonMode: OverlayVisibilityMode.editing,
-                            prefix: const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Icon(CupertinoIcons.phone),
-                            ),
-                            onChanged: (value) => _formKey.currentState?.validate(),
+                            prefixIcon: CupertinoIcons.phone,
                           ),
                           const SizedBox(height: 12),
-
-                          // CupertinoTextField for Address
-                          CupertinoTextField(
+                          _buildPlatformTextField(
+                            context: context,
                             controller: _addressController,
                             placeholder: 'Address',
-                            maxLines: 3, 
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: CupertinoColors.lightBackgroundGray,
-                              ),
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            clearButtonMode: OverlayVisibilityMode.editing,
-                            prefix: const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Icon(CupertinoIcons.location),
-                            ),
-                            onChanged: (value) => _formKey.currentState?.validate(),
+                            maxLines: 3,
+                            prefixIcon: CupertinoIcons.location,
                           ),
                           const SizedBox(height: 24),
 
-                          ElevatedButton(
-                            onPressed: () {
-                              if (_nameController.text.trim().isEmpty ||
-                                  _surnameController.text.trim().isEmpty ||
-                                  _contactNumberController.text.trim().isEmpty ||
-                                  _addressController.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please fill all required fields.'),
+                          // --- PLATFORM AWARE BUTTON ---
+                          isIOSPlatform
+                              ? CupertinoButton.filled(
+                                  child: const Text(
+                                    'Save Changes',
+                                    style: TextStyle(fontSize: 16),
                                   ),
-                                );
-                                return;
-                              }
-
-                              final updatedData = {
-                                'name': _nameController.text.trim(),
-                                'surname': _surnameController.text.trim(),
-                                'phone': _contactNumberController.text.trim(),
-                                'address': _addressController.text.trim(),
-                              };
-                              _updateUserData(updatedData);
-                              Navigator.of(context).pop(); // Close the bottom sheet
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 40,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Save Changes',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                          ),
+                                  onPressed: () {
+                                    _saveProfileChanges();
+                                  },
+                                )
+                              : ElevatedButton(
+                                  onPressed: () {
+                                    _saveProfileChanges();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        Theme.of(context).primaryColor,
+                                    foregroundColor: Theme.of(context)
+                                        .scaffoldBackgroundColor,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 40,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Save Changes',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                ),
                           const SizedBox(height: 20),
                         ],
                       ),
@@ -395,20 +528,100 @@ class _MyProfileState extends State<MyProfile> {
     });
   }
 
+  // --- NEW HELPER: Save Profile Logic ---
+  void _saveProfileChanges() {
+    if (_nameController.text.trim().isEmpty ||
+        _surnameController.text.trim().isEmpty ||
+        _contactNumberController.text.trim().isEmpty ||
+        _addressController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all required fields.'),
+        ),
+      );
+      return;
+    }
+
+    final updatedData = {
+      'name': _nameController.text.trim(),
+      'surname': _surnameController.text.trim(),
+      'phone': _contactNumberController.text.trim(),
+      'address': _addressController.text.trim(),
+    };
+    _updateUserData(updatedData);
+    Navigator.of(context).pop(); // Close the bottom sheet
+  }
+
+  // --- PLATFORM AWARE APP BAR ---
+  PreferredSizeWidget _buildAppBar(ThemeData theme) {
+    if (isIOSPlatform) {
+      return CupertinoNavigationBar(
+        middle: const Text('My Profile'),
+        backgroundColor: theme.primaryColor,
+        // This is tricky. CupertinoNavigationBar doesn't handle theming from Material themes well.
+        // We'll force the text color.
+        leading: CupertinoNavigationBarBackButton(
+          color: theme.scaffoldBackgroundColor,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: Icon(CupertinoIcons.pencil, color: theme.scaffoldBackgroundColor),
+          onPressed: _onEditPressed,
+        ),
+        // A bit of a hack to make the text white
+        brightness: Brightness.dark, 
+      );
+    } else {
+      return AppBar(
+        title: const Text('My Profile'),
+        backgroundColor: theme.primaryColor,
+        foregroundColor: theme.scaffoldBackgroundColor,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _onEditPressed,
+          ),
+        ],
+      );
+    }
+  }
+
+  // --- NEW HELPER: Edit Button Logic ---
+  void _onEditPressed() async {
+    final String? userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return; // Should be handled by the body, but good practice
+
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    if (userDoc.exists) {
+      _showEditProfileSheet(
+        context,
+        userDoc.data() as Map<String, dynamic>,
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load profile data for editing.'),
+          ),
+        );
+      }
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final String? userId = FirebaseAuth.instance.currentUser?.uid;
-    final bool isDesktop = MediaQuery.of(context).size.width > 800; // Define desktop breakpoint
+    final bool isDesktop =
+        MediaQuery.of(context).size.width > 800; // Define desktop breakpoint
 
     if (userId == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('My Profile'),
-          backgroundColor: theme.primaryColor,
-          foregroundColor: theme.scaffoldBackgroundColor,
-          centerTitle: true,
-        ),
+        appBar: _buildAppBar(theme), // Use platform-aware app bar
         body: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -429,40 +642,10 @@ class _MyProfileState extends State<MyProfile> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        backgroundColor: theme.primaryColor,
-        foregroundColor: theme.scaffoldBackgroundColor,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () async {
-              final userDoc = await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .get();
-              if (userDoc.exists) {
-                _showEditProfileSheet(
-                  context,
-                  userDoc.data() as Map<String, dynamic>,
-                );
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not load profile data for editing.'),
-                    ),
-                  );
-                }
-              }
-            },
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(theme), // Use platform-aware app bar
       body: Center(
         child: Container(
-          // Constrain content width for desktop/web 
+          // Constrain content width for desktop/web
           constraints: BoxConstraints(maxWidth: 900),
           child: FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance
@@ -472,7 +655,10 @@ class _MyProfileState extends State<MyProfile> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
-                  child: CircularProgressIndicator(color: theme.primaryColor),
+                  // --- PLATFORM AWARE ---
+                  child: isIOSPlatform
+                      ? CupertinoActivityIndicator()
+                      : CircularProgressIndicator(color: theme.primaryColor),
                 );
               } else if (snapshot.hasError) {
                 return Center(child: Text('Error: ${snapshot.error}'));
@@ -489,15 +675,20 @@ class _MyProfileState extends State<MyProfile> {
               final String email = data['email'] ?? 'N/A';
               final String profileUrl = data['profileUrl'] ?? '';
               // Update local state for the current image URL for the next edit session
-              _currentProfileImageUrl = profileUrl; 
-              
+              _currentProfileImageUrl = profileUrl;
+
               final String address = data['address'] ?? 'N/A';
               final String contactNumber = data['phone'] ?? 'N/A';
               final String role = data['role'] ?? 'N/A';
+              
+              // Handle new nullable fields for External Members
               final String province = data['province'] ?? 'N/A';
-              final String districtElderName = data['districtElderName'] ?? 'N/A';
-              final String communityElderName = data['communityElderName'] ?? 'N/A';
+              final String districtElderName =
+                  data['districtElderName'] ?? 'N/A';
+              final String communityElderName =
+                  data['communityElderName'] ?? 'N/A';
               final String communityName = data['communityName'] ?? 'N/A';
+              
               final double week1 = (data['week1'] as num?)?.toDouble() ?? 0.00;
               final double week2 = (data['week2'] as num?)?.toDouble() ?? 0.00;
               final double week3 = (data['week3'] as num?)?.toDouble() ?? 0.00;
@@ -515,7 +706,7 @@ class _MyProfileState extends State<MyProfile> {
                           backgroundImage: profileUrl.isNotEmpty
                               ? NetworkImage(profileUrl)
                               : const AssetImage('assets/no_profile.png')
-                                    as ImageProvider,
+                                  as ImageProvider,
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -544,18 +735,26 @@ class _MyProfileState extends State<MyProfile> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Wrap cards in a Row for desktop/web if desired, otherwise keep stacked (default)
-                  isDesktop 
+                  isDesktop
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName, districtElderName)),
+                            Expanded(
+                                child: _buildPersonalAndOrgDetails(
+                                    theme,
+                                    contactNumber,
+                                    address,
+                                    province,
+                                    communityName,
+                                    districtElderName)),
                             SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 children: [
-                                  _buildWeeklyProgressCard(theme, week1, week2, week3, week4),
+                                  _buildWeeklyProgressCard(
+                                      theme, week1, week2, week3, week4),
                                   _buildUserApplicationsCard(theme, userId),
                                 ],
                               ),
@@ -564,12 +763,19 @@ class _MyProfileState extends State<MyProfile> {
                         )
                       : Column(
                           children: [
-                            _buildPersonalAndOrgDetails(theme, contactNumber, address, province, communityName , districtElderName),
+                            _buildPersonalAndOrgDetails(
+                                theme,
+                                contactNumber,
+                                address,
+                                province,
+                                communityName,
+                                districtElderName),
                             _buildUserApplicationsCard(theme, userId),
-                            _buildWeeklyProgressCard(theme, week1, week2, week3, week4),
+                            _buildWeeklyProgressCard(
+                                theme, week1, week2, week3, week4),
                           ],
                         ),
-                  
+
                   AdManager().bannerAdWidget(),
                 ],
               );
@@ -582,7 +788,10 @@ class _MyProfileState extends State<MyProfile> {
 
   // --- Helper Widgets ---
 
-  Widget _buildCardWrapper({required ThemeData theme, required List<Widget> children, required String title}) {
+  Widget _buildCardWrapper(
+      {required ThemeData theme,
+      required List<Widget> children,
+      required String title}) {
     return Card(
       color: theme.scaffoldBackgroundColor.withOpacity(0.9),
       elevation: 3,
@@ -609,7 +818,13 @@ class _MyProfileState extends State<MyProfile> {
     );
   }
 
-  Widget _buildPersonalAndOrgDetails(ThemeData theme, String contactNumber, String address, String province, String communityName,String districtElderName) {
+  Widget _buildPersonalAndOrgDetails(
+      ThemeData theme,
+      String contactNumber,
+      String address,
+      String province,
+      String communityName,
+      String districtElderName) {
     return Column(
       children: [
         // Personal Information Card
@@ -617,15 +832,20 @@ class _MyProfileState extends State<MyProfile> {
           theme: theme,
           title: 'Personal Information',
           children: [
-            ListTile(
-              leading: Icon(Icons.phone, color: theme.primaryColor),
-              title: const Text('Contact Number'),
-              subtitle: Text(contactNumber),
+            // --- PLATFORM AWARE ---
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.phone : Icons.phone,
+              title: 'Contact Number',
+              trailingText: contactNumber,
+              onTap: () {}, // No action on tap
             ),
-            ListTile(
-              leading: Icon(Icons.location_on, color: theme.primaryColor),
-              title: const Text('Address'),
-              subtitle: Text(address),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.location : Icons.location_on,
+              title: 'Address',
+              trailingText: address,
+              onTap: () {}, // No action on tap
             ),
           ],
         ),
@@ -635,20 +855,27 @@ class _MyProfileState extends State<MyProfile> {
           theme: theme,
           title: 'Organizational Details',
           children: [
-            ListTile(
-              leading: Icon(Icons.apartment, color: theme.primaryColor),
-              title: const Text('Province'),
-              subtitle: Text(province),
+            // --- PLATFORM AWARE ---
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.building_2_fill : Icons.apartment,
+              title: 'Province',
+              trailingText: province,
+              onTap: () {},
             ),
-            ListTile(
-              leading: Icon(Icons.group, color: theme.primaryColor),
-              title: const Text('Community Name'),
-              subtitle: Text(communityName),
-            ), 
-            ListTile(
-              leading: Icon(Icons.supervisor_account, color: theme.primaryColor),
-              title: const Text('District Elder'),
-              subtitle: Text(districtElderName),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.group : Icons.group,
+              title: 'Community Name',
+              trailingText: communityName,
+              onTap: () {},
+            ),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.person_3 : Icons.supervisor_account,
+              title: 'District Elder',
+              trailingText: districtElderName,
+              onTap: () {},
             ),
           ],
         ),
@@ -666,7 +893,8 @@ class _MyProfileState extends State<MyProfile> {
     );
   }
 
-  Widget _buildWeeklyProgressCard(ThemeData theme, double week1, double week2, double week3, double week4) {
+  Widget _buildWeeklyProgressCard(
+      ThemeData theme, double week1, double week2, double week3, double week4) {
     return _buildCardWrapper(
       theme: theme,
       title: 'Weekly Progress',
@@ -687,7 +915,6 @@ class _MyProfileState extends State<MyProfile> {
       ],
     );
   }
-
 
   TableRow _buildTableRow(String label, String value, ThemeData theme) {
     return TableRow(
@@ -719,7 +946,11 @@ class _MyProfileState extends State<MyProfile> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CupertinoActivityIndicator());
+          // --- PLATFORM AWARE ---
+          return Center(
+              child: isIOSPlatform
+                  ? CupertinoActivityIndicator()
+                  : CircularProgressIndicator());
         } else if (snapshot.hasError) {
           return Text('Error loading applications: ${snapshot.error}');
         } else if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {

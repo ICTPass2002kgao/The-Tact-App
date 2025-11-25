@@ -17,16 +17,26 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Pages/Email_Verification_Page.dart';
-import 'package:flutter/foundation.dart' show kIsWeb; 
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../Components/CustomOutlinedButton.dart';
 import '../Components/API.dart';
 
 // --- PLATFORM UTILITIES ---
-bool get isIOSPlatform =>
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-bool get isAndroidPlatform =>
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isIOSPlatform {
+  // Checks for iOS or macOS (which iPads/Macs report in browsers)
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+// UPDATED: This logic now checks the OS, even on the web.
+bool get isAndroidPlatform {
+  // Checks for Android, Linux, or Fuchsia to default to Material style.
+  return defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.fuchsia;
+}
 // --------------------------
 
 // Custom platform-aware TextField Builder
@@ -44,9 +54,11 @@ Widget _buildPlatformTextField({
 }) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 8.0),
+
     // FIX: Use isIOSPlatform getter
     child: isIOSPlatform
         ? CupertinoTextField(
+            style: TextStyle(color: Theme.of(context).cardColor),
             controller: controller,
             placeholder: placeholder,
             keyboardType: keyboardType,
@@ -54,6 +66,7 @@ Widget _buildPlatformTextField({
             readOnly: readOnly,
             maxLines: maxLines,
             decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
               border: Border.all(color: CupertinoColors.systemGrey4),
               borderRadius: BorderRadius.circular(8.0),
             ),
@@ -100,6 +113,7 @@ Widget _buildListTile({
   // FIX: Use isIOSPlatform getter
   if (isIOSPlatform) {
     return CupertinoListTile(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       title: Text(title),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -165,11 +179,7 @@ void _buildActionSheet({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
+              Text(title, textAlign: TextAlign.center),
               const Divider(),
               ...actions.map((item) {
                 return ListTile(
@@ -210,7 +220,8 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _obscureConfirmPassword = true;
   bool isChecked = false;
   Api backendService = Api();
-  List<String> roles = ['Member', 'Seller'];
+  // UPDATED: Added 'External Member'
+  List<String> roles = ['Member', 'Seller', 'External Member'];
   String? role;
 
   String? selectedMemberUid;
@@ -251,24 +262,19 @@ class _SignUpPageState extends State<SignUpPage> {
     txtConfirmPassword.dispose();
     super.dispose();
   }
-// Add this import if you don't have it
+// ... inside your class ...
 
 Future<void> _getAddress() async {
-  // We no longer skip the web at the start.
-  // The permission flow is handled by the geolocator package.
-
   try {
+    print("[GEO] Step 1: Checking permissions...");
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      
-      // Request permission
+      print("[GEO] Step 2: Permissions denied, requesting...");
       permission = await Geolocator.requestPermission();
-      
+
       if (permission != LocationPermission.always &&
           permission != LocationPermission.whileInUse) {
-        
-        // Show message if user still denies
         Api().showMessage(
           context,
           'Location Permission Denied',
@@ -279,54 +285,98 @@ Future<void> _getAddress() async {
       }
     }
 
-    // This will now work on all platforms
+    print("[GEO] Step 4: Permissions granted. Getting current position...");
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+    print("[GEO] Step 5: Got position: ${position.latitude}, ${position.longitude}");
 
-    // --- PLATFORM-SPECIFIC LOGIC ---
+    // ---------------------------------------------------------
+    // ⭐️ HYBRID GEOCODING LOGIC (FIXES WEB CRASH)
+    // ---------------------------------------------------------
+    
     if (kIsWeb) {
-      // ON WEB:
-      // We got the position, but placemarkFromCoordinates requires a
-      // Google Maps API key in index.html. We'll just show the coordinates.
-      txtAddress.text =
-          "Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}";
+      // --- WEB METHOD (Direct Google API) ---
+      print("[GEO] Step 6a: Running WEB Geocoding (HTTP Call)...");
       
-      Api().showMessage(
-        context,
-        'Location Found (Web)',
-        'Full address lookup is only supported on the mobile app.',
-        Theme.of(context).primaryColor, // Use your theme's color
+      // USE YOUR ACTUAL API KEY HERE
+      const String apiKey = "AIzaSyBzPf3eQnhq13QKvDw9ZShYSYk1qycHMww"; 
+      final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$apiKey"
       );
 
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['status'] == 'OK' && (data['results'] as List).isNotEmpty) {
+          // Google returns the best formatted address in the first result
+          String formattedAddress = data['results'][0]['formatted_address'];
+          print("[GEO] Web Address found: $formattedAddress");
+          
+          // Update UI
+          setState(() {
+             txtAddress.text = formattedAddress;
+          });
+        } else {
+          print("[GEO] Web Error: API returned status ${data['status']}");
+          // If OVER_QUERY_LIMIT or REQUEST_DENIED, check your Google Console
+          txtAddress.text = "Address not found (Web API Error)";
+        }
+      } else {
+        print("[GEO] Web Error: HTTP Status ${response.statusCode}");
+        txtAddress.text = "Connection error";
+      }
+
     } else {
-      // ON MOBILE:
-      // We can use geocoding to get the full address.
+      // --- MOBILE METHOD (Native Package) ---
+      print("[GEO] Step 6b: Running MOBILE Geocoding (Native Package)...");
+      
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
-
+      
       if (placemarks.isNotEmpty) {
         Placemark p = placemarks.first;
-        String fullAddress =
-            "${p.street},  ${p.locality}, ${p.administrativeArea}";
-        txtAddress.text = fullAddress;
+        
+        // Build address safely
+        String fullAddress = [
+          p.street,
+          p.subLocality,
+          p.locality,
+          p.administrativeArea,
+          p.postalCode,
+        ]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(', ');
+
+        print("[GEO] Mobile Address found: $fullAddress");
+        setState(() {
+           txtAddress.text = fullAddress;
+        });
       } else {
-        txtAddress.text = "Address not found";
+        txtAddress.text = "Address details not found";
       }
     }
-  } catch (e) {
-    // This will catch any errors, including permission errors on web
+
+  } catch (e, stackTrace) {
+    print("--- GEOCoding CATCH BLOCK ---");
+    print("Geocoding Error: $e");
+    print("Stack Trace: $stackTrace");
+    
     Api().showMessage(
       context,
       'Location Error',
-      'Could not get address: ${e.toString()}',
+      'Could not get address. Check Internet or Permissions.',
       Colors.red,
     );
-    txtAddress.text = "Error getting address";
   }
 }
+  
+  
+  
   List<String> getDistrictElderNames(Map<String, dynamic>? data) {
     if (data == null ||
         !data.containsKey('districts') ||
@@ -432,43 +482,48 @@ Future<void> _getAddress() async {
       );
       return false;
     }
-    if (selectedProvince == null) {
-      Api().showMessage(
-        context,
-        'Validation Error',
-        'Please select your province.',
-        Colors.red,
-      );
-      return false;
-    }
-    if (selectedMemberUid == null) {
-      Api().showMessage(
-        context,
-        'Validation Error',
-        'Please select an overseer.',
-        Colors.red,
-      );
-      return false;
-    }
-    if (selectedDistrictElder == null) {
-      Api().showMessage(
-        context,
-        'Validation Error',
-        'Please select a district elder.',
-        Colors.red,
-      );
-      return false;
-    }
 
-    if (selectedCommunityName == null) {
-      Api().showMessage(
-        context,
-        'Validation Error',
-        'Please select a community name.',
-        Colors.red,
-      );
-      return false;
+    // UPDATED: Conditional validation for location
+    if (role != 'External Member') {
+      if (selectedProvince == null) {
+        Api().showMessage(
+          context,
+          'Validation Error',
+          'Please select your province.',
+          Colors.red,
+        );
+        return false;
+      }
+      if (selectedMemberUid == null) {
+        Api().showMessage(
+          context,
+          'Validation Error',
+          'Please select an overseer.',
+          Colors.red,
+        );
+        return false;
+      }
+      if (selectedDistrictElder == null) {
+        Api().showMessage(
+          context,
+          'Validation Error',
+          'Please select a district elder.',
+          Colors.red,
+        );
+        return false;
+      }
+
+      if (selectedCommunityName == null) {
+        Api().showMessage(
+          context,
+          'Validation Error',
+          'Please select a community name.',
+          Colors.red,
+        );
+        return false;
+      }
     }
+    // END UPDATED SECTION
 
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(txtEmail.text.trim())) {
       Api().showMessage(
@@ -520,37 +575,9 @@ Future<void> _getAddress() async {
     return true;
   }
 
-  String YOUR_BACKEND_BASE_URL =
-      'https://us-central1-tact-3c612.cloudfunctions.net/api';
-
-  Future<String?> createSellerSubaccount({
-    required String uid,
-    required String businessName,
-    required String email,
-    required String accountNumber,
-    required String bankCode,
-  }) async {
-    final url = Uri.parse('$YOUR_BACKEND_BASE_URL/create_seller_subaccount');
-    final response = await http.post(
-      url,
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "uid": uid,
-        "business_name": businessName,
-        "bank_code": bankCode,
-        "account_number": accountNumber,
-        "contact_email": email,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['subaccount_code'];
-    } else {
-      print('Error creating subaccount: ${response.body}');
-      return null;
-    }
-  }
+  // REMOVED: Moved to API.dart
+  // String YOUR_BACKEND_BASE_URL = ...
+  // Future<String?> createSellerSubaccount(...) async { ... }
 
   @override
   Widget build(BuildContext context) {
@@ -700,184 +727,190 @@ Future<void> _getAddress() async {
                     ),
                   ],
 
-                  // Province Selection
-                  const SizedBox(height: 10),
-                  _buildSection(
-                    context: context,
-                    title: 'LOCATION DETAILS',
-                    children: [
-                      _buildListTile(
-                        context: context,
-                        title: 'Select Province',
-                        trailingText: selectedProvince ?? 'Not Selected',
-                        onTap: () {
-                          _buildActionSheet(
-                            context: context,
-                            title: 'Select your Province',
-                            actions: provinces,
-                            onSelected: (province) {
-                              setState(() {
-                                selectedProvince = province;
-                                selectedMemberUid = null;
-                                currentOverseerData = null;
-                                selectedDistrictElder = null;
-                                selectedCommunityName = null;
-                                selectedDistrictData = null;
-                              });
-                            },
-                          );
-                        },
-                      ),
-
-                      if (selectedProvince != null)
-                        FutureBuilder<QuerySnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection('overseers')
-                              .where('province', isEqualTo: selectedProvince)
-                              .get(),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              // FIX: Use platform-aware loading indicator
-                              return Center(
-                                child: isIOSPlatform
-                                    ? const CupertinoActivityIndicator()
-                                    : const CircularProgressIndicator(),
-                              );
-                            }
-                            if (snapshot.hasError) {
-                              return _buildListTile(
-                                context: context,
-                                title: 'Error: ${snapshot.error}',
-                                trailingText: '!',
-                                onTap: () {},
-                              );
-                            }
-                            final overseers = snapshot.data?.docs ?? [];
-                            if (overseers.isEmpty) {
-                              return _buildListTile(
-                                context: context,
-                                title: 'No Overseers found.',
-                                trailingText: '',
-                                onTap: () {},
-                              );
-                            }
-
-                            return _buildListTile(
-                              context: context,
-                              title: 'Select Overseer',
-                              trailingText: (() {
-                                if (selectedMemberUid == null) {
-                                  return 'Not Selected';
-                                }
-                                final overseerDoc = overseers
-                                    .cast<QueryDocumentSnapshot>()
-                                    .firstWhere(
-                                      (o) => o['uid'] == selectedMemberUid,
-                                      orElse: () =>
-                                          null as QueryDocumentSnapshot,
-                                    );
-                                if (overseerDoc == null) {
-                                  return 'Not Selected';
-                                }
-                                final overseer =
-                                    overseerDoc.data() as Map<String, dynamic>;
-                                return '${overseer['overseerInitialsAndSurname']}';
-                              })(),
-                              onTap: () {
-                                _buildActionSheet(
-                                  context: context,
-                                  title: 'Choose an Overseer',
-                                  actions: overseers.map((overseerDoc) {
-                                    final overseer =
-                                        (overseerDoc).data()
-                                            as Map<String, dynamic>;
-                                    return '${overseer['overseerInitialsAndSurname']}';
-                                  }).toList(),
-                                  onSelected: (selectedName) {
-                                    final selectedDoc = overseers.firstWhere(
-                                      (doc) =>
-                                          '${doc['overseerInitialsAndSurname']}' ==
-                                          selectedName,
-                                    );
-                                    setState(() {
-                                      selectedMemberUid = selectedDoc['uid'];
-                                      _fetchOverseerData(selectedMemberUid!);
-                                    });
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        ),
-
-                      if (currentOverseerData != null)
+                  // UPDATED: Conditionally show Location Details
+                  if (role != null && role != 'External Member') ...[
+                    const SizedBox(height: 10),
+                    _buildSection(
+                      context: context,
+                      title: 'LOCATION DETAILS',
+                      children: [
                         _buildListTile(
                           context: context,
-                          title: 'Select District Elder',
-                          trailingText: selectedDistrictElder ?? 'Not Selected',
+                          title: 'Select Province',
+                          trailingText: selectedProvince ?? 'Not Selected',
                           onTap: () {
-                            if (districtElderNames.isEmpty) {
-                              Api().showMessage(
-                                context,
-                                'No Districts',
-                                'No district elders found for the selected overseer.',
-                                Colors.orange,
-                              );
-                              return;
-                            }
                             _buildActionSheet(
                               context: context,
-                              title: 'Choose a District Elder',
-                              actions: districtElderNames,
-                              onSelected: (elderName) {
+                              title: 'Select your Province',
+                              actions: provinces,
+                              onSelected: (province) {
                                 setState(() {
-                                  selectedDistrictElder = elderName;
-                                  selectedDistrictData =
-                                      (currentOverseerData?['districts']
-                                                  as List<dynamic>?)
-                                              ?.firstWhere(
-                                                (district) =>
-                                                    district['districtElderName'] ==
-                                                    elderName,
-                                                orElse: () => null,
-                                              )
-                                          as Map<String, dynamic>?;
+                                  selectedProvince = province;
+                                  selectedMemberUid = null;
+                                  currentOverseerData = null;
+                                  selectedDistrictElder = null;
                                   selectedCommunityName = null;
+                                  selectedDistrictData = null;
                                 });
                               },
                             );
                           },
                         ),
-                      if (selectedDistrictData != null)
-                        _buildListTile(
-                          context: context,
-                          title: 'Select Community Name',
-                          trailingText: selectedCommunityName ?? 'Not Selected',
-                          onTap: () {
-                            if (communityNames.isEmpty) {
-                              Api().showMessage(
-                                context,
-                                'No Communities',
-                                'No communities found for the selected district elder.',
-                                Colors.orange,
+
+                        if (selectedProvince != null)
+                          FutureBuilder<QuerySnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('overseers')
+                                .where('province', isEqualTo: selectedProvince)
+                                .get(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                // FIX: Use platform-aware loading indicator
+                                return Center(
+                                  child: isIOSPlatform
+                                      ? const CupertinoActivityIndicator()
+                                      : const CircularProgressIndicator(),
+                                );
+                              }
+                              if (snapshot.hasError) {
+                                return _buildListTile(
+                                  context: context,
+                                  title: 'Error: ${snapshot.error}',
+                                  trailingText: '!',
+                                  onTap: () {},
+                                );
+                              }
+                              final overseers = snapshot.data?.docs ?? [];
+                              if (overseers.isEmpty) {
+                                return _buildListTile(
+                                  context: context,
+                                  title: 'No Overseers found.',
+                                  trailingText: '',
+                                  onTap: () {},
+                                );
+                              }
+
+                              return _buildListTile(
+                                context: context,
+                                title: 'Select Overseer',
+                                trailingText: (() {
+                                  if (selectedMemberUid == null) {
+                                    return 'Not Selected';
+                                  }
+                                  final overseerDoc = overseers
+                                      .cast<QueryDocumentSnapshot>()
+                                      .firstWhere(
+                                        (o) => o['uid'] == selectedMemberUid,
+                                        orElse: () =>
+                                            null as QueryDocumentSnapshot,
+                                      );
+                                  if (overseerDoc == null) {
+                                    return 'Not Selected';
+                                  }
+                                  final overseer =
+                                      overseerDoc.data()
+                                          as Map<String, dynamic>;
+                                  return '${overseer['overseerInitialsAndSurname']}';
+                                })(),
+                                onTap: () {
+                                  _buildActionSheet(
+                                    context: context,
+                                    title: 'Choose an Overseer',
+                                    actions: overseers.map((overseerDoc) {
+                                      final overseer =
+                                          (overseerDoc).data()
+                                              as Map<String, dynamic>;
+                                      return '${overseer['overseerInitialsAndSurname']}';
+                                    }).toList(),
+                                    onSelected: (selectedName) {
+                                      final selectedDoc = overseers.firstWhere(
+                                        (doc) =>
+                                            '${doc['overseerInitialsAndSurname']}' ==
+                                            selectedName,
+                                      );
+                                      setState(() {
+                                        selectedMemberUid = selectedDoc['uid'];
+                                        _fetchOverseerData(selectedMemberUid!);
+                                      });
+                                    },
+                                  );
+                                },
                               );
-                              return;
-                            }
-                            _buildActionSheet(
-                              context: context,
-                              title: 'Choose a Community Name',
-                              actions: communityNames,
-                              onSelected: (communityName) {
-                                setState(() {
-                                  selectedCommunityName = communityName;
-                                });
-                              },
-                            );
-                          },
-                        ),
-                    ],
-                  ),
+                            },
+                          ),
+
+                        if (currentOverseerData != null)
+                          _buildListTile(
+                            context: context,
+                            title: 'Select District Elder',
+                            trailingText:
+                                selectedDistrictElder ?? 'Not Selected',
+                            onTap: () {
+                              if (districtElderNames.isEmpty) {
+                                Api().showMessage(
+                                  context,
+                                  'No Districts',
+                                  'No district elders found for the selected overseer.',
+                                  Colors.orange,
+                                );
+                                return;
+                              }
+                              _buildActionSheet(
+                                context: context,
+                                title: 'Choose a District Elder',
+                                actions: districtElderNames,
+                                onSelected: (elderName) {
+                                  setState(() {
+                                    selectedDistrictElder = elderName;
+                                    selectedDistrictData =
+                                        (currentOverseerData?['districts']
+                                                    as List<dynamic>?)
+                                                ?.firstWhere(
+                                                  (district) =>
+                                                      district['districtElderName'] ==
+                                                      elderName,
+                                                  orElse: () => null,
+                                                )
+                                            as Map<String, dynamic>?;
+                                    selectedCommunityName = null;
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        if (selectedDistrictData != null)
+                          _buildListTile(
+                            context: context,
+                            title: 'Select Community Name',
+                            trailingText:
+                                selectedCommunityName ?? 'Not Selected',
+                            onTap: () {
+                              if (communityNames.isEmpty) {
+                                Api().showMessage(
+                                  context,
+                                  'No Communities',
+                                  'No communities found for the selected district elder.',
+                                  Colors.orange,
+                                );
+                                return;
+                              }
+                              _buildActionSheet(
+                                context: context,
+                                title: 'Choose a Community Name',
+                                actions: communityNames,
+                                onSelected: (communityName) {
+                                  setState(() {
+                                    selectedCommunityName = communityName;
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                  // END UPDATED SECTION
 
                   // Email and Password Fields
                   const SizedBox(height: 10),
@@ -1043,8 +1076,9 @@ Future<void> _getAddress() async {
                     foregroundColor: colorScheme.scaffoldBackgroundColor,
                     text: 'SIGN UP',
                     onPressed: () async {
+                      if (isIOSPlatform) Api().showIosLoading(context);
                       Api().showLoading(context);
-                      await _getAddress();
+                      txtAddress.text.contains(',') ? () : await _getAddress();
                       if (!_validateFields()) {
                         if (context.mounted)
                           Navigator.pop(context); // Dismiss loading
@@ -1060,7 +1094,7 @@ Future<void> _getAddress() async {
                           'Your Account Verification code',
 
                           """
-Hello,
+Hello ${txtName.text} ${txtSurname.text},
 
 Thank you for signing up! 
 Your 6-digit verification code is: $code
@@ -1071,28 +1105,38 @@ If you didn't request this, you can safely ignore this email.
                           context,
                         );
                         if (emailSent) {
+                          Navigator.pop(context);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  VerificationScreen(
-                                    expectedCode: code, 
-                                    name: txtName.text.trim(),
-                        surname:txtSurname.text.trim(),
-                        email: txtEmail.text.trim(),
-                       password: txtPassword.text,
-                        address:txtAddress.text.trim(),
-                        contacts:txtContactNumber.text.trim(),
-                       selectedOverseerUid:  selectedMemberUid!,
-                      role:   role!,
-                        accountNumber: txtAccountNumber.text.trim(),
-                        bankCode: txtBankCodeController.text.trim(),
-                       province:  selectedProvince!,
-                      districtElder:   selectedDistrictElder!,
-                       communityName:  selectedCommunityName!,
-                                  ))
+                              builder: (context) => VerificationScreen(
+                                expectedCode: code,
+                                name: txtName.text.trim(),
+                                surname: txtSurname.text.trim(),
+                                email: txtEmail.text.trim(),
+                                password: txtPassword.text,
+                                address: txtAddress.text.trim(),
+                                contacts: txtContactNumber.text.trim(),
+                                // UPDATED: Pass null if External Member
+                                selectedOverseerUid: role == 'External Member'
+                                    ? ''
+                                    : selectedMemberUid!,
+                                role: role!,
+                                accountNumber: txtAccountNumber.text.trim(),
+                                bankCode: txtBankCodeController.text.trim(),
+                                // UPDATED: Pass null if External Member
+                                province: role == 'External Member'
+                                    ? ''
+                                    : selectedProvince!,
+                                districtElder: role == 'External Member'
+                                    ? ''
+                                    : selectedDistrictElder!,
+                                communityName: role == 'External Member'
+                                    ? ''
+                                    : selectedCommunityName!,
+                              ),
+                            ),
                           );
-
                         }
                       } catch (e) {
                         print("Here is the error${e.toString()}");
@@ -1158,7 +1202,7 @@ Widget _buildSection({
   // FIX: Use isIOSPlatform getter
   if (isIOSPlatform) {
     return CupertinoFormSection(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       header: Text(title),
       children: children,
     );

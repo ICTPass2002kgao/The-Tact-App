@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Pages/Tact_Seller.dart';
 
 class VerificationScreen extends StatefulWidget {
-  // Pass the code from your registration page so this screen knows what to check
   final String name;
   final String surname;
   final String email;
@@ -42,60 +42,47 @@ class VerificationScreen extends StatefulWidget {
 }
 
 class _VerificationScreenState extends State<VerificationScreen> {
-  final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  final List<TextEditingController> _controllers = List.generate(
+    6,
+    (index) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
+
   String? _errorMessage;
   bool _isLoading = false;
 
   @override
-  void initState() {
-    super.initState();
-    // Request focus for the hidden text field when the screen loads
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
-
-    // Listen to the controller to update the UI
-    _controller.addListener(() {
-      setState(() {
-        // Clear error when user starts typing
-        if (_errorMessage != null) {
-          _errorMessage = null;
-        }
-      });
-
-      // Auto-submit when 6 digits are entered
-      if (_controller.text.length == 6) {
-        _verifyCode();
-      }
-    });
-  }
-
-  @override
   void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
-  void _verifyCode() async {
-    // Unfocus to hide keyboard
-    _focusNode.unfocus();
+  String get _currentCode {
+    return _controllers.map((c) => c.text).join();
+  }
 
-    if (_controller.text.length != 6) return;
+  void _verifyCode() async {
+    // Unfocus all fields
+    for (var node in _focusNodes) {
+      node.unfocus();
+    }
+
+    String code = _currentCode;
+    if (code.length != 6) return;
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    // --- This is where you check the code ---
-    // We add a small delay to simulate a network call
     await Future.delayed(Duration(seconds: 1));
 
-    if (_controller.text == widget.expectedCode) {
-      // SUCCESS
-
+    if (code == widget.expectedCode) {
       await Api().signUp(
         widget.name,
         widget.surname,
@@ -114,7 +101,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
       );
       setState(() {
         _isLoading = false;
-        _errorMessage = null;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,33 +109,28 @@ class _VerificationScreenState extends State<VerificationScreen> {
           backgroundColor: Colors.green,
         ),
       );
-
-      // Navigate to your app's home screen
-      // Navigator.of(context).pushReplacementNamed('/home');
     } else {
-      // FAILURE
       setState(() {
         _isLoading = false;
-        // Set error message to make boxes red
         _errorMessage = "Wrong code, please try again.";
-        _controller.clear(); // Clear the text
+        for (var controller in _controllers) {
+          controller.clear();
+        }
       });
-      // Request focus again for the user to re-try
-      _focusNode.requestFocus();
+      _focusNodes[0].requestFocus();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryColor = Theme.of(context).primaryColor;
+    final color = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Email Verification'),
-        backgroundColor: primaryColor,
+        backgroundColor: color.primaryColor,
         foregroundColor: Colors.white,
       ),
-      // 1. --- REMOVED THE STACK WIDGET ---
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -157,28 +138,10 @@ class _VerificationScreenState extends State<VerificationScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 2. --- MOVED THE HIDDEN TEXTFIELD HERE ---
-              // It's the first child of the Column, but it's
-              // invisible so it doesn't affect the layout.
-              Offstage(
-                offstage: true,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  maxLength: 6,
-                  autofocus: true,
-                  style: TextStyle(color: Colors.transparent, fontSize: 1),
-                  decoration: InputDecoration(border: InputBorder.none),
-                ),
-              ),
-
-              // --- The rest of your UI is unchanged ---
               Icon(
                 Icons.mark_email_read_outlined,
                 size: 80,
-                color: primaryColor,
+                color: color.primaryColor,
               ),
               SizedBox(height: 20),
               Text(
@@ -186,7 +149,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: color.cardColor,
                 ),
               ),
               SizedBox(height: 10),
@@ -197,22 +160,115 @@ class _VerificationScreenState extends State<VerificationScreen> {
               ),
               SizedBox(height: 40),
 
-              // 3. The 6 OTP boxes
-              GestureDetector(
-                onTap: () {
-                  _focusNode.requestFocus();
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(6, (index) {
-                    return _buildOtpBox(index, context);
-                  }),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(6, (index) {
+                  return Padding(
+                    padding: const EdgeInsets.all(0.0),
+                    child: SizedBox(
+                      width: 50,
+                      height: 60,
+                      // 1. WRAP WITH KEYBOARD LISTENER FOR BACKSPACE DETECTION
+                      child: KeyboardListener(
+                        focusNode:
+                            FocusNode(), // Required but not used directly
+                        onKeyEvent: (event) {
+                          if (event is KeyDownEvent &&
+                              event.logicalKey ==
+                                  LogicalKeyboardKey.backspace) {
+                            // If the field is empty and user hits backspace, go back
+                            if (_controllers[index].text.isEmpty && index > 0) {
+                              _focusNodes[index - 1].requestFocus();
+                            }
+                          }
+                        },
+                        child: TextFormField(
+                          controller: _controllers[index],
+                          focusNode: _focusNodes[index],
+                          autofocus: index == 0,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            // 2. REMOVED LengthLimitingTextInputFormatter(1) TO ALLOW PASTE
+                          ],
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: InputDecoration(
+                            counterText: "",
+                            contentPadding: EdgeInsets.zero,
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: color.hintColor),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: color.primaryColor,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          onChanged: (value) {
+                            if (_errorMessage != null) {
+                              setState(() {
+                                _errorMessage = null;
+                              });
+                            }
+
+                            // 3. PASTE LOGIC
+                            if (value.length == 6) {
+                              // Distribute the pasted digits
+                              for (int i = 0; i < 6; i++) {
+                                _controllers[i].text = value[i];
+                              }
+                              // Submit
+                              _verifyCode();
+                            }
+                            // 4. STANDARD TYPING LOGIC
+                            else if (value.length == 1) {
+                              if (index < 5) {
+                                FocusScope.of(
+                                  context,
+                                ).requestFocus(_focusNodes[index + 1]);
+                              } else {
+                                _focusNodes[index].unfocus();
+                                _verifyCode();
+                              }
+                            }
+                            // 5. HANDLE OVERFLOW (User types 2nd digit without moving)
+                            else if (value.length > 1) {
+                              // Keep only the last digit entered
+                              _controllers[index].text = value.substring(
+                                value.length - 1,
+                              );
+                              // Move next
+                              if (index < 5) {
+                                FocusScope.of(
+                                  context,
+                                ).requestFocus(_focusNodes[index + 1]);
+                              }
+                            }
+                            // 6. EMPTY/BACKSPACE LOGIC (When text existed and was deleted)
+                            else if (value.isEmpty) {
+                              if (index > 0) {
+                                FocusScope.of(
+                                  context,
+                                ).requestFocus(_focusNodes[index - 1]);
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ),
 
               SizedBox(height: 20),
 
-              // 4. Error Message
               if (_errorMessage != null)
                 Text(
                   _errorMessage!,
@@ -221,19 +277,22 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
               SizedBox(height: 30),
 
-              // 5. Verify Button
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: color.hintColor.withOpacity(0.4),
                   foregroundColor: Colors.white,
                   minimumSize: Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: (_controller.text.length == 6 && !_isLoading)
-                    ? _verifyCode
-                    : null,
+                onPressed: (_isLoading)
+                    ? null
+                    : () {
+                        if (_currentCode.length == 6) {
+                          _verifyCode();
+                        }
+                      },
                 child: _isLoading
                     ? CircularProgressIndicator(color: Colors.white)
                     : Text(
@@ -248,84 +307,55 @@ class _VerificationScreenState extends State<VerificationScreen> {
               SizedBox(height: 20),
 
               TextButton(
-                onPressed: () {
-                  // Add your "Resend Code" logic here
+                onPressed: () async {
+                  isIOSPlatform
+                      ? Api().showIosLoading(context)
+                      : Api().showLoading(context);
+                  String code = Api().generateVerificationCode();
+                  print('here is the code $code');
+                  // 2. Send the email
+
+                  bool emailSent = await Api().sendEmail(
+                    widget.email,
+                    'Your Account Verification code',
+
+                    """
+Hello ${widget.name} ${widget.surname},
+
+Thank you for signing up! 
+Your 6-digit verification code is: $code
+
+This code expires soon.
+If you didn't request this, you can safely ignore this email.
+          """,
+                    context,
+                  );
+
+                  if (emailSent) {
+                    Navigator.pop(context);
+                    Api().showMessage(
+                      context,
+                      "Email Send Successfully",
+                      "Success",
+                      color.splashColor,
+                    );
+                  } else {
+                    Navigator.pop(context);
+                    Api().showMessage(
+                      context,
+                      "Email did not send!!, incorrect email",
+                      "Error",
+                      color.primaryColorDark,
+                    );
+                  }
                 },
+
                 child: Text(
                   "Didn't receive the code? Resend",
-                  style: TextStyle(color: primaryColor),
+                  style: TextStyle(color: color.primaryColor),
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- This is the widget for a single OTP box ---
-  Widget _buildOtpBox(int index, BuildContext context) {
-    // Get the digit for this box, or an empty string
-    final String digit = _controller.text.length > index
-        ? _controller.text[index]
-        : '';
-
-    // Check if this box is the one currently being typed into
-    final bool isFocused = _controller.text.length == index;
-
-    // Check if there's an error
-    final bool hasError = _errorMessage != null;
-
-    Color borderColor;
-    if (hasError) {
-      borderColor = Colors.red;
-    } else if (isFocused) {
-      // Use your theme's primary color
-      borderColor = Theme.of(context).primaryColor;
-    } else if (digit.isNotEmpty) {
-      borderColor = Colors.grey[600]!;
-    } else {
-      borderColor = Colors.grey[300]!;
-    }
-
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 200),
-      width: 50,
-      height: 60,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 2),
-        boxShadow: [
-          if (isFocused || hasError)
-            BoxShadow(
-              color: hasError
-                  ? Colors.red.withOpacity(0.3)
-                  : Theme.of(context).primaryColor.withOpacity(0.3),
-              blurRadius: 8,
-              spreadRadius: 2,
-            ),
-        ],
-      ),
-      child: Center(
-        // --- THIS IS THE ANIMATION ---
-        // When the 'digit' variable changes, it animates in and out
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            // This is the "easeIn and Out" animation
-            return ScaleTransition(scale: animation, child: child);
-          },
-          child: Text(
-            digit,
-            // We use a ValueKey to tell the AnimatedSwitcher that the
-            // content has changed, which triggers the animation.
-            key: ValueKey(digit),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
           ),
         ),
       ),
