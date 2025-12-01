@@ -541,7 +541,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
     final int baseCrossAxisCount = 2; // Mobile default
     final int desktopCrossAxisCount = _isDetailsPanelVisible
         ? 3
-        : 4; // Grid shrinks when panel is visible
+        : 5; // Grid shrinks when panel is visible
     final int crossAxisCount = isDesktop
         ? desktopCrossAxisCount
         : baseCrossAxisCount;
@@ -560,7 +560,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
       if (_isDetailsPanelVisible) {
         // Left pane (Flex 2) is 2/3 of the total width
-        availableWidth = (containerWidth * (2 / 3)) - (horizontalPadding * 2);
+        availableWidth = (containerWidth * (3 / 5)) - (horizontalPadding * 2);
       } else {
         // Full width when not split
         availableWidth = containerWidth - (horizontalPadding * 2);
@@ -634,9 +634,6 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
           // Column 2 (Details - Flex 1, Visible if selected)
           if (_isDetailsPanelVisible)
-            Expanded(flex: 1, child: _buildDetailsPanel(theme))
-          else
-            // If panel is hidden, show a placeholder in the remaining space
             Expanded(flex: 1, child: _buildDetailsPanel(theme)),
         ],
       );

@@ -3,7 +3,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; // Import for Cupertino widgets
+import 'package:flutter/cupertino.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,24 +32,6 @@ bool get isIOSPlatform {
       defaultTargetPlatform == TargetPlatform.macOS;
 }
 
-bool get isAndroidPlatform {
-  return defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.fuchsia;
-}
-// ------------------------
-
-// --- COPIED HELPERS (Platform Aware Message) ---
-void _showPlatformMessage(
-  BuildContext context,
-  String title,
-  String message,
-  Color backgroundColor,
-) {
-  Api().showMessage(context, message, title, backgroundColor);
-}
-// --- END COPIED HELPERS ---
-
 class MotherPage extends StatefulWidget {
   final Function(bool) onToggleTheme;
   final int initialIndex;
@@ -72,6 +54,11 @@ class _MotherPageState extends State<MotherPage>
   late int _currentIndex;
   bool _isSeller = false;
   late AppLinks _appLinks;
+  final userId = FirebaseAuth.instance.currentUser?.uid;
+  Map<String, dynamic> _userData = {};
+
+  // ⭐️ HELPER: Detect Mobile Web ⭐️
+  bool get _isMobileWeb => kIsWeb && !isLargeScreen(context);
 
   @override
   void initState() {
@@ -84,13 +71,9 @@ class _MotherPageState extends State<MotherPage>
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
     final uri = await _appLinks.getInitialLink();
-    if (uri != null) {
-      _handleDeepLink(uri);
-    }
+    if (uri != null) _handleDeepLink(uri);
     _appLinks.uriLinkStream.listen((Uri? uri) {
-      if (uri != null) {
-        _handleDeepLink(uri);
-      }
+      if (uri != null) _handleDeepLink(uri);
     });
   }
 
@@ -98,9 +81,7 @@ class _MotherPageState extends State<MotherPage>
     if (uri.path.contains('/song')) {
       final songUrl = uri.queryParameters['url'];
       if (songUrl != null) {
-        setState(() {
-          _currentIndex = 0;
-        });
+        setState(() => _currentIndex = 0);
         Future.delayed(Duration(milliseconds: 100), () {
           MotherPage.deepLinkSongIdNotifier.value = songUrl;
         });
@@ -108,17 +89,11 @@ class _MotherPageState extends State<MotherPage>
     }
   }
 
-  final userId = FirebaseAuth.instance.currentUser?.uid;
-  Map<String, dynamic> _userData = {};
-
   void fetchUserData() async {
     if (userId == null) {
-      setState(() {
-        _isSeller = false;
-      });
+      setState(() => _isSeller = false);
       return;
     }
-
     final snapshots = await FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
@@ -153,268 +128,28 @@ class _MotherPageState extends State<MotherPage>
     }
   }
 
-  // ⭐️ UPDATED: Logic for submitting the help form
-  Future<void> _submitHelpForm(
-    BuildContext context,
-    TextEditingController subjectController,
-    TextEditingController descriptionController,
-  ) async {
-    if (subjectController.text.isNotEmpty &&
-        descriptionController.text.isNotEmpty) {
-      // Close the Bottom Sheet first
-      Navigator.pop(context);
-
-      Api().sendEmail(
-        'kgaogelodeveloper@gmail.com',
-        '${subjectController.text}',
-        """
-      <p>Gooday admin</p>
-      
-      <p>You have received issue from a user</p>
-       
-      
-      <hr />
-      <p><strong>Message:</strong></p>
-      <blockquote style="background: #f9f9f9; border-left: 5px solid #ccc; margin: 1.5em 10px; padding: 0.5em 10px;">
-        ${descriptionController.text}
-      </blockquote>
-      <hr />
-      
-      <p>Please respond to the user as soon as possible.</p>
-      
-      <br>
-      <p>Regards,<br>
-      Dankie Mobile Support System</p>
-      """,
-        context,
-      );
-
-      await FirebaseFirestore.instance.collection('UserHelp').add({
-        'userId': userId ?? 'guest',
-        'userEmail': FirebaseAuth.instance.currentUser?.email ?? 'N/A',
-        'subject': subjectController.text,
-        'description': descriptionController.text,
-        'timestamp': FieldValue.serverTimestamp(),
-        'status': 'open',
-      });
-
-      _showPlatformMessage(
-        context,
-        'Success',
-        'Your issue has been submitted. We will get back to you!',
-        Theme.of(context).splashColor,
-      );
-    } else {
-      _showPlatformMessage(
-        context,
-        'Error',
-        'Please fill in both subject and description.',
-        Theme.of(context).primaryColorDark,
-      );
-    }
-  }
-
-  // ⭐️ UPDATED: Beautiful Platform-Aware Bottom Sheet
-  void _showHelpBottomSheet() {
-    final TextEditingController subjectController = TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-    final theme = Theme.of(context);
-
-    // Helper to build the content so we don't duplicate code for both platforms
-    Widget buildSheetContent(BuildContext context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          top: 20,
-          left: 20,
-          right: 20,
-          // Critical: Moves sheet up when keyboard opens
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: isIOSPlatform
-                      ? CupertinoColors.systemGrey4
-                      : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-
-            // Title
-            Text(
-              'Report an Issue',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: isIOSPlatform
-                    ? CupertinoColors.label.resolveFrom(context)
-                    : theme.primaryColor,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            SizedBox(height: 20),
-
-            // Subject Input
-            if (isIOSPlatform)
-              CupertinoTextField(
-                controller: subjectController,
-                placeholder: 'Subject (e.g., App Crash)',
-                padding: EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  border: Border.all(color: CupertinoColors.systemGrey4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              )
-            else
-              TextField(
-                controller: subjectController,
-                decoration: InputDecoration(
-                  labelText: 'Subject',
-                  hintText: 'e.g., App Crash',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-
-            SizedBox(height: 15),
-
-            // Description Input
-            if (isIOSPlatform)
-              CupertinoTextField(
-                controller: descriptionController,
-                placeholder: 'Describe your issue...',
-                maxLines: 4,
-                padding: EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  border: Border.all(color: CupertinoColors.systemGrey4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              )
-            else
-              TextField(
-                controller: descriptionController,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Describe your issue...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  alignLabelWithHint: true,
-                ),
-              ),
-
-            SizedBox(height: 25),
-
-            // Submit Button
-            SizedBox(
-              width: double.infinity,
-              child: isIOSPlatform
-                  ? CupertinoButton.filled(
-                      color: theme.primaryColor,
-                      child: Text('Submit'),
-                      onPressed: () => _submitHelpForm(
-                        context,
-                        subjectController,
-                        descriptionController,
-                      ),
-                    )
-                  : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.primaryColor,
-                        foregroundColor: theme.scaffoldBackgroundColor,
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => _submitHelpForm(
-                        context,
-                        subjectController,
-                        descriptionController,
-                      ),
-                      child: Text(
-                        'Submit',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (isIOSPlatform) {
-      showCupertinoModalPopup(
-        context: context,
-        builder: (context) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(top: false, child: buildSheetContent(context)),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (context) => buildSheetContent(context),
-      );
-    }
-  }
-
-  List<SalomonBottomBarItem> _buildBottomBarItems(ThemeData theme) {
-    return [
-      SalomonBottomBarItem(
-        icon: Icon(Ionicons.home_outline),
-        title: Text('Home'),
-      ),
-      SalomonBottomBarItem(
-        icon: Icon(Ionicons.calendar_outline),
-        title: Text('Events'),
-      ),
-      SalomonBottomBarItem(
-        icon: Icon(Icons.local_mall_outlined),
-        title: Text('Shopping'),
-      ),
-      SalomonBottomBarItem(
-        icon: Icon(Icons.history_outlined),
-        title: Text('History'),
-      ),
-      if (_isSeller)
-        SalomonBottomBarItem(
-          icon: Icon(Ionicons.person_outline),
-          title: Text('My Shop'),
-        ),
+  // --- HELPER: Navigation Items List ---
+  List<Map<String, dynamic>> _getNavItems() {
+    List<Map<String, dynamic>> items = [
+      {'icon': Ionicons.home_outline, 'label': 'Home'},
+      {'icon': Ionicons.calendar_outline, 'label': 'Events'},
+      {'icon': Icons.local_mall_outlined, 'label': 'Shopping'},
+      {'icon': Icons.history_outlined, 'label': 'History'},
     ];
-  }
 
-  bool _isMobileWeb(BuildContext context) {
-    return kIsWeb && !isLargeScreen(context);
+    // On Mobile/Tablet native, Profile is in Drawer, so we don't add it to bottom bar list usually.
+    // But for sidebar/mobile-web-drawer navigation we need it.
+
+    if (_isSeller) {
+      items.add({'icon': Ionicons.storefront_outline, 'label': 'My Shop'});
+    }
+    return items;
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context);
+    final theme = Theme.of(context);
     final isDesktop = isLargeScreen(context);
-    final isMobileWeb = _isMobileWeb(context);
 
     List<Widget> pages = [
       HomePage(),
@@ -424,398 +159,478 @@ class _MotherPageState extends State<MotherPage>
       if (_isSeller) SellerProductPage(),
     ];
 
+    if (_currentIndex >= pages.length) _currentIndex = 0;
+
     if (isDesktop) {
-      return Scaffold(
-        body: Row(
-          children: [
-            _buildNavigationRail(color),
-            VerticalDivider(
-              thickness: 1,
-              width: 1,
-              color: color.dividerColor.withOpacity(0.5),
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  _buildAppBar(color),
-                  Expanded(child: pages[_currentIndex]),
-                  AdManager().bannerAdWidget(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildDesktopLayout(theme, pages[_currentIndex]);
     } else {
-      return Scaffold(
-        appBar: _buildAppBar(color),
-        drawer: _buildDrawer(color, isMobileWeb: isMobileWeb),
-        body: pages[_currentIndex],
-        bottomNavigationBar: isMobileWeb ? null : _buildSalomonBottomBar(color),
-      );
+      return _buildMobileLayout(theme, pages[_currentIndex]);
     }
   }
 
-  PreferredSizeWidget _buildAppBar(ThemeData color) {
-    return AppBar(
-      centerTitle: true,
-      automaticallyImplyLeading:
-          kIsWeb && MediaQuery.of(context).size.width > 1000 ? false : true,
-      backgroundColor: color.primaryColor,
-      foregroundColor: color.scaffoldBackgroundColor,
-      title: Text('W E L C O M E'),
-      actions: [
-        if (!_isSeller && userId != null)
-          IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => OrdersPage()),
-              );
-            },
-            icon: Icon(Icons.delivery_dining_outlined),
-          ),
-        if (isLargeScreen(context))
-          Switch(
-            value: Theme.of(context).brightness == Brightness.dark,
-            onChanged: _handleThemeChange,
-            activeColor: color.colorScheme.secondary,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDrawer(ThemeData color, {bool isMobileWeb = false}) {
-    return Drawer(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(2)),
-      ),
-      width: MediaQuery.of(context).size.width > 350 ? 350 : null,
-      backgroundColor: color.primaryColor,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // ===========================================================================
+  // 🖥️ DESKTOP LAYOUT (Sidebar + Content Area)
+  // ===========================================================================
+  Widget _buildDesktopLayout(ThemeData theme, Widget content) {
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Row(
         children: [
+          _buildNavigationRail(theme),
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  SizedBox(height: 30),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/dankie_logo.PNG',
-                      width: double.infinity,
-                      height: 250,
-                      fit: BoxFit.cover,
+            child: Column(
+              children: [
+                Container(
+                  height: 70,
+                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  color: theme.scaffoldBackgroundColor,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _getNavItems()[_currentIndex]['label'],
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: theme.brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black87,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => _handleThemeChange(
+                              theme.brightness == Brightness.light,
+                            ),
+                            icon: Icon(
+                              theme.brightness == Brightness.light
+                                  ? Icons.dark_mode_outlined
+                                  : Icons.light_mode_outlined,
+                              color: theme.hintColor,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          if (userId != null)
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: theme.primaryColor,
+                              child: Text(
+                                (_userData['name'] ?? 'U')
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(30, 0, 30, 30),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Scaffold(body: content),
                     ),
                   ),
-                  Divider(color: color.scaffoldBackgroundColor),
-
-                  if (isMobileWeb) ...[
-                    ..._buildBottomBarItems(color).asMap().entries.map((entry) {
-                      int index = entry.key;
-                      SalomonBottomBarItem item = entry.value;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildDrawerListTile(
-                            color,
-                            item.title is Text
-                                ? (item.title as Text).data ?? ''
-                                : 'Item',
-                            item.icon is Icon
-                                ? (item.icon as Icon).icon!
-                                : Icons.circle_outlined,
-                            () {
-                              setState(() {
-                                _currentIndex = index;
-                              });
-                              Navigator.pop(context);
-                            },
-                            isSelected: _currentIndex == index,
-                          ),
-                          Divider(color: color.scaffoldBackgroundColor),
-                        ],
-                      );
-                    }).toList(),
-                  ],
-
-                  _buildDrawerListTile(
-                    color,
-                    'Profile',
-                    Ionicons.person_outline,
-                    () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => MyProfile()),
-                      );
-                    },
-                  ),
-                  Divider(color: color.scaffoldBackgroundColor),
-
-                  isIOSPlatform
-                      ? CupertinoListTile(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18.0,
-                            vertical: 8.0,
-                          ),
-                          leading: Icon(
-                            CupertinoIcons.brightness,
-                            color: color.scaffoldBackgroundColor,
-                          ),
-                          title: Text(
-                            'Light/Dark Mode',
-                            style: TextStyle(
-                              color: color.scaffoldBackgroundColor,
-                            ),
-                          ),
-                          trailing: CupertinoSwitch(
-                            value:
-                                Theme.of(context).brightness == Brightness.dark,
-                            onChanged: _handleThemeChange,
-                            activeColor: color.colorScheme.secondary,
-                          ),
-                        )
-                      : SwitchListTile(
-                          title: Text(
-                            'Light/Dark Mode',
-                            style: TextStyle(
-                              color: color.scaffoldBackgroundColor,
-                            ),
-                          ),
-                          secondary: Icon(
-                            Icons.brightness_2,
-                            color: color.scaffoldBackgroundColor,
-                          ),
-                          value:
-                              Theme.of(context).brightness == Brightness.dark,
-                          onChanged: _handleThemeChange,
-                          activeColor: color.colorScheme.secondary,
-                          inactiveThumbColor: color.hintColor,
-                          inactiveTrackColor: color.hintColor.withOpacity(0.5),
-                        ),
-                  Divider(color: color.scaffoldBackgroundColor),
-
-                  // ⭐️ UPDATED: Calls the new bottom sheet method
-                  _buildDrawerListTile(
-                    color,
-                    'Help / Report Issue',
-                    Icons.help_outline,
-                    () {
-                      Navigator.pop(context);
-                      _showHelpBottomSheet(); // <-- CHANGED
-                    },
-                  ),
-                  Divider(color: color.scaffoldBackgroundColor),
-                ],
-              ),
-            ),
-          ),
-
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AdManager().bannerAdWidget(),
-              Padding(
-                padding: const EdgeInsets.all(18.0),
-                child: _buildDrawerListTile(
-                  color,
-                  userId == null ? 'Login' : 'Logout',
-                  isIOSPlatform
-                      ? CupertinoIcons.square_arrow_right
-                      : Icons.logout,
-                  () async {
-                    final isGuest =
-                        FirebaseAuth.instance.currentUser?.uid == null;
-                    if (isGuest) {
-                      Navigator.pushNamed(context, '/login');
-                    } else {
-                      await FirebaseAuth.instance.signOut();
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('authToken');
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/login',
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerListTile(
-    ThemeData color,
-    String title,
-    IconData icon,
-    VoidCallback onTap, {
-    bool isSelected = false,
-  }) {
-    final itemColor = isSelected
-        ? color.colorScheme.secondary
-        : color.scaffoldBackgroundColor;
-
-    if (isIOSPlatform) {
-      return CupertinoListTile(
-        padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
-        leading: Icon(icon, color: itemColor),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: itemColor,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        onTap: onTap,
-        backgroundColor: isSelected
-            ? color.primaryColor.withOpacity(0.5)
-            : null,
-      );
-    } else {
-      return ListTile(
-        onTap: onTap,
-        textColor: itemColor,
-        iconColor: itemColor,
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        leading: Icon(icon),
-        selected: isSelected,
-        selectedTileColor: color.primaryColor.withOpacity(0.5),
-      );
-    }
-  }
-
-  Widget _buildSalomonBottomBar(ThemeData color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AdManager().bannerAdWidget(),
-
-        SalomonBottomBar(
-          backgroundColor: color.primaryColor,
-          selectedItemColor: color.scaffoldBackgroundColor,
-          unselectedItemColor: color.hintColor,
-          currentIndex: _currentIndex,
-          onTap: (value) {
-            setState(() {
-              _currentIndex = value;
-            });
-          },
-          items: _buildBottomBarItems(color),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNavigationRail(ThemeData color) {
-    final destinations = _buildBottomBarItems(color)
-        .map(
-          (item) =>
-              NavigationRailDestination(icon: item.icon, label: item.title),
-        )
-        .toList();
-
-    return Container(
-      color: color.primaryColor,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                'assets/dankie_logo.PNG',
-                width: 60,
-                height: 60,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-
-          Expanded(
-            child: NavigationRail(
-              backgroundColor: color.primaryColor,
-              selectedIndex: _currentIndex,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              },
-              labelType: NavigationRailLabelType.all,
-              selectedIconTheme: IconThemeData(
-                color: color.scaffoldBackgroundColor,
-              ),
-              unselectedIconTheme: IconThemeData(color: color.hintColor),
-              selectedLabelTextStyle: TextStyle(
-                color: color.scaffoldBackgroundColor,
-              ),
-              unselectedLabelTextStyle: TextStyle(color: color.hintColor),
-              destinations: destinations,
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Ionicons.person_outline,
-                    color: color.scaffoldBackgroundColor,
-                  ),
-                  tooltip: 'Profile',
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => MyProfile()),
-                  ),
-                ),
-                // ⭐️ UPDATED: Calls the new bottom sheet method
-                IconButton(
-                  icon: Icon(
-                    Icons.help_outline,
-                    color: color.scaffoldBackgroundColor,
-                  ),
-                  tooltip: 'Help / Report Issue',
-                  onPressed: _showHelpBottomSheet, // <-- CHANGED
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.logout,
-                    color: color.scaffoldBackgroundColor,
-                  ),
-                  tooltip: userId == null ? 'Login' : 'Logout',
-                  onPressed: () async {
-                    final isGuest =
-                        FirebaseAuth.instance.currentUser?.uid == null;
-                    if (isGuest) {
-                      Navigator.pushNamed(context, '/login');
-                    } else {
-                      await FirebaseAuth.instance.signOut();
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('authToken');
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/login',
-                        (route) => false,
-                      );
-                    }
-                  },
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationRail(ThemeData theme) {
+    return Container(
+      width: 250,
+      color: theme.scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Column(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: theme.hintColor.withOpacity(0.2)),
+                  ),
+                  child: CircleAvatar(
+                    radius: 30,
+                    backgroundImage: AssetImage('assets/dankie_logo.PNG'),
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Dankie Mobile Portal",
+                  style: TextStyle(
+                    color: theme.primaryColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.symmetric(horizontal: 15),
+              children: _getNavItems().asMap().entries.map((entry) {
+                int idx = entry.key;
+                var item = entry.value;
+                bool isSelected = _currentIndex == idx;
+
+                return Container(
+                  margin: EdgeInsets.only(bottom: 5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? theme.primaryColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    leading: Icon(
+                      item['icon'],
+                      color: isSelected ? Colors.white : theme.hintColor,
+                    ),
+                    title: Text(
+                      item['label'],
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : theme.hintColor,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    onTap: () => setState(() => _currentIndex = idx),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.person_outline, color: theme.hintColor),
+                  title: Text(
+                    "Profile",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => MyProfile()),
+                  ),
+                ),
+                ListTile(
+                  leading: Icon(Icons.help_outline, color: theme.hintColor),
+                  title: Text(
+                    "Support",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
+                  onTap: _showHelpBottomSheet,
+                ),
+                ListTile(
+                  leading: Icon(Icons.logout, color: Colors.redAccent),
+                  title: Text(
+                    "Logout",
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  onTap: () => _logout(context),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 📱 MOBILE LAYOUT
+  // Logic: If Mobile Web -> No BottomBar, Use Drawer.
+  //        If Native App -> Use BottomBar.
+  // ===========================================================================
+  Widget _buildMobileLayout(ThemeData theme, Widget content) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: theme.primaryColor, // Blue
+        foregroundColor: Colors.white,
+        centerTitle: true,
+        title: Text(_getNavItems()[_currentIndex]['label']),
+        actions: [
+          if (!_isSeller && userId != null)
+            IconButton(
+              icon: Icon(Icons.delivery_dining_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => OrdersPage()),
+              ),
+            ),
+        ],
+      ),
+
+      drawer: _buildMobileDrawer(theme),
+
+      body: Column(
+        children: [
+          Expanded(child: content),
+          AdManager().bannerAdWidget(),
+        ],
+      ),
+
+      // ⭐️ CONDITIONAL BOTTOM BAR ⭐️
+      // If it is Mobile Web (_isMobileWeb is true), return null (hide bar).
+      // Otherwise (Native App), return SalomonBottomBar.
+      bottomNavigationBar: _isMobileWeb
+          ? null
+          : SalomonBottomBar(
+              backgroundColor: theme.scaffoldBackgroundColor,
+              currentIndex: _currentIndex,
+              onTap: (i) => setState(() => _currentIndex = i),
+              selectedItemColor: theme.primaryColor,
+              unselectedItemColor: theme.hintColor,
+              items: [
+                SalomonBottomBarItem(
+                  icon: Icon(Ionicons.home_outline),
+                  title: Text("Home"),
+                ),
+                SalomonBottomBarItem(
+                  icon: Icon(Ionicons.calendar_outline),
+                  title: Text("Events"),
+                ),
+                SalomonBottomBarItem(
+                  icon: Icon(Icons.local_mall_outlined),
+                  title: Text("Shop"),
+                ),
+                SalomonBottomBarItem(
+                  icon: Icon(Icons.history_outlined),
+                  title: Text("History"),
+                ),
+                if (_isSeller)
+                  SalomonBottomBarItem(
+                    icon: Icon(Ionicons.storefront_outline),
+                    title: Text("My Shop"),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildMobileDrawer(ThemeData theme) {
+    return Drawer(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(color: theme.primaryColor),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 35,
+                    backgroundImage: AssetImage('assets/dankie_logo.PNG'),
+                    backgroundColor: Colors.white,
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    "Dankie Mobile",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                // ⭐️ CONDITIONAL DRAWER ITEMS FOR MOBILE WEB ⭐️
+                // If we hid the bottom bar, we MUST show those items here in the drawer
+                if (_isMobileWeb) ...[
+                  ..._getNavItems().asMap().entries.map((entry) {
+                    int idx = entry.key;
+                    var item = entry.value;
+                    bool isSelected = _currentIndex == idx;
+                    return ListTile(
+                      leading: Icon(
+                        item['icon'],
+                        color: isSelected
+                            ? theme.primaryColor
+                            : theme.hintColor,
+                      ),
+                      title: Text(
+                        item['label'],
+                        style: TextStyle(
+                          color: isSelected
+                              ? theme.primaryColor
+                              : theme.hintColor,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      tileColor: isSelected
+                          ? theme.primaryColor.withOpacity(0.1)
+                          : null,
+                      onTap: () {
+                        setState(() => _currentIndex = idx);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+                  Divider(),
+                ],
+
+                ListTile(
+                  leading: Icon(
+                    Ionicons.person_outline,
+                    color: theme.hintColor,
+                  ),
+                  title: Text(
+                    "Profile",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => MyProfile()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.brightness_6, color: theme.hintColor),
+                  title: Text(
+                    "Switch Theme",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
+                  onTap: () =>
+                      _handleThemeChange(theme.brightness == Brightness.light),
+                ),
+                ListTile(
+                  leading: Icon(Icons.help_outline, color: theme.hintColor),
+                  title: Text(
+                    "Report Issue",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showHelpBottomSheet();
+                  },
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.logout, color: Colors.redAccent),
+            title: Text("Logout", style: TextStyle(color: Colors.redAccent)),
+            onTap: () => _logout(context),
+          ),
+          SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // --- SHARED FUNCTIONS ---
+
+  Future<void> _logout(BuildContext context) async {
+    final isGuest = FirebaseAuth.instance.currentUser?.uid == null;
+    if (isGuest) {
+      Navigator.pushNamed(context, '/login');
+    } else {
+      await FirebaseAuth.instance.signOut();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('authToken');
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    }
+  }
+
+  void _showHelpBottomSheet() {
+    final subjectController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 20,
+          right: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Report an Issue',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: theme.primaryColor,
+              ),
+            ),
+            SizedBox(height: 20),
+            TextField(
+              controller: subjectController,
+              decoration: InputDecoration(
+                labelText: 'Subject',
+                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: theme.hintColor),
+              ),
+            ),
+            SizedBox(height: 15),
+            TextField(
+              controller: descriptionController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: theme.hintColor),
+              ),
+            ),
+            SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.primaryColor,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  Api().showMessage(
+                    context,
+                    "Submitted",
+                    "We received your report.",
+                    Colors.green,
+                  );
+                },
+                child: Text('Submit', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

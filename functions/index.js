@@ -41,13 +41,12 @@ const upload = multer({ dest: os.tmpdir() });
 
 app.use(bodyParser.json());
 // Apply CORS to all routes on the 'app'
-app.use(cors({ origin: ["https://tact-3c612.web.app"] }));
+app.use(cors({ origin: true}));
  
 // Now use environment variables directly:
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY; 
 const GMAIL_EMAIL = process.env.GMAIL_EMAIL;
-const GMAIL_PASSWORD = process.env.GMAIL_PASSWORD;
-console.log(`Paystack key loaded: ${PAYSTACK_SECRET_KEY}`, !!PAYSTACK_SECRET_KEY);
+const GMAIL_PASSWORD = process.env.GMAIL_PASSWORD; 
 
 // Initialize Paystack constants
 // !! SECURITY: Make sure this is set in your environment, not hardcoded
@@ -82,20 +81,24 @@ function determineSubscriptionAmount(memberCount) {
 // =========================================================================
 app.post('/initialize-subscription', async (req, res) => {
     try {
-        const { email, amount, uid, tier, memberCount } = req.body;
+        // We now expect 'planCode' instead of just amount/tier strings
+        const { email, uid, planCode, memberCount } = req.body;
 
-        if (!email || !amount || !uid) {
-            return res.status(400).json({ error: 'Missing required subscription details.' });
+        if (!email || !uid || !planCode) {
+            return res.status(400).json({ error: 'Missing required subscription details (email, uid, or planCode).' });
         }
         
-        const reference = `AUTH_${uid}_${Date.now()}`;
+        const reference = `SUB_${uid}_${Date.now()}`;
         
+        // When using a Plan, amount must be passed as 0 or string "0"
+        // Paystack ignores the amount and uses the Plan's price.
         const body = {
             email: email,
-            amount: amount,
+            amount: "0", 
+            plan: planCode, // <--- THIS IS THE KEY FIELD FOR SUBSCRIPTIONS
             currency: 'ZAR',
             reference: reference, 
-            channels: ['card', 'bank', 'ussd', 'qr'],
+            callback_url: "https://standard.paystack.co/close", // Standard close URL
             metadata: {
                 custom_fields: [
                     {
@@ -109,14 +112,14 @@ app.post('/initialize-subscription', async (req, res) => {
                         value: uid,
                     },
                     {
-                        display_name: "Tier_Level",
-                        variable_name: "tier_level",
-                        value: tier || "N/A",
+                        display_name: "Plan_Code",
+                        variable_name: "plan_code",
+                        value: planCode,
                     },
                     {
                         display_name: "Member_Count",
                         variable_name: "member_count",
-                        value: memberCount.toString(),
+                        value: memberCount ? memberCount.toString() : "0",
                     }
                 ]
             }
@@ -568,108 +571,4 @@ exports.api = onRequest({
   },// This is the v2 way to set options
   app                       // The express app is the second argument
 );
-
-// =========================================================================
-// 7. SCHEDULED SUBSCRIPTION CRON JOB (V2 SYNTAX)
-// =========================================================================
-exports.monthlySubscriptionCharge = onSchedule(
-  {
-    schedule: '0 0 1 * *', // Runs at midnight UTC on the 1st of every month
-    timeZone: 'UTC',
-    region: 'us-central1', // V2 functions often require a region
-  },
-  async (event) => {
-    
-    console.log('Starting monthly subscription charge job.');
-
-    const activeOverseersSnapshot = await db.collection('overseers')
-        .where('subscriptionStatus', '==', 'active')
-        .get();
-
-    if (activeOverseersSnapshot.empty) {
-      console.log('No active overseers found to charge.');
-      return null;
-    }
-
-    const chargePromises = [];
-
-    for (const doc of activeOverseersSnapshot.docs) {
-      const overseerData = doc.data();
-      const overseerId = doc.id;
-      
-      if (overseerData.nextChargeDate && overseerData.nextChargeDate.toMillis() > Date.now()) {
-        console.log(`Overseer ${overseerId} not yet due for charge.`);
-        continue; 
-      }
-
-      chargePromises.push((async () => {
-        const authCode = overseerData.paystackAuthCode;
-        const email = overseerData.paystackEmail;
-
-        if (!authCode || !email) {
-          console.error(`Missing auth code or email for overseer ${overseerId}. Marking as error.`);
-          await doc.ref.update({ subscriptionStatus: 'authorization_error' });
-          return;
-        }
-
-        const membersSnapshot = await db.collection('users')
-            .where('overseerUid', '==', overseerId)
-            .get();
-        const currentMemberCount = membersSnapshot.size;
-        const chargeAmountCents = determineSubscriptionAmount(currentMemberCount);
-
-        try {
-          const chargeResponse = await axios.post(
-            `${PAYSTACK_API_BASE}/transaction/charge_authorization`,
-            {
-              authorization_code: authCode,
-              email: email,
-              amount: chargeAmountCents,
-              currency: 'ZAR',
-              metadata: { 
-                member_count: currentMemberCount,
-                charged_tier_cents: chargeAmountCents 
-              }
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-
-          if (chargeResponse.data.status) {
-            await doc.ref.update({
-              lastCharged: admin.firestore.FieldValue.serverTimestamp(),
-              lastChargedAmount: chargeAmountCents,
-              currentMemberCount: currentMemberCount,
-              nextChargeDate: admin.firestore.Timestamp.fromMillis(
-                Date.now() + (30 * 24 * 60 * 60 * 1000)
-              ),
-              subscriptionStatus: 'active',
-            });
-            console.log(`Successfully charged overseer ${overseerId} R${(chargeAmountCents / 100).toFixed(2)}.`);
-          } else {
-            console.error(`Charge failed for overseer ${overseerId}: ${chargeResponse.data.message}`);
-            await doc.ref.update({ 
-              subscriptionStatus: 'payment_failed',
-              lastAttemptedChargeAmount: chargeAmountCents,
-              lastAttempted: admin.firestore.FieldValue.serverTimestamp(),
-            });
-          }
-        } catch (chargeError) {
-          console.error(`API call failed for overseer ${overseerId}:`, chargeError.response?.data || chargeError.message);
-          await doc.ref.update({ 
-            subscriptionStatus: 'payment_failed',
-            lastAttempted: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
-      })());
-    }
-
-    await Promise.all(chargePromises);
-    console.log('Monthly subscription charge job completed.');
-    return null;
-  }
-);
+ 

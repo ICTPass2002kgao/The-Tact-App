@@ -2,22 +2,21 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // REQUIRED for Face Upload
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb and defaultTargetPlatform
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; // REQUIRED for Face Picking
+import 'package:fl_chart/fl_chart.dart'; // REQUIRED: fl_chart: ^0.65.0
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:ttact/Components/API.dart';
-// Assuming Upcoming_events_card is used elsewhere or just imported
-import 'package:ttact/Components/Upcoming_events_card.dart';
+import 'package:ttact/Components/AuditService.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:io' as io; // Platform safe file handling
+import 'dart:io' as io;
 
 // --- PLATFORM UTILITIES ---
-const double _desktopBreakpoint = 900.0;
+const double _desktopBreakpoint = 1100.0;
 
-// 1. Check if we should use Apple-style widgets (Mac or iOS), even on Web.
 bool get isAppleStyle {
   return defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
@@ -37,6 +36,10 @@ class _TactsoBranchesApplicationsState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
+  // --- THEME STATE ---
+  bool _isDarkMode = false;
+
+  // --- DATA STATE ---
   String? _universityName;
   String? _adminEmail;
   String? _currentuid;
@@ -48,7 +51,7 @@ class _TactsoBranchesApplicationsState
   // Navigation
   int _selectedIndex = 0;
 
-  // --- COMMITTEE STATE ---
+  // --- INPUT CONTROLLERS ---
   final TextEditingController _committeeNameController =
       TextEditingController();
   final TextEditingController _committeeEmailController =
@@ -56,6 +59,8 @@ class _TactsoBranchesApplicationsState
   String? _selectedRole;
   XFile? _committeeFaceImage;
   bool _isUploadingCommittee = false;
+  String? _universityLogoUrl;
+  String? _universityCommitteeFace;
 
   final List<String> _committeeRoles = [
     'Chairperson',
@@ -74,6 +79,23 @@ class _TactsoBranchesApplicationsState
   ];
 
   String? _selectedStatus;
+  String? _committeeName;
+
+  // --- COLOR PALETTE (Dynamic) ---
+  final Color _primaryColor = const Color(0xFF1E3A8A); // Deep Blue
+  final Color _accentColor = const Color(0xFF3B82F6); // Bright Blue
+
+  // Dynamic Colors based on Mode
+  Color get _bgColor =>
+      _isDarkMode ? const Color(0xFF111827) : const Color(0xFFF3F4F6);
+  Color get _cardColor => _isDarkMode ? const Color(0xFF1F2937) : Colors.white;
+  Color get _textColor => _isDarkMode ? Colors.white : Colors.black87;
+  Color get _subTextColor =>
+      _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
+  Color get _inputFillColor =>
+      _isDarkMode ? const Color(0xFF374151) : Colors.grey.shade50;
+  Color get _borderColor =>
+      _isDarkMode ? const Color(0xFF4B5563) : Colors.grey.shade300;
 
   @override
   void initState() {
@@ -97,7 +119,6 @@ class _TactsoBranchesApplicationsState
     }
   }
 
-  // Helper to fetch committee members
   void _fetchCommitteeMembers() {
     if (_currentuid != null) {
       setState(() {
@@ -111,25 +132,41 @@ class _TactsoBranchesApplicationsState
     }
   }
 
+  // --- FIXED DATA LOADING FUNCTION ---
   Future<void> _loadUniversityData() async {
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
       _currentuid = currentUser.uid;
       _adminEmail = currentUser.email;
 
-      // Trigger the initial fetch
       _fetchCommitteeMembers();
 
       try {
-        DocumentSnapshot universityDoc = await _firestore
+        // 1. Get QuerySnapshot
+        QuerySnapshot querySnapshot = await _firestore
             .collection('tactso_branches')
-            .doc(_currentuid)
+            .where('uid', isEqualTo: _currentuid)
+            .limit(1)
             .get();
 
-        if (universityDoc.exists) {
+        if (querySnapshot.docs.isNotEmpty) {
+          // 2. Extract Data from first doc
+          var data = querySnapshot.docs.first.data() as Map<String, dynamic>;
+
           setState(() {
-            _universityName =
-                universityDoc['educationOfficerName'] ?? 'University Admin';
+            _universityName = data['universityName'] ?? 'University Admin';
+            _committeeName = data['educationOfficerName'] ?? 'Committee';
+            _universityCommitteeFace = data['educationOfficerFaceUrl'];
+
+            // 3. Fix: Handle Array vs String for imageUrl
+            var imgField = data['imageUrl'];
+            if (imgField is List && imgField.isNotEmpty) {
+              _universityLogoUrl = imgField[0].toString();
+            } else if (imgField is String) {
+              _universityLogoUrl = imgField;
+            } else {
+              _universityLogoUrl = null;
+            }
           });
         }
       } catch (e) {
@@ -148,10 +185,8 @@ class _TactsoBranchesApplicationsState
     }
   }
 
-  // --- COMMITTEE IMAGE PICKER ---
-
+  // --- LOGIC ---
   Future<void> _pickCommitteeImage() async {
-    print("Picking image..."); // Debug print
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -161,10 +196,8 @@ class _TactsoBranchesApplicationsState
         setState(() {
           _committeeFaceImage = picked;
         });
-        print("Image picked: ${picked.path}");
       }
     } catch (e) {
-      print("Error picking image: $e");
       Api().showMessage(
         context,
         "Error",
@@ -192,8 +225,6 @@ class _TactsoBranchesApplicationsState
     return await snapshot.ref.getDownloadURL();
   }
 
-  // --- ADD COMMITTEE MEMBER LOGIC ---
-
   Future<void> _addCommitteeMember() async {
     if (_committeeNameController.text.isEmpty ||
         _committeeEmailController.text.isEmpty ||
@@ -217,7 +248,6 @@ class _TactsoBranchesApplicationsState
       return;
     }
 
-    // Limit Check
     QuerySnapshot existingMembers = await _firestore
         .collection('tactso_branches')
         .doc(_currentuid)
@@ -266,9 +296,7 @@ class _TactsoBranchesApplicationsState
         _isUploadingCommittee = false;
       });
 
-      // REFRESH THE LIST
       _fetchCommitteeMembers();
-
       Api().showMessage(context, "Success", "Member added.", Colors.green);
     } catch (e) {
       setState(() => _isUploadingCommittee = false);
@@ -289,14 +317,10 @@ class _TactsoBranchesApplicationsState
         'authorizedUserFaceUrls': FieldValue.arrayRemove([faceUrl]),
       });
     }
-
-    // REFRESH THE LIST
     _fetchCommitteeMembers();
-
     Api().showMessage(context, "Deleted", "Member removed.", Colors.grey);
   }
 
-  // --- STATUS UPDATE ---
   Future<void> _updateApplicationStatus({
     required String applicationId,
     required String newStatus,
@@ -355,6 +379,25 @@ class _TactsoBranchesApplicationsState
         }
       }
 
+      String studentName = "Unknown Student";
+      if (applicationData != null &&
+          applicationData['applicationDetails'] != null) {
+        studentName =
+            applicationData['applicationDetails']['fullName'] ??
+            "Unknown Student";
+      }
+
+      await AuditService.logAction(
+        action: "UPDATE_STATUS",
+        details: "Changed status to $newStatus",
+        referenceId: applicationId,
+        universityName: _universityName,
+        studentName: studentName,
+        committeeName: _committeeName,
+        universityCommitteeFace: _universityCommitteeFace,
+        universityLogo: _universityLogoUrl,
+      );
+
       if (mounted) {
         Api().showMessage(context, 'Updated', 'Status changed.', Colors.green);
         setState(() {});
@@ -371,7 +414,7 @@ class _TactsoBranchesApplicationsState
   }
 
   // ===========================================================================
-  // === MAIN LAYOUT SWITCHER ===
+  // === UI & DESIGN ===
   // ===========================================================================
 
   @override
@@ -379,7 +422,7 @@ class _TactsoBranchesApplicationsState
     if (_auth.currentUser == null) return _buildLoginRedirect(context);
     if (_isLoadingUniversityData || _currentuid == null) {
       return Scaffold(
-        backgroundColor: ThemeData.dark().scaffoldBackgroundColor,
+        backgroundColor: _bgColor,
         body: Center(
           child: isAppleStyle
               ? CupertinoActivityIndicator()
@@ -388,52 +431,39 @@ class _TactsoBranchesApplicationsState
       );
     }
 
-    // 1. Content Widget
     Widget contentBody = Align(
       alignment: Alignment.topCenter,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: _selectedIndex == 0
-            ? _buildDashboardTab(context)
-            : _selectedIndex == 1
-            ? _buildApplicationsTableTab(context)
-            : _buildCommitteeTab(context),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 1400),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: _selectedIndex == 0
+              ? _buildDashboardTab(context)
+              : _selectedIndex == 1
+              ? _buildApplicationsTableTab(context)
+              : _buildCommitteeTab(context),
+        ),
       ),
     );
 
     final double screenWidth = MediaQuery.of(context).size.width;
 
-    // ----------------------------------------------------------------------
-    // CASE 1: DESKTOP / WIDE SCREEN (Sidebar)
-    // ----------------------------------------------------------------------
+    // DESKTOP
     if (screenWidth >= _desktopBreakpoint) {
       return Scaffold(
+        backgroundColor: _bgColor,
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Permanent Sidebar
             Container(
-              width: 260,
-              color: Theme.of(context).primaryColor,
+              width: 280,
+              color: _cardColor,
               child: _buildDrawerContent(context, isSidebar: true),
             ),
             Expanded(
               child: Scaffold(
-                appBar: isAppleStyle
-                    ? CupertinoNavigationBar(
-                        middle: Text(
-                          _universityName ?? "Admin",
-                          style: TextStyle(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                          ),
-                        ),
-                        backgroundColor: Theme.of(context).primaryColor,
-                      )
-                    : AppBar(
-                        title: Text(_universityName ?? "Admin"),
-                        automaticallyImplyLeading: false,
-                        elevation: 0,
-                      ),
+                backgroundColor: _bgColor,
+                appBar: _buildAppBar(context),
                 body: SingleChildScrollView(child: contentBody),
               ),
             ),
@@ -442,130 +472,166 @@ class _TactsoBranchesApplicationsState
       );
     }
 
-    // ----------------------------------------------------------------------
-    // CASE 2: WEB - SMALL SCREEN (Drawer)
-    // ----------------------------------------------------------------------
+    // WEB / TABLET
     if (kIsWeb) {
-      // If we are here, screenWidth is < _desktopBreakpoint
       return Scaffold(
-        appBar: AppBar(
-          title: Text(_universityName ?? 'Admin'),
-          automaticallyImplyLeading: true,
+        backgroundColor: _bgColor,
+        appBar: _buildAppBar(context),
+        drawer: Drawer(
+          backgroundColor: _cardColor,
+          child: _buildDrawerContent(context, isSidebar: false),
         ),
-        drawer: Drawer(child: _buildDrawerContent(context, isSidebar: false)),
         body: SingleChildScrollView(child: contentBody),
       );
     }
 
-    // ----------------------------------------------------------------------
-    // CASE 3: NATIVE MOBILE (iOS - Bottom Tabs)
-    // ----------------------------------------------------------------------
-    if (isAppleStyle) {
-      return CupertinoTabScaffold(
-        tabBar: CupertinoTabBar(
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.graph_circle),
-              label: 'Dash',
+    // MOBILE
+    return Scaffold(
+      backgroundColor: _bgColor,
+      appBar: _buildAppBar(context),
+      body: SingleChildScrollView(child: contentBody),
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          backgroundColor: _cardColor,
+          indicatorColor: _primaryColor.withOpacity(0.2),
+          labelTextStyle: MaterialStateProperty.all(
+            TextStyle(color: _textColor, fontSize: 12),
+          ),
+          iconTheme: MaterialStateProperty.resolveWith((states) {
+            if (states.contains(MaterialState.selected)) {
+              return IconThemeData(color: _primaryColor);
+            }
+            return IconThemeData(color: _subTextColor);
+          }),
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard),
+              label: 'Dashboard',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.doc_text),
-              label: 'Apps',
+            NavigationDestination(
+              icon: Icon(Icons.table_chart_outlined),
+              selectedIcon: Icon(Icons.table_chart),
+              label: 'Applications',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.group),
+            NavigationDestination(
+              icon: Icon(Icons.people_outlined),
+              selectedIcon: Icon(Icons.people),
               label: 'Team',
             ),
           ],
         ),
-        tabBuilder: (ctx, index) {
-          // We don't set state here to avoid loops, we just render
-          Widget tabContent;
-          if (index == 0)
-            tabContent = _buildDashboardTab(context);
-          else if (index == 1)
-            tabContent = _buildApplicationsTableTab(context);
-          else
-            tabContent = _buildCommitteeTab(context);
-
-          return CupertinoPageScaffold(
-            navigationBar: CupertinoNavigationBar(
-              middle: Text(_universityName ?? 'Admin'),
-              trailing: CupertinoButton(
-                padding: EdgeInsets.zero,
-                child: Icon(CupertinoIcons.square_arrow_right),
-                onPressed: _logout,
-              ),
-            ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                child: Padding(padding: EdgeInsets.all(16), child: tabContent),
-              ),
-            ),
-          );
-        },
-      );
-    }
-
-    // ----------------------------------------------------------------------
-    // CASE 4: NATIVE MOBILE (Android - Bottom Nav)
-    // ----------------------------------------------------------------------
-    // This handles Android apps (not web)
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_universityName ?? 'Admin'),
-        actions: [IconButton(icon: Icon(Icons.logout), onPressed: _logout)],
-      ),
-      body: SingleChildScrollView(child: contentBody),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dash'),
-          NavigationDestination(icon: Icon(Icons.table_chart), label: 'Apps'),
-          NavigationDestination(icon: Icon(Icons.group), label: 'Team'),
-        ],
       ),
     );
   }
 
-  // --- DRAWER / SIDEBAR CONTENT ---
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      title: Text(
+        _universityName ?? "Admin Portal",
+        style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
+      ),
+      backgroundColor: _cardColor,
+      elevation: 0,
+      iconTheme: IconThemeData(color: _textColor),
+      actions: [
+        IconButton(
+          icon: Icon(
+            _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            color: _isDarkMode ? Colors.yellow.shade600 : Colors.grey.shade600,
+          ),
+          onPressed: () {
+            setState(() {
+              _isDarkMode = !_isDarkMode;
+            });
+          },
+        ),
+        SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(right: 16.0),
+          child: CircleAvatar(
+            backgroundColor: _primaryColor.withOpacity(0.1),
+            backgroundImage: _universityLogoUrl != null
+                ? NetworkImage(_universityLogoUrl!)
+                : null,
+            child: _universityLogoUrl == null
+                ? Text(
+                    _universityName?.substring(0, 1) ?? "U",
+                    style: TextStyle(color: _primaryColor),
+                  )
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- DRAWER ---
   Widget _buildDrawerContent(BuildContext context, {required bool isSidebar}) {
-    final color = isSidebar ? Colors.white : Colors.black87;
+    final color = isSidebar
+        ? (_isDarkMode ? Colors.white70 : Colors.black54)
+        : _textColor;
+    final activeColor = _primaryColor;
 
     return Column(
       children: [
-        if (isSidebar) SizedBox(height: 50),
+        if (isSidebar)
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.admin_panel_settings,
+                  size: 40,
+                  color: _primaryColor,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "TACTSO ADMIN",
+                  style: TextStyle(
+                    color: _textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (!isSidebar)
           UserAccountsDrawerHeader(
+            decoration: BoxDecoration(color: _primaryColor),
             accountName: Text(_universityName ?? 'Admin'),
             accountEmail: Text(_adminEmail ?? ''),
-            currentAccountPicture: CircleAvatar(child: Icon(Icons.school)),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Icon(Icons.school, color: _primaryColor),
+            ),
           ),
-        if (isSidebar) ...[
-          Icon(Icons.admin_panel_settings, size: 50, color: Colors.white),
-          SizedBox(height: 10),
-          Text(
-            "TACTSO ADMIN",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 40),
-        ],
-
-        _drawerItem(Icons.dashboard, "Dashboard", 0, color, isSidebar),
-        _drawerItem(Icons.table_chart, "Applications", 1, color, isSidebar),
-        _drawerItem(Icons.group, "Committee", 2, color, isSidebar),
-
+        SizedBox(height: 20),
+        _drawerItem(
+          Icons.dashboard_rounded,
+          "Dashboard",
+          0,
+          color,
+          activeColor,
+        ),
+        _drawerItem(
+          Icons.table_chart_rounded,
+          "Applications",
+          1,
+          color,
+          activeColor,
+        ),
+        _drawerItem(Icons.groups_rounded, "Committee", 2, color, activeColor),
         Spacer(),
         ListTile(
-          leading: Icon(
-            Icons.logout,
-            color: isSidebar ? Colors.white70 : Colors.grey,
-          ),
-          title: Text(
-            "Logout",
-            style: TextStyle(color: isSidebar ? Colors.white70 : Colors.black),
-          ),
+          leading: Icon(Icons.logout_rounded, color: Colors.redAccent),
+          title: Text("Logout", style: TextStyle(color: Colors.redAccent)),
           onTap: _logout,
         ),
         SizedBox(height: 20),
@@ -578,254 +644,315 @@ class _TactsoBranchesApplicationsState
     String title,
     int index,
     Color color,
-    bool isSidebar,
+    Color activeColor,
   ) {
     bool isActive = _selectedIndex == index;
-    return ListTile(
-      leading: Icon(icon, color: color),
-      title: Text(title, style: TextStyle(color: color)),
-      selected: isActive,
-      selectedTileColor: isSidebar
-          ? Colors.white.withOpacity(0.2)
-          : Colors.blue.withOpacity(0.1),
-      onTap: () {
-        setState(() => _selectedIndex = index);
-        if (!isSidebar) Navigator.pop(context); // Close Drawer if on mobile
-      },
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        tileColor: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
+        leading: Icon(icon, color: isActive ? activeColor : color),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isActive ? activeColor : color,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        onTap: () {
+          setState(() => _selectedIndex = index);
+          if (Scaffold.of(context).hasDrawer &&
+              Scaffold.of(context).isDrawerOpen) {
+            Navigator.pop(context);
+          }
+        },
+      ),
     );
-  }
-
-  // --- WIDGET GENERATORS (Platform Aware) ---
-
-  Widget _platformTextField({
-    required TextEditingController controller,
-    required String placeholder,
-    bool isPassword = false,
-    IconData? icon,
-  }) {
-    if (isAppleStyle) {
-      return CupertinoTextField(
-        controller: controller,
-        placeholder: placeholder,
-        obscureText: isPassword,
-        padding: EdgeInsets.all(12),
-        prefix: icon != null
-            ? Padding(
-                padding: EdgeInsets.only(left: 10),
-                child: Icon(icon, color: CupertinoColors.systemGrey),
-              )
-            : null,
-        decoration: BoxDecoration(
-          color: CupertinoColors.extraLightBackgroundGray,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: CupertinoColors.systemGrey4),
-        ),
-      );
-    } else {
-      return TextField(
-        controller: controller,
-        obscureText: isPassword,
-        decoration: InputDecoration(
-          labelText: placeholder,
-          prefixIcon: icon != null ? Icon(icon) : null,
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-      );
-    }
-  }
-
-  Widget _platformButton({
-    required VoidCallback onPressed,
-    required String label,
-    required IconData icon,
-    required BuildContext context,
-    Color? color,
-  }) {
-    if (isAppleStyle) {
-      return SizedBox(
-        width: double.infinity,
-        child: CupertinoButton.filled(
-          onPressed: onPressed,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [Icon(icon, size: 20), SizedBox(width: 8), Text(label)],
-          ),
-        ),
-      );
-    } else {
-      return SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(label),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color ?? Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.symmetric(vertical: 16),
-          ),
-        ),
-      );
-    }
   }
 
   // --- TAB 1: DASHBOARD ---
   Widget _buildDashboardTab(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Card(
-          color: Colors.blue.shade50,
-          child: ListTile(
-            leading: Icon(Icons.verified_user, color: Colors.blue),
-            title: Text(
-              "Welcome Back",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(_adminEmail ?? ''),
-          ),
-        ),
-        SizedBox(height: 20),
-        Text(
-          "Metrics",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        Divider(),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _buildMetricCard(
-              context,
-              "Total",
-              Colors.blue,
-              Icons.assignment,
-              _firestore
-                  .collection('tactso_branches')
-                  .doc(_currentuid)
-                  .collection('application_requests')
-                  .get(),
-              (snapshot) => snapshot.hasData ? snapshot.data!.size : 0,
-              isDesktop:
-                  MediaQuery.of(context).size.width >= _desktopBreakpoint,
-            ),
-            _buildMetricCard(
-              context,
-              "New",
-              Colors.orange,
-              Icons.fiber_new,
-              _firestore
-                  .collection('tactso_branches')
-                  .doc(_currentuid)
-                  .collection('application_requests')
-                  .where('status', isEqualTo: 'New')
-                  .get(),
-              (snapshot) => snapshot.hasData ? snapshot.data!.size : 0,
-              isDesktop:
-                  MediaQuery.of(context).size.width >= _desktopBreakpoint,
-            ),
-            _buildMetricCard(
-              context,
-              "Accepted",
-              Colors.green,
-              Icons.check_circle,
-              _firestore
-                  .collection('tactso_branches')
-                  .doc(_currentuid)
-                  .collection('application_requests')
-                  .where('status', isEqualTo: 'Application Submitted')
-                  .get(),
-              (snapshot) => snapshot.hasData ? snapshot.data!.size : 0,
-              isDesktop:
-                  MediaQuery.of(context).size.width >= _desktopBreakpoint,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricCard(
-    BuildContext context,
-    String title,
-    Color color,
-    IconData icon,
-    Future<QuerySnapshot> future,
-    int Function(AsyncSnapshot<QuerySnapshot> snapshot) countExtractor, {
-    required bool isDesktop,
-  }) {
-    final double cardWidth = isDesktop
-        ? (MediaQuery.of(context).size.width * 0.45)
-        : double.infinity;
-
-    return FutureBuilder<QuerySnapshot>(
-      future: future,
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('tactso_branches')
+          .doc(_currentuid)
+          .collection('application_requests')
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Card(
-            margin: EdgeInsets.only(bottom: 16.0),
-            child: SizedBox(
-              width: isDesktop
-                  ? (_desktopBreakpoint / 2) - 32
-                  : double.infinity,
-              height: 100,
-              child: Center(child: CupertinoActivityIndicator()),
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return Card(
-            color: color.withOpacity(0.1),
-            margin: const EdgeInsets.only(bottom: 16.0),
-            child: Text('Error: ${snapshot.error}'),
-          );
+        if (!snapshot.hasData) {
+          return Center(child: CupertinoActivityIndicator());
         }
 
-        final count = countExtractor(snapshot);
+        final docs = snapshot.data!.docs;
+        final total = docs.length;
+        final newApps = docs.where((d) => d['status'] == 'New').length;
+        final submitted = docs
+            .where((d) => d['status'] == 'Application Submitted')
+            .length;
+        final rejected = docs.where((d) => d['status'] == 'Rejected').length;
+        final reviewed = docs.where((d) => d['status'] == 'Reviewed').length;
 
-        return Card(
-          color: color.withOpacity(0.1),
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 16.0),
-          child: Container(
-            // Use the calculated width if desktop, otherwise fill
-            width: isDesktop ? (_desktopBreakpoint / 2) - 32 : double.infinity,
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(icon, size: 32, color: color),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Welcome Header
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [_primaryColor, _accentColor]),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  if (!_isDarkMode)
+                    BoxShadow(
+                      color: _primaryColor.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    child: Icon(Icons.person, color: Colors.white),
+                  ),
+                  SizedBox(width: 15),
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
+                        "Welcome Back,",
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
-                      const SizedBox(height: 4),
                       Text(
-                        '$count',
+                        _universityName ?? "Administrator",
                         style: TextStyle(
-                          fontSize: 28,
+                          color: Colors.white,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: color,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            SizedBox(height: 30),
+
+            Text(
+              "Overview",
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: _textColor,
+              ),
+            ),
+            SizedBox(height: 15),
+
+            LayoutBuilder(
+              builder: (context, constraints) {
+                int crossAxisCount = constraints.maxWidth > 800 ? 3 : 1;
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    _buildStatCard(
+                      "Total Applications",
+                      total.toString(),
+                      Icons.folder_shared,
+                      Colors.blueAccent,
+                      constraints.maxWidth,
+                      crossAxisCount,
+                    ),
+                    _buildStatCard(
+                      "New / Pending",
+                      newApps.toString(),
+                      Icons.fiber_new,
+                      Colors.orange,
+                      constraints.maxWidth,
+                      crossAxisCount,
+                    ),
+                    _buildStatCard(
+                      "Completed",
+                      submitted.toString(),
+                      Icons.check_circle,
+                      Colors.green,
+                      constraints.maxWidth,
+                      crossAxisCount,
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            SizedBox(height: 30),
+
+            if (total > 0) ...[
+              Text(
+                "Status Distribution",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: _textColor,
+                ),
+              ),
+              SizedBox(height: 15),
+              Container(
+                height: 350,
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    if (!_isDarkMode)
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: PieChart(
+                        PieChartData(
+                          sectionsSpace: 2,
+                          centerSpaceRadius: 40,
+                          sections: [
+                            _buildPieSection(newApps, "New", Colors.orange),
+                            _buildPieSection(reviewed, "Reviewed", Colors.blue),
+                            _buildPieSection(
+                              submitted,
+                              "Submitted",
+                              Colors.green,
+                            ),
+                            _buildPieSection(rejected, "Rejected", Colors.red),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLegendItem("New", Colors.orange, newApps),
+                          _buildLegendItem("Reviewed", Colors.blue, reviewed),
+                          _buildLegendItem(
+                            "Submitted",
+                            Colors.green,
+                            submitted,
+                          ),
+                          _buildLegendItem("Rejected", Colors.red, rejected),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else
+              Container(
+                padding: EdgeInsets.all(30),
+                decoration: BoxDecoration(
+                  color: _cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    "No application data available for charts.",
+                    style: TextStyle(color: _subTextColor),
+                  ),
+                ),
+              ),
+          ],
         );
       },
+    );
+  }
+
+  PieChartSectionData _buildPieSection(int count, String title, Color color) {
+    final double value = count.toDouble();
+    return PieChartSectionData(
+      color: color,
+      value: value,
+      title: value > 0 ? '${value.toInt()}' : '',
+      radius: 50,
+      titleStyle: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(String title, Color color, int count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Container(width: 12, height: 12, color: color),
+          SizedBox(width: 8),
+          Text("$title ($count)", style: TextStyle(color: _subTextColor)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    double width,
+    int count,
+  ) {
+    return Container(
+      width: count == 3 ? (width - 40) / 3 : width,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          if (!_isDarkMode)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 30),
+          ),
+          SizedBox(width: 15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: _subTextColor, fontSize: 14)),
+              SizedBox(height: 5),
+              Text(
+                value,
+                style: TextStyle(
+                  color: _textColor,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -835,10 +962,19 @@ class _TactsoBranchesApplicationsState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Applications",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          "Applications Database",
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: _textColor,
+          ),
         ),
-        SizedBox(height: 10),
+        SizedBox(height: 5),
+        Text(
+          "Manage status and review documents",
+          style: TextStyle(color: _subTextColor),
+        ),
+        SizedBox(height: 20),
         StreamBuilder<QuerySnapshot>(
           stream: _firestore
               .collection('tactso_branches')
@@ -848,54 +984,172 @@ class _TactsoBranchesApplicationsState
               .snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return CupertinoActivityIndicator();
-            if (snapshot.data!.docs.isEmpty) return Text("No applications.");
+            if (snapshot.data!.docs.isEmpty) {
+              return Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.inbox, size: 50, color: _subTextColor),
+                    Text(
+                      "No applications received yet.",
+                      style: TextStyle(color: _subTextColor),
+                    ),
+                  ],
+                ),
+              );
+            }
 
-            // DOUBLE SCROLL VIEW FOR RESPONSIVENESS
-            return Card(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
+            return Container(
+              decoration: BoxDecoration(
+                color: _cardColor,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  if (!_isDarkMode)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                ],
+              ),
+              padding: EdgeInsets.all(10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
                 child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text("Student")),
-                      DataColumn(label: Text("Program")),
-                      DataColumn(label: Text("Date")),
-                      DataColumn(label: Text("Status")),
-                      DataColumn(label: Text("Docs")),
-                    ],
-                    rows: snapshot.data!.docs.map((doc) {
-                      var data = doc.data() as Map<String, dynamic>;
-                      var details = data['applicationDetails'] ?? {};
-                      String status = data['status'] ?? 'New';
-
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(details['fullName'] ?? 'Unknown')),
-                          DataCell(Text(details['primaryProgram'] ?? '-')),
-                          DataCell(
-                            Text(
-                              data['submissionDate'] != null
-                                  ? DateFormat('MM/dd').format(
-                                      (data['submissionDate'] as Timestamp)
-                                          .toDate(),
-                                    )
-                                  : '-',
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: MaterialStateProperty.all(
+                        _primaryColor.withOpacity(0.05),
+                      ),
+                      dataRowHeight: 70,
+                      columns: [
+                        DataColumn(
+                          label: Text(
+                            "Student",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _textColor,
                             ),
                           ),
-                          DataCell(_buildStatusDropdown(status, doc.id, data)),
-                          DataCell(
-                            IconButton(
-                              icon: Icon(Icons.description, color: Colors.blue),
-                              onPressed: () => _showDocsDialog(
-                                context,
-                                details['documents'],
+                        ),
+                        DataColumn(
+                          label: Text(
+                            "Program",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _textColor,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            "Date",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _textColor,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            "Status",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _textColor,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            "Action",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _textColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                      rows: snapshot.data!.docs.map((doc) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        var details = data['applicationDetails'] ?? {};
+                        String status = data['status'] ?? 'New';
+                        String studentName =
+                            details['fullName'] ?? 'Unknown Student';
+
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 15,
+                                    backgroundColor: _isDarkMode
+                                        ? Colors.grey[700]
+                                        : Colors.grey[200],
+                                    child: Text(
+                                      studentName[0].toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: _textColor,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    studentName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: _textColor,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                            DataCell(
+                              Text(
+                                details['primaryProgram'] ?? '-',
+                                style: TextStyle(color: _textColor),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                data['submissionDate'] != null
+                                    ? DateFormat('MMM dd, yyyy').format(
+                                        (data['submissionDate'] as Timestamp)
+                                            .toDate(),
+                                      )
+                                    : '-',
+                                style: TextStyle(color: _textColor),
+                              ),
+                            ),
+                            DataCell(_buildStatusChip(status, doc.id, data)),
+                            DataCell(
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _cardColor,
+                                  foregroundColor: _primaryColor,
+                                  elevation: 0,
+                                  side: BorderSide(
+                                    color: _primaryColor.withOpacity(0.5),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: Icon(Icons.file_present, size: 16),
+                                label: Text("View Docs"),
+                                onPressed: () => _showDocsDialog(
+                                  context,
+                                  details['documents'],
+                                  studentName: studentName,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -906,37 +1160,72 @@ class _TactsoBranchesApplicationsState
     );
   }
 
-  // Status Dropdown helper to support iOS style in future if needed
-  Widget _buildStatusDropdown(
+  Widget _buildStatusChip(
     String currentStatus,
     String docId,
     Map<String, dynamic> data,
   ) {
-    // For table cells, standard DropdownButton is usually best even on Mac/Web
-    // because CupertinoPicker is too large for a table cell.
-    return DropdownButton<String>(
-      value: _applicationStatuses.contains(currentStatus)
-          ? currentStatus
-          : null,
-      hint: Text(currentStatus),
-      underline: SizedBox(),
-      items: _applicationStatuses.map((s) {
-        return DropdownMenuItem(value: s, child: Text(s));
-      }).toList(),
-      onChanged: (val) {
-        if (val != null)
-          _updateApplicationStatus(
-            applicationId: docId,
-            newStatus: val,
-            applicationData: data,
-            globalApplicationRequestId: data['globalApplicationRequestId'],
-            userId: data['userId'],
-          );
-      },
+    Color statusColor;
+    switch (currentStatus) {
+      case 'New':
+        statusColor = Colors.orange;
+        break;
+      case 'Application Submitted':
+        statusColor = Colors.green;
+        break;
+      case 'Rejected':
+        statusColor = Colors.red;
+        break;
+      default:
+        statusColor = Colors.blue;
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _applicationStatuses.contains(currentStatus)
+              ? currentStatus
+              : null,
+          isDense: true,
+          dropdownColor: _cardColor,
+          style: TextStyle(
+            color: statusColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+          icon: Icon(Icons.arrow_drop_down, color: statusColor),
+          items: _applicationStatuses.map((s) {
+            return DropdownMenuItem(
+              value: s,
+              child: Text(s, style: TextStyle(color: _textColor)),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null)
+              _updateApplicationStatus(
+                applicationId: docId,
+                newStatus: val,
+                applicationData: data,
+                globalApplicationRequestId: data['globalApplicationRequestId'],
+                userId: data['userId'],
+              );
+          },
+        ),
+      ),
     );
   }
 
-  void _showDocsDialog(BuildContext context, dynamic docs) {
+  void _showDocsDialog(
+    BuildContext context,
+    dynamic docs, {
+    required String studentName,
+  }) {
     if (docs == null || docs is! Map) {
       Api().showMessage(context, "No Docs", "None attached", Colors.grey);
       return;
@@ -946,211 +1235,346 @@ class _TactsoBranchesApplicationsState
         .where((e) => e.value != null && e.value.toString().isNotEmpty)
         .toList();
 
-    if (availableDocs.isEmpty) {
-      Api().showMessage(
-        context,
-        "Empty",
-        "No valid document links",
-        Colors.grey,
-      );
-      return;
-    }
-
-    // Platform aware dialog
-    if (isAppleStyle) {
-      showCupertinoDialog(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text("Documents"),
-          content: Column(
-            children: availableDocs
-                .map(
-                  (e) => CupertinoButton(
-                    child: Text(e.key.toString()),
-                    onPressed: () => _launchUrl(e.value.toString()),
-                  ),
-                )
-                .toList(),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: Text("Close"),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: _cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          "Documents: $studentName",
+          style: TextStyle(color: _textColor),
         ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text("Documents"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: availableDocs.map((e) {
+        content: SizedBox(
+          width: 400,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: availableDocs.length,
+            separatorBuilder: (context, index) => Divider(color: _borderColor),
+            itemBuilder: (context, index) {
+              var e = availableDocs[index];
               return ListTile(
-                leading: Icon(Icons.file_open),
-                title: Text(e.key.toString().toUpperCase()),
-                onTap: () => _launchUrl(e.value.toString()),
+                leading: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.picture_as_pdf, color: Colors.blue),
+                ),
+                title: Text(
+                  e.key.toString().toUpperCase(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.open_in_new,
+                  size: 18,
+                  color: _subTextColor,
+                ),
+                onTap: () async {
+                  _launchUrl(e.value.toString());
+                  await AuditService.logAction(
+                    action: "VIEW_DOCUMENT",
+                    details: "Viewed ${e.key.toString().toUpperCase()}",
+                    universityName: _universityName,
+                    studentName: studentName,
+                    committeeName: _committeeName,
+                    universityCommitteeFace: _universityCommitteeFace,
+                    universityLogo: _universityLogoUrl,
+                  );
+                },
               );
-            }).toList(),
+            },
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: Text("Close")),
-          ],
         ),
-      );
-    }
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: Text("Close")),
+        ],
+      ),
+    );
   }
 
-  // --- COMMITTEE TAB (USING FUTURE BUILDER) ---
+  // --- TAB 3: COMMITTEE ---
   Widget _buildCommitteeTab(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Committee (Max 5)",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        Text("Face Image required for login."),
-        SizedBox(height: 20),
-
-        // Add Member Form
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // -------------------------------------------------
-                    // CLICKABLE IMAGE CARD
-                    // -------------------------------------------------
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _pickCommitteeImage,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: _committeeFaceImage == null
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.camera_alt, color: Colors.grey),
-                                    Text(
-                                      "Add Face",
-                                      style: TextStyle(fontSize: 10),
-                                    ),
-                                  ],
-                                )
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: kIsWeb
-                                      ? Image.network(
-                                          _committeeFaceImage!.path,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Image.file(
-                                          io.File(_committeeFaceImage!.path),
-                                          fit: BoxFit.cover,
-                                        ),
-                                ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          _platformTextField(
-                            controller: _committeeNameController,
-                            placeholder: "Full Name",
-                            icon: Icons.person,
-                          ),
-                          SizedBox(height: 10),
-                          _platformTextField(
-                            controller: _committeeEmailController,
-                            placeholder: "Email",
-                            icon: Icons.email,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: _selectedRole,
-                  decoration: InputDecoration(
-                    labelText: "Portfolio",
-                    border: OutlineInputBorder(),
+                Text(
+                  "Committee Members",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
                   ),
-                  items: _committeeRoles
-                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedRole = v),
                 ),
-                SizedBox(height: 10),
-                _isUploadingCommittee
-                    ? CircularProgressIndicator()
-                    : _platformButton(
-                        onPressed: _addCommitteeMember,
-                        label: "Add Member",
-                        icon: Icons.add,
-                        context: context,
-                      ),
+                Text(
+                  "Manage authorized access (Max 5)",
+                  style: TextStyle(color: _subTextColor),
+                ),
               ],
             ),
+          ],
+        ),
+        SizedBox(height: 20),
+
+        // ADD MEMBER CARD
+        Container(
+          padding: EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              if (!_isDarkMode)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Add New Member",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _textColor,
+                ),
+              ),
+              SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Photo Picker
+                  InkWell(
+                    onTap: _pickCommitteeImage,
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: _inputFillColor,
+                        border: Border.all(color: _borderColor),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: _committeeFaceImage == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo, color: _subTextColor),
+                                SizedBox(height: 5),
+                                Text(
+                                  "Upload Face",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: _subTextColor,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: kIsWeb
+                                  ? Image.network(
+                                      _committeeFaceImage!.path,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.file(
+                                      io.File(_committeeFaceImage!.path),
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                    ),
+                  ),
+                  SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _styledTextField(
+                          controller: _committeeNameController,
+                          label: "Full Name",
+                          icon: Icons.person_outline,
+                        ),
+                        SizedBox(height: 15),
+                        _styledTextField(
+                          controller: _committeeEmailController,
+                          label: "Email Address",
+                          icon: Icons.email_outlined,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 15),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedRole,
+                      dropdownColor: _cardColor,
+                      decoration: InputDecoration(
+                        labelText: "Portfolio / Role",
+                        labelStyle: TextStyle(color: _subTextColor),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: _borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: _borderColor),
+                        ),
+                        filled: true,
+                        fillColor: _inputFillColor,
+                      ),
+                      style: TextStyle(color: _textColor),
+                      items: _committeeRoles
+                          .map(
+                            (r) => DropdownMenuItem(value: r, child: Text(r)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedRole = v),
+                    ),
+                  ),
+                  SizedBox(width: 15),
+                  SizedBox(
+                    height: 55,
+                    width: 150,
+                    child: ElevatedButton(
+                      onPressed: _isUploadingCommittee
+                          ? null
+                          : _addCommitteeMember,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isUploadingCommittee
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text("Add Member"),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
 
-        SizedBox(height: 20),
-        Divider(),
+        SizedBox(height: 30),
 
-        // LIST (USING FUTURE BUILDER)
+        // MEMBER LIST
         FutureBuilder<QuerySnapshot>(
           future: _committeeFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
+              return Center(child: CupertinoActivityIndicator());
             }
 
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Text("No committee members found."),
+              return Center(
+                child: Text(
+                  "No committee members found.",
+                  style: TextStyle(color: _subTextColor),
+                ),
               );
             }
 
-            return Column(
-              children: snapshot.data!.docs.map((doc) {
-                var data = doc.data() as Map<String, dynamic>;
-                return Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage: NetworkImage(data['faceUrl'] ?? ''),
-                      child: data['faceUrl'] == null
-                          ? Icon(Icons.person)
-                          : null,
-                    ),
-                    title: Text(data['name'] ?? 'Unknown'),
-                    subtitle: Text("${data['role']} • ${data['email']}"),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () =>
-                          _deleteCommitteeMember(doc.id, data['faceUrl']),
-                    ),
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 400,
+                mainAxisExtent: 100,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: snapshot.data!.docs.length,
+              itemBuilder: (context, index) {
+                var data =
+                    snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                String docId = snapshot.data!.docs[index].id;
+
+                return Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          image: DecorationImage(
+                            image: NetworkImage(data['faceUrl'] ?? ''),
+                            fit: BoxFit.cover,
+                            onError: (e, s) =>
+                                Icon(Icons.person, color: _subTextColor),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              data['name'] ?? 'Unknown',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: _textColor,
+                              ),
+                            ),
+                            Text(
+                              data['role'] ?? 'Member',
+                              style: TextStyle(
+                                color: _primaryColor,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              data['email'] ?? '',
+                              style: TextStyle(
+                                color: _subTextColor,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline, color: Colors.red),
+                        onPressed: () =>
+                            _deleteCommitteeMember(docId, data['faceUrl']),
+                      ),
+                    ],
                   ),
                 );
-              }).toList(),
+              },
             );
           },
         ),
@@ -1158,7 +1582,40 @@ class _TactsoBranchesApplicationsState
     );
   }
 
+  Widget _styledTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+  }) {
+    return TextField(
+      controller: controller,
+      style: TextStyle(color: _textColor),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: _subTextColor),
+        prefixIcon: Icon(icon, color: _subTextColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: _borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: _borderColor),
+        ),
+        filled: true,
+        fillColor: _inputFillColor,
+      ),
+    );
+  }
+
   Widget _buildLoginRedirect(BuildContext context) {
-    return Scaffold(body: Center(child: Text("Please Log In")));
+    return Scaffold(
+      body: Center(
+        child: Text(
+          "Session Expired. Please Log In.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      ),
+    );
   }
 }

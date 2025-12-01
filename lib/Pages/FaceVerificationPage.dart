@@ -287,78 +287,110 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
 
   Widget _buildBodyContent(BuildContext context) {
     if (!_cameraController.value.isInitialized) {
+      final color = Theme.of(context);
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator.adaptive(),
-            const SizedBox(height: 20),
-            Text(
-              _statusMessage,
-              style: _isIOS
-                  ? CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                      color: CupertinoColors.systemGrey,
-                    )
-                  : Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color.primaryColor,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: color.primaryColor.withOpacity(0.7),
+              width: 2,
             ),
-          ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(25.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator.adaptive(),
+                const SizedBox(height: 20),
+                Text(
+                  _statusMessage,
+                  style: _isIOS
+                      ? CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                          color: CupertinoColors.systemGrey,
+                        )
+                      : Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
+    final color = Theme.of(context);
 
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              height: 250,
-              width: 180,
-              child: ClipOval(child: CameraPreview(_cameraController)),
+        child: Padding(
+          padding: const EdgeInsets.all(25.0),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: color.primaryColor, width: 1),
             ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(25.0),
+                  child: Container(
+                    height: 250,
+                    width: 180,
+                    child: ClipOval(child: CameraPreview(_cameraController)),
+                  ),
+                ),
 
-            const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Text(
-                _statusMessage,
-                textAlign: TextAlign.center,
-                style: _isIOS
-                    ? CupertinoTheme.of(
-                        context,
-                      ).textTheme.navLargeTitleTextStyle.copyWith(
-                        fontSize: 18,
-                        color: _isVerifying
-                            ? CupertinoColors.systemGrey
-                            : CupertinoColors.black,
-                        fontWeight: FontWeight.w600,
-                      )
-                    : Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 18,
-                        color: _isVerifying
-                            ? Colors.grey.shade600
-                            : Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Text(
+                    _statusMessage,
+                    textAlign: TextAlign.center,
+                    style: _isIOS
+                        ? CupertinoTheme.of(
+                            context,
+                          ).textTheme.navLargeTitleTextStyle.copyWith(
+                            fontSize: 18,
+                            color: _isVerifying
+                                ? CupertinoColors.systemGrey
+                                : CupertinoColors.black,
+                            fontWeight: FontWeight.w600,
+                          )
+                        : Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: 18,
+                            color: _isVerifying
+                                ? Colors.grey.shade600
+                                : Colors.black87,
+                            fontWeight: FontWeight.w600,
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 20,
+                  ),
+                  child: _buildAdaptiveButton(
+                    context: context,
+                    text: _isVerifying
+                        ? 'Verifying Identity...'
+                        : 'Verify Face',
+                    onPressed: _isVerifying ? null : _verifyFace,
+                    isLoading: _isVerifying,
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 40),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: _buildAdaptiveButton(
-                context: context,
-                text: _isVerifying ? 'Verifying Identity...' : 'Verify Face',
-                onPressed: _isVerifying ? null : _verifyFace,
-                isLoading: _isVerifying,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

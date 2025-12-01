@@ -784,7 +784,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                 // Responsive Card Width
                 final cardWidth = isDesktop
-                    ? (MediaQuery.of(context).size.width * 0.8) / 3 -
+                    ? (MediaQuery.of(context).size.width * 0.8) / 4 -
                           40 // ~3 columns on desktop
                     : MediaQuery.of(context).size.width / 2 -
                           12; // 2 columns on mobile
