@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Components/NotificationService.dart';
 import 'package:ttact/Pages/InitialRoadWrapper.dart';
 import 'package:ttact/firebase_options.dart';
 
@@ -28,7 +29,13 @@ import 'package:ttact/introductionPage.dart';
 MyAudioHandler? audioHandler;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  try {
+    await NotificationService.init();
+    await NotificationService.scheduleDailyVerses();
+  } catch (e) {
+    print("⚠️ Notification Error: $e");
+    // App will continue to run even if notifications fail
+  }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Enable Crashlytics collection in production
@@ -54,9 +61,10 @@ Future<void> main() async {
         builder: () => MyAudioHandler(),
         config: const AudioServiceConfig(
           androidNotificationChannelId: 'com.thetact.ttact.channel.audio',
-          androidNotificationChannelName: 'TTact Music',
+          androidNotificationChannelName: 'TACT Music',
           androidNotificationOngoing: true,
           androidStopForegroundOnPause: true,
+          androidNotificationIcon: 'drawable/ic_notification',
         ),
       );
       print('✅ Audio Handler initialized');

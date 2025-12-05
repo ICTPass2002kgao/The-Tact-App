@@ -9,6 +9,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
+import 'package:ttact/Pages/Add_Career_Opportunities.dart';
+import 'package:ttact/Pages/Add_Committee_Member.dart';
 
 // --- IMPORT YOUR EXISTING PAGES HERE ---
 import 'package:ttact/Pages/Add_Tactso_Branch.dart';
@@ -71,6 +73,16 @@ class _AdminPortalState extends State<AdminPortal> {
       'label': 'Sellers',
       'icon': Icons.storefront_outlined,
       'page': AdminVerifySeller(),
+    },
+    {
+      'label': 'Career And Opportunities',
+      'icon': Icons.work_outline,
+      'page': AddCareerOpportunities(),
+    },
+    {
+      'label': 'Tactso Committees',
+      'icon': Icons.person_add_alt,
+      'page': AddCommitteeMember(),
     },
     {
       'label': 'Audit Logs',

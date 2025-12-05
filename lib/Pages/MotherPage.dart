@@ -393,11 +393,11 @@ class _MotherPageState extends State<MotherPage>
       bottomNavigationBar: _isMobileWeb
           ? null
           : SalomonBottomBar(
-              backgroundColor: theme.scaffoldBackgroundColor,
+              backgroundColor: theme.primaryColor,
               currentIndex: _currentIndex,
               onTap: (i) => setState(() => _currentIndex = i),
-              selectedItemColor: theme.primaryColor,
-              unselectedItemColor: theme.hintColor,
+              selectedItemColor: theme.scaffoldBackgroundColor,
+              unselectedItemColor: theme.scaffoldBackgroundColor,
               items: [
                 SalomonBottomBarItem(
                   icon: Icon(Ionicons.home_outline),

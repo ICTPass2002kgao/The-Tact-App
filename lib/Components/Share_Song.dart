@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously, depend_on_referenced_packages
+
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
@@ -10,40 +12,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:screenshot/screenshot.dart';
-// NOTE: These are placeholders for your actual app imports.
-// Make sure these files exist in your project:
+
+// ⭐️ IMPORTS FROM YOUR PROJECT
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/Share_Card_Generator.dart';
-import 'package:ttact/main.dart'; // Required to access the global 'audioHandler'
-
-// --- PLACEHOLDER FOR GLOBAL AUDIO HANDLER (DEFINE THIS IN main.dart) ---
-// Since the original code relies on 'audioHandler', I'm defining a placeholder
-// here for completeness. You must ensure this object is correctly initialized
-// in your main application logic.
-class MockAudioHandler {
-  final playbackState = ValueNotifier(
-    AudioPlaybackState(
-      position: Duration.zero,
-      processingState: AudioProcessingState.ready,
-      playing: false,
-    ),
-  );
-}
-
-enum AudioProcessingState { ready }
-
-class AudioPlaybackState {
-  final Duration position;
-  final AudioProcessingState processingState;
-  final bool playing;
-  AudioPlaybackState({
-    required this.position,
-    required this.processingState,
-    required this.playing,
-  });
-}
-
-MockAudioHandler? audioHandler = MockAudioHandler();
+import 'package:ttact/main.dart';
 
 // --- PLATFORM UTILITIES ---
 bool get isMobileNative =>
@@ -54,12 +27,6 @@ bool get isMobileNative =>
 bool get isIOSPlatform {
   return defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
-}
-
-bool get isAndroidPlatform {
-  return defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.fuchsia;
 }
 
 // --- TIKTOK SHARE SHEET WIDGET ---
@@ -83,48 +50,55 @@ class TikTokShareSheet extends StatefulWidget {
 
 class _TikTokShareSheetState extends State<TikTokShareSheet> {
   // --- STATE FOR VIDEO CLIPPING ---
-  double _clipDurationSeconds = 15.0; // Default clip length
+  double _clipDurationSeconds = 15.0;
   bool _isGenerating = false;
 
-  // Use your Firebase domain
   final String _appDomain = "https://tact-3c612.web.app";
 
-  late final ScreenshotController _screenshotController; // Explicitly typed
+  late final ScreenshotController _screenshotController;
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) {
-      _screenshotController = ScreenshotController();
-    } else {
-      // Initialize with a mock or handle web case gracefully if needed
-      _screenshotController = ScreenshotController();
-    }
+    _screenshotController = ScreenshotController();
   }
 
-  // Helper function to get the LIVE position from your audio handler
+  // ⭐️ UPDATED HELPER: Uses Milliseconds for Precision
   double _getLiveStartSeconds() {
     if (audioHandler != null) {
-      return audioHandler!.playbackState.value.position.inSeconds.toDouble();
+      // Use milliseconds for precision, then convert to double seconds
+      final currentPosMs =
+          audioHandler!.playbackState.value.position.inMilliseconds;
+      final currentPosSec = currentPosMs / 1000.0;
+
+      // Safety check: If current position is near the end, start from 0
+      final totalDuration =
+          audioHandler!.mediaItem.value?.duration?.inSeconds ?? 300;
+
+      if (currentPosSec > totalDuration - 5) {
+        return 0.0;
+      }
+      return currentPosSec;
     }
-    return 0.0; // Fallback to start if handler is null
+    return 0.0;
   }
 
   // --- CORE VIDEO GENERATION LOGIC ---
   Future<void> _generateAndShareVideoClip() async {
+    // ⭐️ FIX 1: CAPTURE TIME IMMEDIATELY
+    // We grab the time BEFORE any async work (await) or UI updates happen.
+    // This ensures the cut matches exactly when the user tapped the button.
+    final startSeconds = _getLiveStartSeconds();
+
     if (kIsWeb) {
-      // NOTE: Original code calls _generateAndShareStatic(false),
-      // which is retained here.
       return _generateAndShareStatic(false);
     }
 
     setState(() => _isGenerating = true);
-    // NOTE: Replace these API calls with your actual loading UI logic
-    // isIOSPlatform ? Api().showIosLoading(context) : Api().showLoading(context);
-    Api().showLoading(context); // Using a single loading call placeholder
+    Api().showLoading(context);
 
+    // Now we can do the heavy async work
     final directory = await getTemporaryDirectory();
-    final startSeconds = _getLiveStartSeconds();
     final duration = _clipDurationSeconds.toInt();
     final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -135,6 +109,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
     final String tempVisualPath = '$tempDir/visual_loop.mp4';
     final String tempAudioClipPath = '$tempDir/audio_clip.aac';
     final String finalVideoPath = '$tempDir/final_clip_$now.mp4';
+
     String appLink =
         "$_appDomain/song?url=${Uri.encodeComponent(widget.songUrl)}&song=${Uri.encodeComponent(widget.songName)}&artist=${Uri.encodeComponent(widget.artistName)}";
 
@@ -156,9 +131,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
           artistName: widget.artistName,
           appLogoPath: "assets/dankie_logo.PNG",
         ),
-        delay: const Duration(
-          milliseconds: 50,
-        ), // Increased delay slightly for safety
+        delay: const Duration(milliseconds: 50),
       );
       final String tempPngPath = '$tempDir/frame.png';
       await File(tempPngPath).writeAsBytes(imageBytes);
@@ -166,31 +139,33 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
       // --- FFmpeg COMMAND EXECUTION ---
 
       // 3. Command 1: Cut the Audio
+      // We use the 'startSeconds' we captured at the very top of the function
+      debugPrint("✂️ Cutting Audio from: $startSeconds for $duration seconds");
+
       String audioCmd =
-          "-y -i \"$sourceFilePath\" -ss $startSeconds -t $duration -c:a aac -b:a 128k -map 0:a? \"$tempAudioClipPath\"";
+          "-y -ss $startSeconds -t $duration -i \"$sourceFilePath\" -c:a aac -b:a 128k \"$tempAudioClipPath\"";
 
       Session audioSession = await FFmpegKit.execute(audioCmd);
       if (!ReturnCode.isSuccess(await audioSession.getReturnCode())) {
-        // Detailed error logging
         final logs = await audioSession.getLogsAsString();
         throw Exception("Audio Cut Failed. Logs: $logs");
       }
 
-      // 4. Command 2: Generate Visual Video (WITH ANIMATED WAVEFORM)
+      // 4. Command 2: Generate Visual Video
       String visualCmd =
           "-y "
-          "-loop 1 -i \"$tempPngPath\" " // Input 0: Background Image
-          "-i \"$tempAudioClipPath\" " // Input 1: Audio (Used to generate waves)
+          "-loop 1 -i \"$tempPngPath\" " // Input 0: Background
+          "-i \"$tempAudioClipPath\" " // Input 1: Audio
           "-filter_complex \""
-          // A. Generate Waveform from Input 1 (Audio)
-          "[1:a]showwaves=s=600x300:mode=cline:colors=white@0.9[waves];"
-          // B. Scale Background Image from Input 0
+          // 1. Force background to even dimensions
           "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2[bg];"
-          // C. Overlay Waves on Background
-          "[bg][waves]overlay=(W-w)/2:H-h-410:shortest=1[video_out]"
+          // 2. Generate simple white waves
+          "[1:a]showwaves=s=600x120:mode=line:colors=white[waves];"
+          // 3. Overlay waves 190px from the bottom
+          // H-h-190 means: (Background Height) - (Wave Height) - 190px Padding
+          "[bg][waves]overlay=(W-w)/2:H-h-455:shortest=1[video_out]"
           "\" "
           "-map \"[video_out]\" "
-          // 🔥 FIX IS HERE: Changed -c:v libx264 to -c:v mpeg4 🔥
           "-t $duration -c:v mpeg4 -q:v 3 -pix_fmt yuv420p -r 24 \"$tempVisualPath\"";
 
       Session visualSession = await FFmpegKit.execute(visualCmd);
@@ -199,7 +174,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
         throw Exception("Visual Gen Failed. Logs: $logs");
       }
 
-      // 5. Command 3: Mux Audio and Video
+      // 5. Mux (Combine Final)
       String muxCmd =
           "-y -i \"$tempVisualPath\" -i \"$tempAudioClipPath\" -c:v copy -c:a aac -shortest \"$finalVideoPath\"";
 
@@ -211,9 +186,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
 
       // 6. Share
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-      // Close the loading dialog
-      Navigator.pop(context);
+      Navigator.pop(context); // Close loading
 
       final xFile = XFile(finalVideoPath);
       await Share.shareXFiles([xFile], text: message);
@@ -222,30 +195,27 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Video generation failed. Sharing link only."),
+        SnackBar(
+          content: Text("Video generation failed: $e"),
+          duration: const Duration(seconds: 4),
+          backgroundColor: Colors.red,
         ),
       );
 
-      // Ensure loading dialog is closed if it's open
       try {
-        Navigator.pop(context);
+        Navigator.pop(context); // Close loading if open
       } catch (_) {}
 
-      // Fallback
+      // Fallback share (Text Link)
       await Share.share(message);
     } finally {
       final loadingPopped = _isGenerating;
-
       try {
-        // Clean up temporary directory
         await Directory(tempDir).delete(recursive: true);
       } catch (_) {}
 
       if (mounted) {
         setState(() => _isGenerating = false);
-        // Only pop the bottom sheet if we didn't pop the loading dialog already
-        // and we are not in the loading state anymore.
         if (loadingPopped) {
           Navigator.pop(context); // Close the sheet
         }
@@ -341,7 +311,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
           ),
           const SizedBox(height: 20),
 
-          // ⭐️ NEW: CLIP DURATION SLIDER ⭐️
+          // CLIP DURATION SLIDER
           if (!kIsWeb) ...[
             Text(
               "Clip Duration: ${_clipDurationSeconds.toInt()} seconds",
@@ -354,7 +324,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
             Slider(
               min: 5.0,
               max: 60.0,
-              divisions: 11, // 5, 10, 15, 20, ... 60 (increments of 5)
+              divisions: 11,
               value: _clipDurationSeconds,
               label: "${_clipDurationSeconds.toInt()}s",
               activeColor: widget.theme.primaryColor,
@@ -367,7 +337,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
             const SizedBox(height: 20),
           ],
 
-          // --- SHARE ICONS ROW ---
+          // SHARE ICONS ROW
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -402,14 +372,10 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
                   onTap: _copyDeepLink,
                 ),
                 const SizedBox(width: 20),
-
-                // Web/General Share options (Fallback to static/text)
               ],
             ),
           ),
           const SizedBox(height: 30),
-
-          // Footer logic moved to inside generation methods (snackbars)
         ],
       ),
     );
@@ -442,8 +408,3 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
     );
   }
 }
-
-// NOTE: You will need to make sure your actual `ttact/Components/API.dart` 
-// and `ttact/Components/Share_Card_Generator.dart` files are in place 
-// for this code to compile successfully.
-// The `Api()` calls for loading are placeholders that need your implementation.

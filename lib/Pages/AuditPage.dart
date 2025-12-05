@@ -127,12 +127,16 @@ class _AuditPageState extends State<AuditPage> {
           ? DateFormat('yyyy-MM-dd HH:mm').format(ts.toDate())
           : '-';
 
-      // Fetch Network Images for PDF (Handle with care, slow for many rows)
+      // -- NEW: Retrieve Face with Fallbacks --
+      String faceUrl = d['actorFaceUrl'] ?? 
+                       d['universityCommitteeFace'] ?? 
+                       d['educationOfficerFaceUrl'] ?? 
+                       '';
+
       pw.Widget faceWidget = pw.Text("-");
-      if (d['educationOfficerFaceUrl'] != null &&
-          d['educationOfficerFaceUrl'].toString().isNotEmpty) {
+      if (faceUrl.isNotEmpty) {
         try {
-          final netImage = await networkImage(d['educationOfficerFaceUrl']);
+          final netImage = await networkImage(faceUrl);
           faceWidget = pw.ClipOval(
             child: pw.Image(
               netImage,
@@ -146,14 +150,26 @@ class _AuditPageState extends State<AuditPage> {
         }
       }
 
+      // -- NEW: Retrieve Actor Name/Role --
+      String actorName = d['actorName'] ?? d['committeeName'] ?? d['educationOfficerName'] ?? '-';
+      String actorRole = d['actorRole'] ?? '';
+      String displayActor = actorRole.isNotEmpty ? "$actorName\n($actorRole)" : actorName;
+
+      // -- NEW: Retrieve Target (Student or Member) --
+      String studentName = d['studentName'] ?? 'N/A';
+      String targetMember = d['targetMemberName'] ?? 'N/A';
+      String targetInfo = (studentName != 'N/A') 
+          ? studentName 
+          : (targetMember != 'N/A' ? "$targetMember (Member)" : '-');
+
       pdfRows.add([
         dateStr,
         faceWidget, // Face Image
-        d['committeeName'] ?? (d['educationOfficerName'] ?? '-'),
+        displayActor,
         d['universityName'] ?? '-',
         d['action'] ?? '-',
-        d['studentName'] ?? '-',
-        d['userEmail'] ?? '-',
+        targetInfo,
+        d['branchEmail'] ?? d['userEmail'] ?? '-',
       ]);
     }
 
@@ -211,11 +227,11 @@ class _AuditPageState extends State<AuditPage> {
               headers: [
                 'Time',
                 'Face',
-                'Committee',
+                'Committee / Actor',
                 'University',
                 'Action',
-                'Student',
-                'User',
+                'Target (Student/Mem)',
+                'User Email',
               ],
               data: pdfRows,
             ),
@@ -442,7 +458,7 @@ class _AuditPageState extends State<AuditPage> {
                             DataColumn(label: Text('UNIVERSITY')),
                             DataColumn(label: Text('LOGO')),
                             DataColumn(label: Text('ACTION')),
-                            DataColumn(label: Text('STUDENT')),
+                            DataColumn(label: Text('TARGET (Student/Mem)')), // Renamed Column
                             DataColumn(label: Text('USER')),
                             DataColumn(label: Text('VIEW')),
                           ],
@@ -457,17 +473,40 @@ class _AuditPageState extends State<AuditPage> {
                             String actionStr = data['action'] ?? '';
                             Color actionColor = _getActionColor(actionStr);
 
-                            // Extract Data fields based on your create branch logic
-                            String faceUrl =
-                                data['educationOfficerFaceUrl'] ?? '';
-                            String logoUrl = '';
-                            // Handle image list or string for logo
-                            if (data['imageUrl'] is List &&
-                                (data['imageUrl'] as List).isNotEmpty) {
-                              logoUrl = (data['imageUrl'] as List)[0];
-                            } else if (data['imageUrl'] is String) {
-                              logoUrl = data['imageUrl'];
+                            // --- 1. NEW DATA RETRIEVAL LOGIC (With Fallbacks) ---
+                            
+                            // FACE: Try new 'actorFaceUrl', fallback to old fields
+                            String faceUrl = data['actorFaceUrl'] ?? 
+                                             data['universityCommitteeFace'] ??
+                                             data['educationOfficerFaceUrl'] ?? 
+                                             '';
+                                             
+                            // LOGO: Try new 'universityLogo', fallback to old 'imageUrl'
+                            String logoUrl = data['universityLogo'] ?? '';
+                            if (logoUrl.isEmpty) {
+                              if (data['imageUrl'] is List && (data['imageUrl'] as List).isNotEmpty) {
+                                logoUrl = (data['imageUrl'] as List)[0];
+                              } else if (data['imageUrl'] is String) {
+                                logoUrl = data['imageUrl'];
+                              }
                             }
+
+                            // NAME: Try new 'actorName', fallback to old names
+                            String actorName = data['actorName'] ?? 
+                                               data['committeeName'] ?? 
+                                               data['educationOfficerName'] ?? 
+                                               '-';
+                            
+                            // ROLE: New field
+                            String actorRole = data['actorRole'] ?? '';
+
+                            // TARGET: Try 'studentName' or 'targetMemberName'
+                            String studentName = data['studentName'] ?? 'N/A';
+                            String targetMemberName = data['targetMemberName'] ?? 'N/A';
+                            String targetDisplay = (studentName != 'N/A' && studentName != 'Unknown') 
+                                ? studentName 
+                                : (targetMemberName != 'N/A' ? "$targetMemberName (Member)" : '-');
+
 
                             return DataRow(
                               cells: [
@@ -516,15 +555,27 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 3. Committee Name
+                                // 3. Committee Name & Role
                                 DataCell(
-                                  Text(
-                                    data['educationOfficerName'] ??
-                                        data['committeeName'] ??
-                                        '-',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        actorName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (actorRole.isNotEmpty)
+                                        Text(
+                                          actorRole,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: neutralGrey,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
 
@@ -596,11 +647,11 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 7. Student
-                                DataCell(Text(data['studentName'] ?? '-')),
+                                // 7. Target (Student or Member)
+                                DataCell(Text(targetDisplay)),
 
-                                // 8. User
-                                DataCell(Text(data['userEmail'] ?? 'System')),
+                                // 8. User (Branch Email)
+                                DataCell(Text(data['branchEmail'] ?? data['userEmail'] ?? 'System')),
 
                                 // 9. Details
                                 DataCell(

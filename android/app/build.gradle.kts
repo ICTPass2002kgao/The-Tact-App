@@ -1,6 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
-import org.gradle.api.GradleException // Ensure this is imported for safety
+import org.gradle.api.GradleException 
 
 fun getKeystoreProperties(key: String): String {
     val keystorePropertiesFile = rootProject.file("key.properties")
@@ -29,32 +29,34 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8 // Changed to 1.8 for desugaring compatibility
+        targetCompatibility = JavaVersion.VERSION_1_8 // Changed to 1.8 for desugaring compatibility
+        
+        // 👇 ADDED THIS LINE 👇
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
     }
 
     defaultConfig {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 30
-        versionName = "1.0.30"
+        versionCode = 32
+        versionName = "1.0.32"
         
-        // Kotlin DSL syntax for manifestPlaceholders
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
-        // 👇 FIXED KOTLIN DSL SYNTAX 👇
-        // abiFilters is a Set in Kotlin DSL, so we use .add()
         ndk {
             abiFilters.add("arm64-v8a")
         }
+        
+        // 👇 ADDED THIS TO FIX DESUGARING ON SOME VERSIONS 👇
+        multiDexEnabled = true 
     }
     
-    // --- START: CUSTOM CODE FOR RELEASE SIGNING ---
     signingConfigs {
         create("release") {
             storeFile = file(getKeystoreProperties("storeFile"))
@@ -63,7 +65,6 @@ android {
             keyPassword = getKeystoreProperties("keyPassword")
         }
     }
-    // --- END: CUSTOM CODE FOR RELEASE SIGNING ---
 
     buildTypes {
         getByName("release") {
@@ -81,8 +82,9 @@ android {
 flutter {
     source = "../.."
 }
-
-dependencies { 
-    // Kotlin DSL syntax for dependencies
+dependencies {
     implementation("com.google.android.gms:play-services-ads:22.6.0")
+
+    // 👇 UPDATED VERSION FROM 2.0.4 TO 2.1.4 👇
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

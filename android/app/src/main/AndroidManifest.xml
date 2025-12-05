@@ -15,7 +15,11 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
-
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+ 
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- [FIX 1] REMOVED the AD_ID 'tools:node=remove' block. 
          Huawei parser crashes on this. If you don't want AD_ID, simply don't include the line. -->
 
@@ -32,6 +36,9 @@
 
         <!-- [FIX 3] Switched back to relative path '.MainActivity' 
              This is safer. Ensure your Kotlin MainActivity extends AudioServiceActivity instead. -->
+             <meta-data
+            android:name="com.ryanheise.audioservice.notification_icon"
+            android:resource="@drawable/ic_notification" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -56,6 +63,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="tact-3c612.web.app" android:pathPrefix="/song" />
+                <data android:scheme="https" android:host="tact-3c612.web.app" android:pathPrefix="/career" />
             </intent-filter>
 
             <intent-filter>

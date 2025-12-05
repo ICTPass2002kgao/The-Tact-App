@@ -1,17 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for lookup
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb and defaultTargetPlatform
+import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; // Required for iOS widgets
+import 'package:flutter/cupertino.dart'; 
 import 'package:camera/camera.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart' hide AudioPlayer;
 import 'package:permission_handler/permission_handler.dart';
 
-// Keep your existing imports
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
 
@@ -37,15 +37,12 @@ class FaceVerificationScreen extends StatefulWidget {
 
 class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
   late CameraController _cameraController;
-
-  // 1. UPDATE: Define TTS as a class variable
   late FlutterTts _flutterTts;
   late AudioPlayer _audioPlayer;
   final Api _api = Api();
   bool _isVerifying = false;
   String _statusMessage = 'Initializing camera...';
 
-  // Helper to check if we should use iOS style
   bool get _isIOS =>
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
@@ -58,14 +55,12 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     super.initState();
     _initializeCamera();
     _audioPlayer = AudioPlayer();
+    _flutterTts = FlutterTts();
   }
 
   Future<void> playSound(bool isSuccess) async {
     try {
-      // Assuming you put files in assets/sounds/
       String fileName = isSuccess ? 'success.mp3' : 'denied.mp3';
-
-      // Play the file
       await _audioPlayer.play(AssetSource(fileName));
     } catch (e) {
       print("Audio Error (Ignored): $e");
@@ -101,14 +96,10 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     try {
       await _cameraController.initialize();
       if (!mounted) return;
-      setState(() {
-        _statusMessage = 'Camera ready. Align your face.';
-      });
+      setState(() => _statusMessage = 'Camera ready. Align your face.');
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _statusMessage = 'Camera Error: $e';
-      });
+      setState(() => _statusMessage = 'Camera Error: $e');
     }
   }
 
@@ -124,13 +115,56 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     }
   }
 
+  // --- NEW: Identify User from Database ---
+  Future<void> _identifyUser(String matchedUrl) async {
+    setState(() => _statusMessage = "Identifying Member...");
+
+    try {
+      // 1. Sign in first (Required to read Firestore)
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: widget.email,
+        password: widget.password,
+      );
+
+      // 2. Query Firestore to find who owns this face URL
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('tactso_branches')
+          .doc(widget.universityUID)
+          .collection('committee_members')
+          .where('faceUrl', isEqualTo: matchedUrl)
+          .limit(1)
+          .get();
+
+      String memberName = "Authorized Member";
+      String memberRole = "Committee";
+      String memberFaceUrl = "";
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final data = querySnapshot.docs.first.data();
+        memberName = data['name'] ?? "Member";
+        memberRole = data['role'] ?? "Committee";
+        memberFaceUrl = data['faceUrl'] ?? "";
+
+      }
+
+      // 3. Pass details to success handler
+      await _handleSuccess(memberName, memberRole, memberFaceUrl);
+
+    } catch (e) {
+      print("Identification Error: $e");
+      // Fallback if lookup fails but face matched
+      await _handleSuccess("Authorized Member", "Verified", "" );
+    }
+  }
+
+  // --- MODIFIED VERIFICATION LOGIC ---
   Future<void> _verifyFace() async {
     if (_isVerifying || !_cameraController.value.isInitialized) return;
 
     if (widget.authorizedFaceUrls.isEmpty) {
       _api.showMessage(
         context,
-        'No authorized faces found.',
+        'No authorized faces found in database.',
         'Error',
         Colors.red,
       );
@@ -139,18 +173,27 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
 
     setState(() {
       _isVerifying = true;
-      _statusMessage = 'Verifying...';
+      _statusMessage = 'Verifying Identity...';
     });
 
     try {
       final XFile capturedFile = await _cameraController.takePicture();
-      final String refImageUrl = widget.authorizedFaceUrls.first;
 
-      final result = await _compareFaces(capturedFile, refImageUrl);
+      String? matchedUrl; // To store the specific URL that matches
 
-      if (result['matched'] == true) {
-        // 4. UPDATE: Await the success handler
-        await _handleSuccess();
+      // LOOP through ALL authorized faces
+      for (String refImageUrl in widget.authorizedFaceUrls) {
+        final result = await _compareFaces(capturedFile, refImageUrl);
+
+        if (result['matched'] == true) {
+          matchedUrl = refImageUrl; // Found the match
+          break; 
+        }
+      }
+
+      if (matchedUrl != null) {
+        // Match found, now find out who it is
+        await _identifyUser(matchedUrl);
       } else {
         _handleFailure();
       }
@@ -169,9 +212,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
         Uri.parse(_verificationApiEndpoint),
       );
       request.fields['reference_url'] = referenceImageUrl;
-
       final Uint8List imageBytes = await capturedImage.readAsBytes();
-
       request.files.add(
         http.MultipartFile.fromBytes(
           'live_image',
@@ -185,40 +226,31 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
 
       if (response.statusCode == 200) {
         final json = jsonDecode(respString);
-        return json['matched'] == true
-            ? {'matched': true}
-            : {
-                'matched': false,
-                'error_message': json['message'] ?? json['error'],
-              };
+        return json['matched'] == true ? {'matched': true} : {'matched': false};
       }
-      return {
-        'matched': false,
-        'error_message': 'Server Error: ${response.statusCode}',
-      };
+      return {'matched': false};
     } catch (e) {
-      return {'matched': false, 'error_message': 'Connection Error'};
+      return {'matched': false};
     }
   }
 
-  // 6. UPDATE: Make this async and wait for speech
-  Future<void> _handleSuccess() async {
+  // Updated to accept Name and Role
+  Future<void> _handleSuccess(String name, String role, String faceUrl) async {
     if (!mounted) return;
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: widget.email,
-      password: widget.password,
-    );
-    // Speak FIRST
+
+    // Note: Sign-in already happened in _identifyUser
+
     await playSound(true);
+    _api.showMessage(context, 'Welcome, $name', 'Access Granted', Colors.green);
 
-    // Then show message
-    _api.showMessage(context, 'Identity Verified.', 'Success', Colors.green);
-
-    // Then navigate
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (context) => const TactsoBranchesApplications(),
+          builder: (context) => TactsoBranchesApplications(
+            loggedMemberName: name,
+            loggedMemberRole: role,
+            faceUrl: faceUrl,
+          ),
         ),
         (route) => false,
       );
@@ -227,24 +259,25 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
 
   void _handleFailure() async {
     if (!mounted) return;
-
-    // We don't await here because we aren't navigating away instantly
-    await playSound(true);
-
+    await playSound(false);
     setState(() {
       _isVerifying = false;
+      _statusMessage = "Face not recognized. Try again.";
     });
-    _api.showMessage(context, "Access denied", 'Denied', Colors.red);
+    _api.showMessage(
+      context,
+      "Access denied. Face not in committee list.",
+      'Denied',
+      Colors.red,
+    );
   }
 
   @override
   void dispose() {
     _cameraController.dispose();
-    _flutterTts.stop(); // Good practice to stop TTS
+    _flutterTts.stop();
     super.dispose();
   }
-
-  // --- BUILD METHODS (UNCHANGED) ---
 
   @override
   Widget build(BuildContext context) {

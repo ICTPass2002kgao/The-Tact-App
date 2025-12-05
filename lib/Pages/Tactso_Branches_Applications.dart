@@ -6,24 +6,33 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart'; // REQUIRED: fl_chart: ^0.65.0
+import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AuditService.dart';
+import 'package:ttact/Pages/Payment.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io' as io;
 
 // --- PLATFORM UTILITIES ---
 const double _desktopBreakpoint = 1100.0;
-
-bool get isAppleStyle {
-  return defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-}
+bool get isAppleStyle =>
+    defaultTargetPlatform == TargetPlatform.iOS ||
+    defaultTargetPlatform == TargetPlatform.macOS;
 
 class TactsoBranchesApplications extends StatefulWidget {
-  const TactsoBranchesApplications({super.key});
+  // Parameters passed from FaceVerificationScreen
+  final String? loggedMemberName;
+  final String? loggedMemberRole;
+  final String? faceUrl;
+
+  const TactsoBranchesApplications({
+    super.key,
+    this.loggedMemberName,
+    this.loggedMemberRole,
+    this.faceUrl,
+  });
 
   @override
   State<TactsoBranchesApplications> createState() =>
@@ -36,22 +45,15 @@ class _TactsoBranchesApplicationsState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
-  // --- THEME STATE ---
   bool _isDarkMode = false;
-
-  // --- DATA STATE ---
   String? _universityName;
   String? _adminEmail;
   String? _currentuid;
   bool _isLoadingUniversityData = true;
 
-  // Future for Committee Members
   Future<QuerySnapshot>? _committeeFuture;
-
-  // Navigation
   int _selectedIndex = 0;
 
-  // --- INPUT CONTROLLERS ---
   final TextEditingController _committeeNameController =
       TextEditingController();
   final TextEditingController _committeeEmailController =
@@ -60,7 +62,7 @@ class _TactsoBranchesApplicationsState
   XFile? _committeeFaceImage;
   bool _isUploadingCommittee = false;
   String? _universityLogoUrl;
-  String? _universityCommitteeFace;
+  String? _universityCommitteeFace; // Main face (usually Officer)
 
   final List<String> _committeeRoles = [
     'Chairperson',
@@ -70,22 +72,16 @@ class _TactsoBranchesApplicationsState
     'Treasurer',
     'Additional Member',
   ];
-
   final List<String> _applicationStatuses = [
     'New',
     'Reviewed',
     'Application Submitted',
     'Rejected',
   ];
+  String? _committeeName; // Default Officer Name
 
-  String? _selectedStatus;
-  String? _committeeName;
-
-  // --- COLOR PALETTE (Dynamic) ---
-  final Color _primaryColor = const Color(0xFF1E3A8A); // Deep Blue
-  final Color _accentColor = const Color(0xFF3B82F6); // Bright Blue
-
-  // Dynamic Colors based on Mode
+  final Color _primaryColor = const Color(0xFF1E3A8A);
+  final Color _accentColor = const Color(0xFF3B82F6);
   Color get _bgColor =>
       _isDarkMode ? const Color(0xFF111827) : const Color(0xFFF3F4F6);
   Color get _cardColor => _isDarkMode ? const Color(0xFF1F2937) : Colors.white;
@@ -112,10 +108,8 @@ class _TactsoBranchesApplicationsState
   }
 
   Future<void> _checkAuthorization() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    if (FirebaseAuth.instance.currentUser == null) {
       if (mounted) Navigator.of(context).pushReplacementNamed('/login');
-      return;
     }
   }
 
@@ -132,33 +126,25 @@ class _TactsoBranchesApplicationsState
     }
   }
 
-  // --- FIXED DATA LOADING FUNCTION ---
   Future<void> _loadUniversityData() async {
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
       _currentuid = currentUser.uid;
       _adminEmail = currentUser.email;
-
       _fetchCommitteeMembers();
 
       try {
-        // 1. Get QuerySnapshot
         QuerySnapshot querySnapshot = await _firestore
             .collection('tactso_branches')
             .where('uid', isEqualTo: _currentuid)
             .limit(1)
             .get();
-
         if (querySnapshot.docs.isNotEmpty) {
-          // 2. Extract Data from first doc
           var data = querySnapshot.docs.first.data() as Map<String, dynamic>;
-
           setState(() {
             _universityName = data['universityName'] ?? 'University Admin';
             _committeeName = data['educationOfficerName'] ?? 'Committee';
             _universityCommitteeFace = data['educationOfficerFaceUrl'];
-
-            // 3. Fix: Handle Array vs String for imageUrl
             var imgField = data['imageUrl'];
             if (imgField is List && imgField.isNotEmpty) {
               _universityLogoUrl = imgField[0].toString();
@@ -173,44 +159,26 @@ class _TactsoBranchesApplicationsState
         debugPrint("Error loading data: $e");
       }
     }
-    setState(() {
-      _isLoadingUniversityData = false;
-    });
+    setState(() => _isLoadingUniversityData = false);
   }
 
   Future<void> _logout() async {
     await _auth.signOut();
-    if (mounted) {
+    if (mounted)
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-    }
   }
 
-  // --- LOGIC ---
   Future<void> _pickCommitteeImage() async {
-    try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      if (picked != null) {
-        setState(() {
-          _committeeFaceImage = picked;
-        });
-      }
-    } catch (e) {
-      Api().showMessage(
-        context,
-        "Error",
-        "Could not pick image: $e",
-        Colors.red,
-      );
-    }
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked != null) setState(() => _committeeFaceImage = picked);
   }
 
   Future<String> _uploadFile(XFile file, String path) async {
     final ref = FirebaseStorage.instance.ref(path);
     UploadTask uploadTask;
-
     if (kIsWeb) {
       final bytes = await file.readAsBytes();
       uploadTask = ref.putData(
@@ -220,29 +188,26 @@ class _TactsoBranchesApplicationsState
     } else {
       uploadTask = ref.putFile(io.File(file.path));
     }
-
     final snapshot = await uploadTask;
     return await snapshot.ref.getDownloadURL();
   }
 
+  // --- ADD MEMBER + AUDIT ---
   Future<void> _addCommitteeMember() async {
-    if (_committeeNameController.text.isEmpty ||
-        _committeeEmailController.text.isEmpty ||
-        _selectedRole == null) {
+    if (_committeeNameController.text.isEmpty || _selectedRole == null) {
       Api().showMessage(
         context,
         "Missing Info",
-        "Please fill all text fields.",
+        "Please fill all fields.",
         Colors.orange,
       );
       return;
     }
-
     if (_committeeFaceImage == null) {
       Api().showMessage(
         context,
         "Face Required",
-        "Please upload a face image for biometric login.",
+        "Upload face for biometric login.",
         Colors.red,
       );
       return;
@@ -254,11 +219,12 @@ class _TactsoBranchesApplicationsState
         .collection('committee_members')
         .get();
 
-    if (existingMembers.docs.length >= 4) {
+    // MAX LIMIT CHECK: 5 Members Total (Officer + Chair + 3 Others)
+    if (existingMembers.docs.length >= 5) {
       Api().showMessage(
         context,
         "Limit Reached",
-        "Maximum 5 members allowed (1 Head + 4 Committee).",
+        "Maximum 5 committee members allowed.",
         Colors.red,
       );
       return;
@@ -284,9 +250,27 @@ class _TactsoBranchesApplicationsState
             'addedAt': FieldValue.serverTimestamp(),
           });
 
+      // Add face to authorized list
       await _firestore.collection('tactso_branches').doc(_currentuid).update({
         'authorizedUserFaceUrls': FieldValue.arrayUnion([faceUrl]),
       });
+
+      // --- LOG AUDIT ---
+      await AuditService.logAction(
+        action: "ADD_COMMITTEE_MEMBER",
+        details: "Added ${_committeeNameController.text} as $_selectedRole",
+        referenceId: "N/A",
+        // University Context
+        universityName: _universityName,
+        universityLogo: _universityLogoUrl,
+        // Actor (Logged In)
+        committeeMemberName: widget.loggedMemberName ?? _committeeName,
+        committeeMemberRole: widget.loggedMemberRole ?? "Education Officer",
+        universityCommitteeFace: _universityCommitteeFace,
+        // Target (New Member)
+        targetMemberName: _committeeNameController.text,
+        targetMemberRole: _selectedRole,
+      );
 
       _committeeNameController.clear();
       _committeeEmailController.clear();
@@ -304,23 +288,109 @@ class _TactsoBranchesApplicationsState
     }
   }
 
-  Future<void> _deleteCommitteeMember(String docId, String? faceUrl) async {
-    await _firestore
-        .collection('tactso_branches')
-        .doc(_currentuid)
-        .collection('committee_members')
-        .doc(docId)
-        .delete();
+  // --- DELETE MEMBER + AUDIT ---
+  Future<void> _deleteCommitteeMember(
+    String docId,
+    String? faceUrl,
+    String memberName,
+    String memberRole,
+  ) async {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: 400,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    memberName == widget.loggedMemberName
+                        ? "Please confirm that you're deleting yourself in the database and any action taken cannot be revert back!!"
+                        : "Please confirm deletion of $memberName the current $memberRole of this branch.",
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                      },
+                      child: Text("Cancel"),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        isIOSPlatform
+                            ? Api().showIosLoading(context)
+                            : Api().showLoading(context);
+                        await _firestore
+                            .collection('tactso_branches')
+                            .doc(_currentuid)
+                            .collection('committee_members')
+                            .doc(docId)
+                            .delete();
 
-    if (faceUrl != null) {
-      await _firestore.collection('tactso_branches').doc(_currentuid).update({
-        'authorizedUserFaceUrls': FieldValue.arrayRemove([faceUrl]),
-      });
-    }
-    _fetchCommitteeMembers();
-    Api().showMessage(context, "Deleted", "Member removed.", Colors.grey);
+                        if (faceUrl != null) {
+                          await _firestore
+                              .collection('tactso_branches')
+                              .doc(_currentuid)
+                              .update({
+                                'authorizedUserFaceUrls':
+                                    FieldValue.arrayRemove([faceUrl]),
+                              });
+                        }
+
+                        await AuditService.logAction(
+                          action: "DELETE_COMMITTEE_MEMBER",
+                          details: "Removed $memberName from committee",
+                          referenceId: docId,
+                          // University Context
+                          universityName: _universityName,
+                          universityLogo: _universityLogoUrl,
+                          // Actor (Logged In)
+                          committeeMemberName:
+                              widget.loggedMemberName ?? _committeeName,
+                          committeeMemberRole:
+                              widget.loggedMemberRole ?? "Education Officer",
+                          universityCommitteeFace: _universityCommitteeFace,
+                          // Target (Deleted Member)
+                          targetMemberName: memberName,
+                          targetMemberRole: memberRole,
+                        );
+                        _fetchCommitteeMembers();
+                        if (memberName == widget.loggedMemberName &&
+                            memberRole == widget.loggedMemberRole) {
+                          _auth.signOut();
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, "/login");
+                        }
+                        Api().showMessage(
+                          context,
+                          "Deleted",
+                          memberName == widget.loggedMemberName
+                              ? "You deleted yourself!!"
+                              : "Member removed.",
+                          Colors.grey,
+                        );
+                      },
+                      child: Text("Confirm"),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    // --- LOG AUDIT ---
   }
 
+  // --- UPDATE STATUS + AUDIT ---
   Future<void> _updateApplicationStatus({
     required String applicationId,
     required String newStatus,
@@ -329,7 +399,6 @@ class _TactsoBranchesApplicationsState
     Map<String, dynamic>? applicationData,
   }) async {
     if (_currentuid == null) return;
-
     try {
       await _firestore.runTransaction((transaction) async {
         DocumentReference universityAppRef = _firestore
@@ -338,7 +407,6 @@ class _TactsoBranchesApplicationsState
             .collection('application_requests')
             .doc(applicationId);
         transaction.update(universityAppRef, {'status': newStatus});
-
         if (globalApplicationRequestId != null) {
           DocumentReference globalAppRef = _firestore
               .collection('application_requests')
@@ -348,7 +416,6 @@ class _TactsoBranchesApplicationsState
             'status': newStatus,
           });
         }
-
         if (userId != null) {
           QuerySnapshot userAppsSnapshot = await _firestore
               .collection('users')
@@ -357,11 +424,10 @@ class _TactsoBranchesApplicationsState
               .where('uid', isEqualTo: _currentuid)
               .where('applicationRequestId', isEqualTo: applicationId)
               .get();
-
           if (userAppsSnapshot.docs.isNotEmpty) {
-            DocumentReference userSpecificAppRef =
-                userAppsSnapshot.docs.first.reference;
-            transaction.update(userSpecificAppRef, {'status': newStatus});
+            transaction.update(userAppsSnapshot.docs.first.reference, {
+              'status': newStatus,
+            });
           }
         }
       });
@@ -369,33 +435,32 @@ class _TactsoBranchesApplicationsState
       if (applicationData != null) {
         final details = applicationData['applicationDetails'] ?? {};
         final studentEmail = details['email'];
-        if (studentEmail != null) {
+        if (studentEmail != null)
           await Api().sendEmail(
             studentEmail,
             'Status Update: $newStatus',
             '<p>Your status is now: $newStatus</p>',
             context,
           );
-        }
       }
 
-      String studentName = "Unknown Student";
-      if (applicationData != null &&
-          applicationData['applicationDetails'] != null) {
-        studentName =
-            applicationData['applicationDetails']['fullName'] ??
-            "Unknown Student";
-      }
+      // --- LOG AUDIT ---
+      String studentName =
+          applicationData?['applicationDetails']?['fullName'] ?? "Unknown";
 
       await AuditService.logAction(
         action: "UPDATE_STATUS",
-        details: "Changed status to $newStatus",
+        details: "Changed status to $newStatus for $studentName",
         referenceId: applicationId,
+        // University Context
         universityName: _universityName,
-        studentName: studentName,
-        committeeName: _committeeName,
-        universityCommitteeFace: _universityCommitteeFace,
         universityLogo: _universityLogoUrl,
+        // Actor (Logged In)
+        committeeMemberName: widget.loggedMemberName ?? _committeeName,
+        committeeMemberRole: widget.loggedMemberRole ?? "Education Officer",
+        universityCommitteeFace: _universityCommitteeFace,
+        // Target (Student)
+        studentName: studentName,
       );
 
       if (mounted) {
@@ -408,19 +473,19 @@ class _TactsoBranchesApplicationsState
   }
 
   Future<void> _launchUrl(String url) async {
-    if (!await launchUrl(Uri.parse(url))) {
+    if (!await launchUrl(Uri.parse(url)))
       Api().showMessage(context, 'Error', 'Invalid URL', Colors.red);
-    }
   }
 
   // ===========================================================================
-  // === UI & DESIGN ===
+  // === UI & DESIGN (UNCHANGED) ===
   // ===========================================================================
 
   @override
   Widget build(BuildContext context) {
-    if (_auth.currentUser == null) return _buildLoginRedirect(context);
-    if (_isLoadingUniversityData || _currentuid == null) {
+    if (_auth.currentUser == null)
+      return Scaffold(body: Center(child: Text("Session Expired.")));
+    if (_isLoadingUniversityData || _currentuid == null)
       return Scaffold(
         backgroundColor: _bgColor,
         body: Center(
@@ -429,7 +494,6 @@ class _TactsoBranchesApplicationsState
               : CircularProgressIndicator(),
         ),
       );
-    }
 
     Widget contentBody = Align(
       alignment: Alignment.topCenter,
@@ -448,7 +512,6 @@ class _TactsoBranchesApplicationsState
 
     final double screenWidth = MediaQuery.of(context).size.width;
 
-    // DESKTOP
     if (screenWidth >= _desktopBreakpoint) {
       return Scaffold(
         backgroundColor: _bgColor,
@@ -471,8 +534,6 @@ class _TactsoBranchesApplicationsState
         ),
       );
     }
-
-    // WEB / TABLET
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: _bgColor,
@@ -484,8 +545,6 @@ class _TactsoBranchesApplicationsState
         body: SingleChildScrollView(child: contentBody),
       );
     }
-
-    // MOBILE
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: _buildAppBar(context),
@@ -497,12 +556,11 @@ class _TactsoBranchesApplicationsState
           labelTextStyle: MaterialStateProperty.all(
             TextStyle(color: _textColor, fontSize: 12),
           ),
-          iconTheme: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
-              return IconThemeData(color: _primaryColor);
-            }
-            return IconThemeData(color: _subTextColor);
-          }),
+          iconTheme: MaterialStateProperty.resolveWith(
+            (states) => states.contains(MaterialState.selected)
+                ? IconThemeData(color: _primaryColor)
+                : IconThemeData(color: _subTextColor),
+          ),
         ),
         child: NavigationBar(
           selectedIndex: _selectedIndex,
@@ -544,11 +602,7 @@ class _TactsoBranchesApplicationsState
             _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
             color: _isDarkMode ? Colors.yellow.shade600 : Colors.grey.shade600,
           ),
-          onPressed: () {
-            setState(() {
-              _isDarkMode = !_isDarkMode;
-            });
-          },
+          onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
         ),
         SizedBox(width: 10),
         Padding(
@@ -570,13 +624,10 @@ class _TactsoBranchesApplicationsState
     );
   }
 
-  // --- DRAWER ---
   Widget _buildDrawerContent(BuildContext context, {required bool isSidebar}) {
     final color = isSidebar
         ? (_isDarkMode ? Colors.white70 : Colors.black54)
         : _textColor;
-    final activeColor = _primaryColor;
-
     return Column(
       children: [
         if (isSidebar)
@@ -613,21 +664,9 @@ class _TactsoBranchesApplicationsState
             ),
           ),
         SizedBox(height: 20),
-        _drawerItem(
-          Icons.dashboard_rounded,
-          "Dashboard",
-          0,
-          color,
-          activeColor,
-        ),
-        _drawerItem(
-          Icons.table_chart_rounded,
-          "Applications",
-          1,
-          color,
-          activeColor,
-        ),
-        _drawerItem(Icons.groups_rounded, "Committee", 2, color, activeColor),
+        _drawerItem(Icons.dashboard_rounded, "Dashboard", 0, color),
+        _drawerItem(Icons.table_chart_rounded, "Applications", 1, color),
+        _drawerItem(Icons.groups_rounded, "Committee", 2, color),
         Spacer(),
         ListTile(
           leading: Icon(Icons.logout_rounded, color: Colors.redAccent),
@@ -639,39 +678,33 @@ class _TactsoBranchesApplicationsState
     );
   }
 
-  Widget _drawerItem(
-    IconData icon,
-    String title,
-    int index,
-    Color color,
-    Color activeColor,
-  ) {
+  Widget _drawerItem(IconData icon, String title, int index, Color color) {
     bool isActive = _selectedIndex == index;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        tileColor: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
-        leading: Icon(icon, color: isActive ? activeColor : color),
+        tileColor: isActive
+            ? _primaryColor.withOpacity(0.1)
+            : Colors.transparent,
+        leading: Icon(icon, color: isActive ? _primaryColor : color),
         title: Text(
           title,
           style: TextStyle(
-            color: isActive ? activeColor : color,
+            color: isActive ? _primaryColor : color,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
         ),
         onTap: () {
           setState(() => _selectedIndex = index);
           if (Scaffold.of(context).hasDrawer &&
-              Scaffold.of(context).isDrawerOpen) {
+              Scaffold.of(context).isDrawerOpen)
             Navigator.pop(context);
-          }
         },
       ),
     );
   }
 
-  // --- TAB 1: DASHBOARD ---
   Widget _buildDashboardTab(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
@@ -715,25 +748,42 @@ class _TactsoBranchesApplicationsState
                 children: [
                   CircleAvatar(
                     backgroundColor: Colors.white.withOpacity(0.2),
-                    child: Icon(Icons.person, color: Colors.white),
+                    child: widget.faceUrl != null && widget.faceUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(50),
+                            child: Image.network(
+                              height: 100,
+                              width: 100,
+                              widget.faceUrl!,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Icon(Icons.person, color: Colors.white),
                   ),
                   SizedBox(width: 15),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Welcome Back,",
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                      Text(
-                        _universityName ?? "Administrator",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Welcome Back,",
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
                         ),
-                      ),
-                    ],
+                        // DISPLAY THE LOGGED IN MEMBER'S NAME & ROLE
+                        Text(
+                          widget.loggedMemberName != null
+                              ? "${widget.loggedMemberName} (${widget.loggedMemberRole})"
+                              : _universityName ?? "Administrator",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -956,207 +1006,72 @@ class _TactsoBranchesApplicationsState
     );
   }
 
-  // --- TAB 2: APPLICATIONS TABLE ---
   Widget _buildApplicationsTableTab(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Applications Database",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: _textColor,
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('tactso_branches')
+          .doc(_currentuid)
+          .collection('application_requests')
+          .orderBy('submissionDate', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+          return Center(
+            child: Text(
+              "No applications",
+              style: TextStyle(color: _subTextColor),
+            ),
+          );
+        return Container(
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-        SizedBox(height: 5),
-        Text(
-          "Manage status and review documents",
-          style: TextStyle(color: _subTextColor),
-        ),
-        SizedBox(height: 20),
-        StreamBuilder<QuerySnapshot>(
-          stream: _firestore
-              .collection('tactso_branches')
-              .doc(_currentuid)
-              .collection('application_requests')
-              .orderBy('submissionDate', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return CupertinoActivityIndicator();
-            if (snapshot.data!.docs.isEmpty) {
-              return Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.inbox, size: 50, color: _subTextColor),
-                    Text(
-                      "No applications received yet.",
-                      style: TextStyle(color: _subTextColor),
+          padding: EdgeInsets.all(10),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: [
+                DataColumn(
+                  label: Text("Student", style: TextStyle(color: _textColor)),
+                ),
+                DataColumn(
+                  label: Text("Status", style: TextStyle(color: _textColor)),
+                ),
+                DataColumn(
+                  label: Text("Action", style: TextStyle(color: _textColor)),
+                ),
+              ],
+              rows: snapshot.data!.docs.map((doc) {
+                var data = doc.data() as Map<String, dynamic>;
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Text(
+                        data['applicationDetails']['fullName'] ?? 'Unknown',
+                        style: TextStyle(color: _textColor),
+                      ),
+                    ),
+                    DataCell(
+                      _buildStatusChip(data['status'] ?? 'New', doc.id, data),
+                    ),
+                    DataCell(
+                      ElevatedButton(
+                        child: Text("View Docs"),
+                        onPressed: () => _showDocsDialog(
+                          context,
+                          data['applicationDetails']['documents'],
+                          studentName: data['applicationDetails']['fullName'],
+                        ),
+                      ),
                     ),
                   ],
-                ),
-              );
-            }
-
-            return Container(
-              decoration: BoxDecoration(
-                color: _cardColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  if (!_isDarkMode)
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                ],
-              ),
-              padding: EdgeInsets.all(10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: MaterialStateProperty.all(
-                        _primaryColor.withOpacity(0.05),
-                      ),
-                      dataRowHeight: 70,
-                      columns: [
-                        DataColumn(
-                          label: Text(
-                            "Student",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            "Program",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            "Date",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            "Status",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            "Action",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                      rows: snapshot.data!.docs.map((doc) {
-                        var data = doc.data() as Map<String, dynamic>;
-                        var details = data['applicationDetails'] ?? {};
-                        String status = data['status'] ?? 'New';
-                        String studentName =
-                            details['fullName'] ?? 'Unknown Student';
-
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 15,
-                                    backgroundColor: _isDarkMode
-                                        ? Colors.grey[700]
-                                        : Colors.grey[200],
-                                    child: Text(
-                                      studentName[0].toUpperCase(),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: _textColor,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    studentName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: _textColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                details['primaryProgram'] ?? '-',
-                                style: TextStyle(color: _textColor),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                data['submissionDate'] != null
-                                    ? DateFormat('MMM dd, yyyy').format(
-                                        (data['submissionDate'] as Timestamp)
-                                            .toDate(),
-                                      )
-                                    : '-',
-                                style: TextStyle(color: _textColor),
-                              ),
-                            ),
-                            DataCell(_buildStatusChip(status, doc.id, data)),
-                            DataCell(
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: _cardColor,
-                                  foregroundColor: _primaryColor,
-                                  elevation: 0,
-                                  side: BorderSide(
-                                    color: _primaryColor.withOpacity(0.5),
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                icon: Icon(Icons.file_present, size: 16),
-                                label: Text("View Docs"),
-                                onPressed: () => _showDocsDialog(
-                                  context,
-                                  details['documents'],
-                                  studentName: studentName,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1165,58 +1080,21 @@ class _TactsoBranchesApplicationsState
     String docId,
     Map<String, dynamic> data,
   ) {
-    Color statusColor;
-    switch (currentStatus) {
-      case 'New':
-        statusColor = Colors.orange;
-        break;
-      case 'Application Submitted':
-        statusColor = Colors.green;
-        break;
-      case 'Rejected':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.blue;
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _applicationStatuses.contains(currentStatus)
-              ? currentStatus
-              : null,
-          isDense: true,
-          dropdownColor: _cardColor,
-          style: TextStyle(
-            color: statusColor,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-          ),
-          icon: Icon(Icons.arrow_drop_down, color: statusColor),
-          items: _applicationStatuses.map((s) {
-            return DropdownMenuItem(
-              value: s,
-              child: Text(s, style: TextStyle(color: _textColor)),
-            );
-          }).toList(),
-          onChanged: (val) {
-            if (val != null)
-              _updateApplicationStatus(
-                applicationId: docId,
-                newStatus: val,
-                applicationData: data,
-                globalApplicationRequestId: data['globalApplicationRequestId'],
-                userId: data['userId'],
-              );
-          },
-        ),
+    return DropdownButton<String>(
+      value: _applicationStatuses.contains(currentStatus)
+          ? currentStatus
+          : null,
+      dropdownColor: _cardColor,
+      style: TextStyle(color: _primaryColor),
+      items: _applicationStatuses
+          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+          .toList(),
+      onChanged: (val) => _updateApplicationStatus(
+        applicationId: docId,
+        newStatus: val!,
+        applicationData: data,
+        globalApplicationRequestId: data['globalApplicationRequestId'],
+        userId: data['userId'],
       ),
     );
   }
@@ -1226,161 +1104,64 @@ class _TactsoBranchesApplicationsState
     dynamic docs, {
     required String studentName,
   }) {
-    if (docs == null || docs is! Map) {
-      Api().showMessage(context, "No Docs", "None attached", Colors.grey);
-      return;
-    }
-
-    final availableDocs = docs.entries
-        .where((e) => e.value != null && e.value.toString().isNotEmpty)
-        .toList();
-
+    if (docs == null || docs is! Map) return;
     showDialog(
       context: context,
       builder: (c) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          "Documents: $studentName",
-          style: TextStyle(color: _textColor),
-        ),
+        title: Text("Docs: $studentName", style: TextStyle(color: _textColor)),
         content: SizedBox(
           width: 400,
-          child: ListView.separated(
+          child: ListView(
             shrinkWrap: true,
-            itemCount: availableDocs.length,
-            separatorBuilder: (context, index) => Divider(color: _borderColor),
-            itemBuilder: (context, index) {
-              var e = availableDocs[index];
-              return ListTile(
-                leading: Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
+            children: docs.entries
+                .map(
+                  (e) => ListTile(
+                    title: Text(e.key),
+                    onTap: () => _launchUrl(e.value),
                   ),
-                  child: Icon(Icons.picture_as_pdf, color: Colors.blue),
-                ),
-                title: Text(
-                  e.key.toString().toUpperCase(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
-                ),
-                trailing: Icon(
-                  Icons.open_in_new,
-                  size: 18,
-                  color: _subTextColor,
-                ),
-                onTap: () async {
-                  _launchUrl(e.value.toString());
-                  await AuditService.logAction(
-                    action: "VIEW_DOCUMENT",
-                    details: "Viewed ${e.key.toString().toUpperCase()}",
-                    universityName: _universityName,
-                    studentName: studentName,
-                    committeeName: _committeeName,
-                    universityCommitteeFace: _universityCommitteeFace,
-                    universityLogo: _universityLogoUrl,
-                  );
-                },
-              );
-            },
+                )
+                .toList(),
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: Text("Close")),
-        ],
       ),
     );
   }
 
-  // --- TAB 3: COMMITTEE ---
   Widget _buildCommitteeTab(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Committee Members",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
-                ),
-                Text(
-                  "Manage authorized access (Max 5)",
-                  style: TextStyle(color: _subTextColor),
-                ),
-              ],
-            ),
-          ],
+        Text(
+          "Committee Members (Max 5)",
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: _textColor,
+          ),
         ),
         SizedBox(height: 20),
-
-        // ADD MEMBER CARD
         Container(
           padding: EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: _cardColor,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              if (!_isDarkMode)
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-            ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Add New Member",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: _textColor,
-                ),
-              ),
-              SizedBox(height: 20),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Photo Picker
                   InkWell(
                     onTap: _pickCommitteeImage,
                     child: Container(
-                      width: 100,
-                      height: 100,
+                      width: 80,
+                      height: 80,
                       decoration: BoxDecoration(
-                        color: _inputFillColor,
                         border: Border.all(color: _borderColor),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: _committeeFaceImage == null
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, color: _subTextColor),
-                                SizedBox(height: 5),
-                                Text(
-                                  "Upload Face",
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: _subTextColor,
-                                  ),
-                                ),
-                              ],
-                            )
+                          ? Icon(Icons.add_a_photo, color: _subTextColor)
                           : ClipRRect(
                               borderRadius: BorderRadius.circular(11),
                               child: kIsWeb
@@ -1401,14 +1182,14 @@ class _TactsoBranchesApplicationsState
                       children: [
                         _styledTextField(
                           controller: _committeeNameController,
-                          label: "Full Name",
-                          icon: Icons.person_outline,
+                          label: "Name",
+                          icon: Icons.person,
                         ),
-                        SizedBox(height: 15),
+                        SizedBox(height: 10),
                         _styledTextField(
                           controller: _committeeEmailController,
-                          label: "Email Address",
-                          icon: Icons.email_outlined,
+                          label: "Email",
+                          icon: Icons.email,
                         ),
                       ],
                     ),
@@ -1423,20 +1204,12 @@ class _TactsoBranchesApplicationsState
                       value: _selectedRole,
                       dropdownColor: _cardColor,
                       decoration: InputDecoration(
-                        labelText: "Portfolio / Role",
-                        labelStyle: TextStyle(color: _subTextColor),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: _borderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: _borderColor),
-                        ),
                         filled: true,
                         fillColor: _inputFillColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      style: TextStyle(color: _textColor),
                       items: _committeeRoles
                           .map(
                             (r) => DropdownMenuItem(value: r, child: Text(r)),
@@ -1446,57 +1219,28 @@ class _TactsoBranchesApplicationsState
                     ),
                   ),
                   SizedBox(width: 15),
-                  SizedBox(
-                    height: 55,
-                    width: 150,
-                    child: ElevatedButton(
-                      onPressed: _isUploadingCommittee
-                          ? null
-                          : _addCommitteeMember,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isUploadingCommittee
-                          ? SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text("Add Member"),
+                  ElevatedButton(
+                    onPressed: _isUploadingCommittee
+                        ? null
+                        : _addCommitteeMember,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryColor,
+                      minimumSize: Size(120, 50),
                     ),
+                    child: _isUploadingCommittee
+                        ? CircularProgressIndicator(color: Colors.white)
+                        : Text("Add"),
                   ),
                 ],
               ),
             ],
           ),
         ),
-
         SizedBox(height: 30),
-
-        // MEMBER LIST
         FutureBuilder<QuerySnapshot>(
           future: _committeeFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CupertinoActivityIndicator());
-            }
-
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return Center(
-                child: Text(
-                  "No committee members found.",
-                  style: TextStyle(color: _subTextColor),
-                ),
-              );
-            }
-
+            if (!snapshot.hasData) return CupertinoActivityIndicator();
             return GridView.builder(
               shrinkWrap: true,
               physics: NeverScrollableScrollPhysics(),
@@ -1510,8 +1254,6 @@ class _TactsoBranchesApplicationsState
               itemBuilder: (context, index) {
                 var data =
                     snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                String docId = snapshot.data!.docs[index].id;
-
                 return Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -1529,8 +1271,6 @@ class _TactsoBranchesApplicationsState
                           image: DecorationImage(
                             image: NetworkImage(data['faceUrl'] ?? ''),
                             fit: BoxFit.cover,
-                            onError: (e, s) =>
-                                Icon(Icons.person, color: _subTextColor),
                           ),
                         ),
                       ),
@@ -1541,35 +1281,30 @@ class _TactsoBranchesApplicationsState
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              data['name'] ?? 'Unknown',
+                              data['name'],
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 15,
                                 color: _textColor,
                               ),
                             ),
                             Text(
-                              data['role'] ?? 'Member',
+                              data['role'],
                               style: TextStyle(
                                 color: _primaryColor,
                                 fontSize: 13,
                               ),
                             ),
-                            Text(
-                              data['email'] ?? '',
-                              style: TextStyle(
-                                color: _subTextColor,
-                                fontSize: 11,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () =>
-                            _deleteCommitteeMember(docId, data['faceUrl']),
+                        icon: Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteCommitteeMember(
+                          snapshot.data!.docs[index].id,
+                          data['faceUrl'],
+                          data['name'],
+                          data['role'],
+                        ),
                       ),
                     ],
                   ),
@@ -1592,29 +1327,10 @@ class _TactsoBranchesApplicationsState
       style: TextStyle(color: _textColor),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: _subTextColor),
         prefixIcon: Icon(icon, color: _subTextColor),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _borderColor),
-        ),
         filled: true,
         fillColor: _inputFillColor,
-      ),
-    );
-  }
-
-  Widget _buildLoginRedirect(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text(
-          "Session Expired. Please Log In.",
-          style: TextStyle(color: Colors.grey),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
