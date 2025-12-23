@@ -11,7 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/ProductCard.dart';
 import 'package:ttact/Components/Product_Details.dart';
-import 'package:ttact/Pages/CartPage.dart';
+import 'package:ttact/Pages/User/CartPage.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 

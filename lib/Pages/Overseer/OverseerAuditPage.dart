@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -6,14 +7,14 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-class AuditPage extends StatefulWidget {
-  const AuditPage({super.key});
+class OverseerAuditpage extends StatefulWidget {
+  const OverseerAuditpage({super.key});
 
   @override
-  State<AuditPage> createState() => _AuditPageState();
+  State<OverseerAuditpage> createState() => _OverseerAuditpageState();
 }
 
-class _AuditPageState extends State<AuditPage> {
+class _OverseerAuditpageState extends State<OverseerAuditpage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // --- Color Palette ---
@@ -24,8 +25,13 @@ class _AuditPageState extends State<AuditPage> {
   final Color lightBackground = const Color(0xFFF5F7FA);
 
   Stream<QuerySnapshot> _getAuditStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream.empty();
+
     return _firestore
         .collection('audit_logs')
+        .doc(user.uid)
+        .collection('logs')
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
@@ -34,9 +40,12 @@ class _AuditPageState extends State<AuditPage> {
     action = action.toUpperCase();
     if (action.contains('CREATE') ||
         action.contains('ADD') ||
-        action.contains('UPDATE')) {
+        action.contains('UPDATE') ||
+        action.contains('APPROVE')) {
       return successGreen;
-    } else if (action.contains('DELETE') || action.contains('REMOVE')) {
+    } else if (action.contains('DELETE') ||
+        action.contains('REMOVE') ||
+        action.contains('REJECT')) {
       return errorRed;
     } else if (action.contains('VIEW') || action.contains('READ')) {
       return primaryBlue;
@@ -46,7 +55,7 @@ class _AuditPageState extends State<AuditPage> {
 
   // --- IMAGE PREVIEW DIALOG ---
   void _showImagePreview(BuildContext context, String imageUrl, String title) {
-    if (imageUrl.isEmpty) return;
+    if (imageUrl.isEmpty || imageUrl == 'N/A') return;
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -99,12 +108,34 @@ class _AuditPageState extends State<AuditPage> {
     );
   }
 
+  // --- HELPER TO GET TARGET STRING ---
+  String _getTargetDisplay(Map<String, dynamic> d) {
+    // 1. Check for Expense
+    if (d['expenseName'] != null && d['expenseName'] != 'N/A') {
+      String amt = d['expenseAmount'] ?? '';
+      return "Exp: ${d['expenseName']} ($amt)";
+    }
+    // 2. Check for Committee Target
+    if (d['targetMemberName'] != null && d['targetMemberName'] != 'N/A') {
+      return "${d['targetMemberName']} (Committee)";
+    }
+    // 3. Check for General Member
+    if (d['memberName'] != null && d['memberName'] != 'N/A') {
+      return d['memberName'];
+    }
+    return '-';
+  }
+
   // --- PDF GENERATION ---
   Future<void> _generateAndDownloadPdf() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     final pdf = pw.Document();
     final snapshot = await _firestore
         .collection('audit_logs')
-        .orderBy('timestamp', descending: true)
+        .doc(user.uid)
+        .collection('logs') 
         .get();
 
     final data = snapshot.docs;
@@ -117,24 +148,20 @@ class _AuditPageState extends State<AuditPage> {
     final pdfPrimaryBlue = PdfColor.fromInt(primaryBlue.value);
     final pdfHeaderBg = PdfColor.fromInt(0xFFE3F2FD);
 
-    // Pre-fetch rows data (images need to be fetched async)
+    // Pre-fetch rows data
     List<List<dynamic>> pdfRows = [];
 
     for (var doc in data) {
-      final d = doc.data() as Map<String, dynamic>;
+      final d = doc.data();
       Timestamp? ts = d['timestamp'] as Timestamp?;
       String dateStr = ts != null
           ? DateFormat('yyyy-MM-dd HH:mm').format(ts.toDate())
           : '-';
 
-      // -- NEW: Retrieve Face with Fallbacks --
-      String faceUrl = d['actorFaceUrl'] ?? 
-                       d['universityCommitteeFace'] ?? 
-                       d['educationOfficerFaceUrl'] ?? 
-                       '';
-
+      // -- Face Logic --
+      String faceUrl = d['actorFaceUrl'] ?? 'N/A';
       pw.Widget faceWidget = pw.Text("-");
-      if (faceUrl.isNotEmpty) {
+      if (faceUrl != 'N/A' && faceUrl.isNotEmpty) {
         try {
           final netImage = await networkImage(faceUrl);
           faceWidget = pw.ClipOval(
@@ -150,26 +177,24 @@ class _AuditPageState extends State<AuditPage> {
         }
       }
 
-      // -- NEW: Retrieve Actor Name/Role --
-      String actorName = d['actorName'] ?? d['committeeName'] ?? d['educationOfficerName'] ?? '-';
+      // -- Actor Logic --
+      String actorName = d['actorName'] ?? 'Unknown';
       String actorRole = d['actorRole'] ?? '';
-      String displayActor = actorRole.isNotEmpty ? "$actorName\n($actorRole)" : actorName;
+      String displayActor = actorRole.isNotEmpty
+          ? "$actorName\n($actorRole)"
+          : actorName;
 
-      // -- NEW: Retrieve Target (Student or Member) --
-      String studentName = d['studentName'] ?? 'N/A';
-      String targetMember = d['targetMemberName'] ?? 'N/A';
-      String targetInfo = (studentName != 'N/A') 
-          ? studentName 
-          : (targetMember != 'N/A' ? "$targetMember (Member)" : '-');
+      // -- Target Logic --
+      String targetInfo = _getTargetDisplay(d);
 
       pdfRows.add([
         dateStr,
         faceWidget, // Face Image
         displayActor,
-        d['universityName'] ?? '-',
+        d['overseerName'] ?? '-',
         d['action'] ?? '-',
         targetInfo,
-        d['branchEmail'] ?? d['userEmail'] ?? '-',
+        d['overseerEmail'] ?? '-',
       ]);
     }
 
@@ -195,7 +220,7 @@ class _AuditPageState extends State<AuditPage> {
                       pw.Image(logoProvider, width: 40, height: 40),
                       pw.SizedBox(width: 10),
                       pw.Text(
-                        'Dankie Audit Report',
+                        'Overseer Audit Report',
                         style: pw.TextStyle(
                           fontSize: 22,
                           fontWeight: pw.FontWeight.bold,
@@ -227,11 +252,11 @@ class _AuditPageState extends State<AuditPage> {
               headers: [
                 'Time',
                 'Face',
-                'Committee / Actor',
-                'University',
+                'Actor',
+                'Overseer Area',
                 'Action',
-                'Target (Student/Mem)',
-                'User Email',
+                'Target / Expense',
+                'Email',
               ],
               data: pdfRows,
             ),
@@ -243,7 +268,7 @@ class _AuditPageState extends State<AuditPage> {
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
       name:
-          'Dankie_Audit_Log_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
+          'Audit_Log_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
     );
   }
 
@@ -270,8 +295,12 @@ class _AuditPageState extends State<AuditPage> {
                   'yyyy-MM-dd HH:mm:ss',
                 ).format((e.value as Timestamp).toDate());
               }
-              if (e.key.contains('Url') || e.key.contains('image'))
-                return const SizedBox.shrink(); // Hide raw URLs in details
+              // Hide explicit image URLs to keep details clean
+              if (e.key.contains('FaceUrl') || e.key.contains('image')) {
+                return const SizedBox.shrink();
+              }
+              // Hide 'N/A' fields to keep it clean
+              if (valueStr == 'N/A') return const SizedBox.shrink();
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
@@ -355,7 +384,7 @@ class _AuditPageState extends State<AuditPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'System Audit Logs',
+                          'Overseer Audit Logs',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -365,7 +394,7 @@ class _AuditPageState extends State<AuditPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'Track operations, status updates, and document access.',
+                          'Track expenses, committee actions, and updates.',
                           style: TextStyle(fontSize: 14, color: neutralGrey),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -414,10 +443,11 @@ class _AuditPageState extends State<AuditPage> {
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _getAuditStream(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting)
+                    if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(
                         child: CircularProgressIndicator(color: primaryBlue),
                       );
+                    }
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return Center(
                         child: Column(
@@ -453,14 +483,13 @@ class _AuditPageState extends State<AuditPage> {
                           horizontalMargin: 24,
                           columns: const [
                             DataColumn(label: Text('TIME')),
-                            DataColumn(label: Text('COMMITTEE FACE')),
-                            DataColumn(label: Text('COMMITTEE NAME')),
-                            DataColumn(label: Text('UNIVERSITY')),
-                            DataColumn(label: Text('LOGO')),
+                            DataColumn(label: Text('FACE')),
+                            DataColumn(label: Text('ACTOR')),
+                            DataColumn(label: Text('OVERSEER AREA')),
                             DataColumn(label: Text('ACTION')),
-                            DataColumn(label: Text('TARGET (Student/Mem)')), // Renamed Column
-                            DataColumn(label: Text('USER')),
-                            DataColumn(label: Text('VIEW')),
+                            DataColumn(label: Text('TARGET / EXPENSE')),
+                            DataColumn(label: Text('EMAIL')),
+                            DataColumn(label: Text('DETAILS')),
                           ],
                           rows: snapshot.data!.docs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
@@ -473,40 +502,20 @@ class _AuditPageState extends State<AuditPage> {
                             String actionStr = data['action'] ?? '';
                             Color actionColor = _getActionColor(actionStr);
 
-                            // --- 1. NEW DATA RETRIEVAL LOGIC (With Fallbacks) ---
-                            
-                            // FACE: Try new 'actorFaceUrl', fallback to old fields
-                            String faceUrl = data['actorFaceUrl'] ?? 
-                                             data['universityCommitteeFace'] ??
-                                             data['educationOfficerFaceUrl'] ?? 
-                                             '';
-                                             
-                            // LOGO: Try new 'universityLogo', fallback to old 'imageUrl'
-                            String logoUrl = data['universityLogo'] ?? '';
-                            if (logoUrl.isEmpty) {
-                              if (data['imageUrl'] is List && (data['imageUrl'] as List).isNotEmpty) {
-                                logoUrl = (data['imageUrl'] as List)[0];
-                              } else if (data['imageUrl'] is String) {
-                                logoUrl = data['imageUrl'];
-                              }
-                            }
+                            // --- 1. DATA ALIGNED WITH OverseerAuditLogs CLASS ---
 
-                            // NAME: Try new 'actorName', fallback to old names
-                            String actorName = data['actorName'] ?? 
-                                               data['committeeName'] ?? 
-                                               data['educationOfficerName'] ?? 
-                                               '-';
-                            
-                            // ROLE: New field
+                            // FACE
+                            String faceUrl = data['actorFaceUrl'] ?? 'N/A';
+
+                            // ACTOR
+                            String actorName = data['actorName'] ?? 'Unknown';
                             String actorRole = data['actorRole'] ?? '';
 
-                            // TARGET: Try 'studentName' or 'targetMemberName'
-                            String studentName = data['studentName'] ?? 'N/A';
-                            String targetMemberName = data['targetMemberName'] ?? 'N/A';
-                            String targetDisplay = (studentName != 'N/A' && studentName != 'Unknown') 
-                                ? studentName 
-                                : (targetMemberName != 'N/A' ? "$targetMemberName (Member)" : '-');
+                            // OVERSEER NAME
+                            String overseerName = data['overseerName'] ?? 'N/A';
 
+                            // TARGET / EXPENSE DISPLAY
+                            String targetDisplay = _getTargetDisplay(data);
 
                             return DataRow(
                               cells: [
@@ -522,13 +531,13 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 2. Committee Face (Clickable)
+                                // 2. Face (Clickable)
                                 DataCell(
                                   InkWell(
                                     onTap: () => _showImagePreview(
                                       context,
                                       faceUrl,
-                                      "Committee Face",
+                                      "Actor Face",
                                     ),
                                     child: Container(
                                       decoration: BoxDecoration(
@@ -540,10 +549,14 @@ class _AuditPageState extends State<AuditPage> {
                                       child: CircleAvatar(
                                         radius: 18,
                                         backgroundColor: Colors.grey.shade100,
-                                        backgroundImage: faceUrl.isNotEmpty
+                                        backgroundImage:
+                                            (faceUrl != 'N/A' &&
+                                                faceUrl.isNotEmpty)
                                             ? NetworkImage(faceUrl)
                                             : null,
-                                        child: faceUrl.isEmpty
+                                        child:
+                                            (faceUrl == 'N/A' ||
+                                                faceUrl.isEmpty)
                                             ? Icon(
                                                 Icons.person,
                                                 size: 16,
@@ -555,11 +568,12 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 3. Committee Name & Role
+                                // 3. Actor Name & Role
                                 DataCell(
                                   Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         actorName,
@@ -567,7 +581,8 @@ class _AuditPageState extends State<AuditPage> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      if (actorRole.isNotEmpty)
+                                      if (actorRole.isNotEmpty &&
+                                          actorRole != 'Unknown Portfolio')
                                         Text(
                                           actorRole,
                                           style: TextStyle(
@@ -579,50 +594,17 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 4. University Name
+                                // 4. Overseer Name (Was University)
                                 DataCell(
                                   Text(
-                                    data['universityName'] ?? '-',
+                                    overseerName,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
 
-                                // 5. University Logo (Clickable)
-                                DataCell(
-                                  InkWell(
-                                    onTap: () => _showImagePreview(
-                                      context,
-                                      logoUrl,
-                                      "University Logo",
-                                    ),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      child: CircleAvatar(
-                                        radius: 18,
-                                        backgroundColor: Colors.white,
-                                        backgroundImage: logoUrl.isNotEmpty
-                                            ? NetworkImage(logoUrl)
-                                            : null,
-                                        child: logoUrl.isEmpty
-                                            ? Icon(
-                                                Icons.school,
-                                                size: 16,
-                                                color: Colors.grey,
-                                              )
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                // 6. Action
+                                // 5. Action
                                 DataCell(
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -647,13 +629,15 @@ class _AuditPageState extends State<AuditPage> {
                                   ),
                                 ),
 
-                                // 7. Target (Student or Member)
+                                // 6. Target / Expense
                                 DataCell(Text(targetDisplay)),
 
-                                // 8. User (Branch Email)
-                                DataCell(Text(data['branchEmail'] ?? data['userEmail'] ?? 'System')),
+                                // 7. User (Overseer Email)
+                                DataCell(
+                                  Text(data['overseerEmail'] ?? 'System'),
+                                ),
 
-                                // 9. Details
+                                // 8. Details
                                 DataCell(
                                   IconButton(
                                     icon: Icon(

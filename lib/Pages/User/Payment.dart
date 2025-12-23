@@ -9,7 +9,7 @@ import 'package:ttact/Components/API.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ttact/Pages/SignUpPage.dart';
+import 'package:ttact/Pages/User/SignUpPage.dart';
 
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 700.0;

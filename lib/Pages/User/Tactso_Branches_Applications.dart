@@ -10,8 +10,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/AuditService.dart';
-import 'package:ttact/Pages/Payment.dart';
+import 'package:ttact/Components/Aduit_Logs/Tactso_Audit_Logs.dart';
+import 'package:ttact/Pages/User/Payment.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io' as io;
 
@@ -256,7 +256,7 @@ class _TactsoBranchesApplicationsState
       });
 
       // --- LOG AUDIT ---
-      await AuditService.logAction(
+      await TactsoAuditLogs.logAction(
         action: "ADD_COMMITTEE_MEMBER",
         details: "Added ${_committeeNameController.text} as $_selectedRole",
         referenceId: "N/A",
@@ -344,7 +344,7 @@ class _TactsoBranchesApplicationsState
                               });
                         }
 
-                        await AuditService.logAction(
+                        await TactsoAuditLogs.logAction(
                           action: "DELETE_COMMITTEE_MEMBER",
                           details: "Removed $memberName from committee",
                           referenceId: docId,
@@ -448,7 +448,7 @@ class _TactsoBranchesApplicationsState
       String studentName =
           applicationData?['applicationDetails']?['fullName'] ?? "Unknown";
 
-      await AuditService.logAction(
+      await TactsoAuditLogs.logAction(
         action: "UPDATE_STATUS",
         details: "Changed status to $newStatus for $studentName",
         referenceId: applicationId,
@@ -597,6 +597,16 @@ class _TactsoBranchesApplicationsState
       elevation: 0,
       iconTheme: IconThemeData(color: _textColor),
       actions: [
+        IconButton(
+          icon: Icon(
+            Icons.logout_outlined,
+            color: _isDarkMode ? Colors.white : Colors.grey.shade600,
+          ),
+          onPressed: () {
+            FirebaseAuth.instance.signOut();
+            Navigator.pushNamed(context, '/login');
+          },
+        ),
         IconButton(
           icon: Icon(
             _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,

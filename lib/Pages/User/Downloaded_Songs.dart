@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:ttact/Components/MusicPlayerSheet.dart';
 import 'package:ttact/Components/Tabs/MusicTab.dart';
 import 'package:ttact/main.dart'; // To access audioHandler
-import 'package:ttact/Pages/HomePage.dart'; // ⭐️ IMPORT THIS to access MusicPlayerSheet
+import 'package:ttact/Pages/User/HomePage.dart'; // ⭐️ IMPORT THIS to access MusicPlayerSheet
 
 // --- PLATFORM UTILITIES ---
 bool get isIOSPlatform {

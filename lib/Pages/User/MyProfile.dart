@@ -1,22 +1,16 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, prefer_typing_uninitialized_variables
 
-// --- PLATFORM IMPORTS FIX: Rerouting dart:io ---
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart'; // for kIsWeb
-
-// Import dart:io.File with an alias 'io' ONLY on non-web platforms.
-import 'dart:io' as io show File; // <-- FIX: Imports ONLY the File class for use as io.File
+import 'dart:io' as io; // Safe import for File usage
 import 'package:image_picker/image_picker.dart';
-
-// --- REST OF IMPORTS ---
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:intl/intl.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Custom_Buttons.dart';
-import 'package:ttact/Components/API.dart'; // Import API for showLoading
+import 'package:ttact/Components/API.dart';
 
 // --- PLATFORM UTILITIES ---
 bool get isIOSPlatform {
@@ -24,15 +18,7 @@ bool get isIOSPlatform {
       defaultTargetPlatform == TargetPlatform.macOS;
 }
 
-bool get isAndroidPlatform {
-  return defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.fuchsia;
-}
-// ------------------------
-
-// --- COPIED HELPERS ---
-
+// --- HELPER WIDGETS ---
 Widget _buildPlatformTextField({
   required TextEditingController controller,
   required String placeholder,
@@ -194,7 +180,6 @@ void _buildActionSheet({
     );
   }
 }
-// --- END COPIED HELPERS ---
 
 class MyProfile extends StatefulWidget {
   const MyProfile({super.key});
@@ -212,9 +197,8 @@ class _MyProfileState extends State<MyProfile> {
   XFile? _pickedFile;
   String? _currentProfileImageUrl;
 
-  // Organization state variables for editing
   String? _selectedProvince;
-  String? _selectedMemberUid; // This acts as the Overseer UID
+  String? _selectedMemberUid;
   String? _selectedDistrictElder;
   String? _selectedCommunityName;
   Map<String, dynamic>? _currentOverseerData;
@@ -279,11 +263,13 @@ class _MyProfileState extends State<MyProfile> {
     }
 
     try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('user_profile_images')
-          .child('$userId.jpg');
+          .child('${user.uid}.jpg');
 
       UploadTask uploadTask;
 
@@ -291,13 +277,11 @@ class _MyProfileState extends State<MyProfile> {
         final bytes = await _pickedFile!.readAsBytes();
         uploadTask = storageRef.putData(bytes);
       } else {
-        uploadTask =
-            storageRef.putFile(io.File(_pickedFile!.path));
+        uploadTask = storageRef.putFile(io.File(_pickedFile!.path));
       }
 
       final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-      return downloadUrl;
+      return await snapshot.ref.getDownloadURL();
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -331,27 +315,27 @@ class _MyProfileState extends State<MyProfile> {
       }
 
       if (mounted) {
-        Navigator.pop(context); // Pop loading
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
         );
-        setState(() {}); // Refresh the UI
+        setState(() {});
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Pop loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('An error occurred: $e')),
-        );
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('An error occurred: $e')));
       }
     }
   }
 
-  // Helper to fetch overseer details to populate lists
-  Future<void> _fetchOverseerData(String overseerUid, StateSetter setModalState) async {
+  Future<void> _fetchOverseerData(
+    String overseerUid,
+    StateSetter setModalState,
+  ) async {
     try {
-      // NOTE: Since 'overseers' are stored by auto-ID but have a 'uid' field,
-      // we query by the field 'uid'.
       final querySnapshot = await FirebaseFirestore.instance
           .collection('overseers')
           .where('uid', isEqualTo: overseerUid)
@@ -360,32 +344,31 @@ class _MyProfileState extends State<MyProfile> {
 
       if (querySnapshot.docs.isNotEmpty) {
         final data = querySnapshot.docs.first.data();
-        
+
         setModalState(() {
           _currentOverseerData = data;
-          
-          // Parse districts
+
           final districts = data['districts'] as List<dynamic>? ?? [];
           _districtElderNames = districts
               .map((d) => d['districtElderName'] as String)
               .toList();
-          
-          // If a district is already selected, update community list
+
           if (_selectedDistrictElder != null) {
-             final selectedDistrict = districts.firstWhere(
-                (d) => d['districtElderName'] == _selectedDistrictElder,
-                orElse: () => null,
-              );
-              
-              if (selectedDistrict != null) {
-                final communities = selectedDistrict['communities'] as List<dynamic>? ?? [];
-                _communityNames = communities
-                    .map((c) => c['communityName'] as String)
-                    .toList();
-              } else {
-                _communityNames = [];
-                _selectedCommunityName = null;
-              }
+            final selectedDistrict = districts.firstWhere(
+              (d) => d['districtElderName'] == _selectedDistrictElder,
+              orElse: () => null,
+            );
+
+            if (selectedDistrict != null) {
+              final communities =
+                  selectedDistrict['communities'] as List<dynamic>? ?? [];
+              _communityNames = communities
+                  .map((c) => c['communityName'] as String)
+                  .toList();
+            } else {
+              _communityNames = [];
+              _selectedCommunityName = null;
+            }
           }
         });
       }
@@ -405,12 +388,11 @@ class _MyProfileState extends State<MyProfile> {
     _currentProfileImageUrl = currentData['profileUrl'];
     _pickedFile = null;
 
-    // Initialize Organization State
     _selectedProvince = currentData['province'];
     _selectedMemberUid = currentData['overseerUid'];
     _selectedDistrictElder = currentData['districtElderName'];
     _selectedCommunityName = currentData['communityName'];
-    
+
     _currentOverseerData = null;
     _districtElderNames = [];
     _communityNames = [];
@@ -424,10 +406,9 @@ class _MyProfileState extends State<MyProfile> {
             constraints: const BoxConstraints(maxWidth: 600),
             child: StatefulBuilder(
               builder: (BuildContext context, StateSetter setModalState) {
-                
-                // Trigger fetch if we have an overseer but no data yet
-                if (_selectedMemberUid != null && _currentOverseerData == null) {
-                   _fetchOverseerData(_selectedMemberUid!, setModalState);
+                if (_selectedMemberUid != null &&
+                    _currentOverseerData == null) {
+                  _fetchOverseerData(_selectedMemberUid!, setModalState);
                 }
 
                 return Padding(
@@ -445,26 +426,24 @@ class _MyProfileState extends State<MyProfile> {
                         children: [
                           Text(
                             'Edit Profile',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
+                            style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const Divider(height: 20, thickness: 1),
                           const SizedBox(height: 20),
 
-                          // --- Profile Image ---
                           GestureDetector(
                             onTap: () async {
                               await _pickImage(setModalState);
                             },
                             child: CircleAvatar(
                               radius: 50,
-                              backgroundColor: Theme.of(context)
-                                  .primaryColor
-                                  .withOpacity(0.1),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).primaryColor.withOpacity(0.1),
                               backgroundImage: _getProfileImage(),
-                              child: (_pickedFile == null &&
+                              child:
+                                  (_pickedFile == null &&
                                       (_currentProfileImageUrl == null ||
                                           _currentProfileImageUrl!.isEmpty))
                                   ? Icon(
@@ -479,20 +458,23 @@ class _MyProfileState extends State<MyProfile> {
                           isIOSPlatform
                               ? CupertinoButton(
                                   child: Text('Change Profile Picture'),
-                                  onPressed: () async {
-                                    await _pickImage(setModalState);
-                                  },
+                                  onPressed: () async =>
+                                      await _pickImage(setModalState),
                                 )
                               : TextButton(
-                                  onPressed: () async {
-                                    await _pickImage(setModalState);
-                                  },
+                                  onPressed: () async =>
+                                      await _pickImage(setModalState),
                                   child: const Text('Change Profile Picture'),
                                 ),
                           const SizedBox(height: 20),
 
-                          // --- Personal Details ---
-                          Text("Personal Details", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                          Text(
+                            "Personal Details",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
+                          ),
                           SizedBox(height: 8),
                           _buildPlatformTextField(
                             context: context,
@@ -522,11 +504,15 @@ class _MyProfileState extends State<MyProfile> {
                           ),
                           const SizedBox(height: 20),
 
-                          // --- Organization Details ---
-                          Text("Organization Details", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                          Text(
+                            "Organization Details",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
+                          ),
                           SizedBox(height: 8),
-                          
-                          // 1. Select Province
+
                           _buildListTile(
                             context: context,
                             title: 'Province',
@@ -540,7 +526,6 @@ class _MyProfileState extends State<MyProfile> {
                                 onSelected: (val) {
                                   setModalState(() {
                                     _selectedProvince = val;
-                                    // Reset children
                                     _selectedMemberUid = null;
                                     _currentOverseerData = null;
                                     _selectedDistrictElder = null;
@@ -553,53 +538,81 @@ class _MyProfileState extends State<MyProfile> {
                             },
                           ),
 
-                          // 2. Select Overseer (Depends on Province)
                           if (_selectedProvince != null)
                             _buildListTile(
                               context: context,
                               title: 'Overseer',
                               leadingIcon: Icons.supervisor_account,
-                              trailingText: _currentOverseerData?['overseerInitialsAndSurname'] ?? (_selectedMemberUid != null ? 'Loading...' : 'Select'),
+                              trailingText:
+                                  _currentOverseerData?['overseerInitialsAndSurname'] ??
+                                  (_selectedMemberUid != null
+                                      ? 'Loading...'
+                                      : 'Select'),
                               onTap: () async {
-                                // Fetch overseers in this province
-                                final snapshot = await FirebaseFirestore.instance
+                                final snapshot = await FirebaseFirestore
+                                    .instance
                                     .collection('overseers')
-                                    .where('province', isEqualTo: _selectedProvince)
+                                    .where(
+                                      'province',
+                                      isEqualTo: _selectedProvince,
+                                    )
                                     .get();
-                                
+
                                 if (snapshot.docs.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No overseers found in $_selectedProvince")));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "No overseers found in $_selectedProvince",
+                                      ),
+                                    ),
+                                  );
                                   return;
                                 }
 
-                                final overseers = snapshot.docs.map((doc) => doc.data()).toList();
-                                final names = overseers.map((o) => o['overseerInitialsAndSurname'] as String).toList();
+                                final overseers = snapshot.docs
+                                    .map((doc) => doc.data())
+                                    .toList();
+                                final names = overseers
+                                    .map(
+                                      (o) =>
+                                          o['overseerInitialsAndSurname']
+                                              as String,
+                                    )
+                                    .toList();
 
                                 _buildActionSheet(
                                   context: context,
                                   title: 'Select Overseer',
                                   actions: names,
                                   onSelected: (val) {
-                                    final selectedDoc = overseers.firstWhere((o) => o['overseerInitialsAndSurname'] == val);
+                                    final selectedDoc = overseers.firstWhere(
+                                      (o) =>
+                                          o['overseerInitialsAndSurname'] ==
+                                          val,
+                                    );
                                     setModalState(() {
                                       _selectedMemberUid = selectedDoc['uid'];
-                                      // Trigger fetch of deep data
                                       _currentOverseerData = selectedDoc;
-                                      // Reset children
                                       _selectedDistrictElder = null;
                                       _selectedCommunityName = null;
                                       _communityNames = [];
-                                      
-                                      // Update districts list immediately
-                                      final districts = selectedDoc['districts'] as List<dynamic>? ?? [];
-                                      _districtElderNames = districts.map((d) => d['districtElderName'] as String).toList();
+                                      final districts =
+                                          selectedDoc['districts']
+                                              as List<dynamic>? ??
+                                          [];
+                                      _districtElderNames = districts
+                                          .map(
+                                            (d) =>
+                                                d['districtElderName']
+                                                    as String,
+                                          )
+                                          .toList();
                                     });
-                                  }
+                                  },
                                 );
                               },
                             ),
 
-                          // 3. Select District (Depends on Overseer)
                           if (_selectedMemberUid != null)
                             _buildListTile(
                               context: context,
@@ -607,10 +620,7 @@ class _MyProfileState extends State<MyProfile> {
                               leadingIcon: Icons.person,
                               trailingText: _selectedDistrictElder ?? 'Select',
                               onTap: () {
-                                if (_districtElderNames.isEmpty) {
-                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No districts found for this overseer")));
-                                   return;
-                                }
+                                if (_districtElderNames.isEmpty) return;
                                 _buildActionSheet(
                                   context: context,
                                   title: 'Select District',
@@ -619,19 +629,29 @@ class _MyProfileState extends State<MyProfile> {
                                     setModalState(() {
                                       _selectedDistrictElder = val;
                                       _selectedCommunityName = null;
-                                      
-                                      // Update communities list
-                                      final districts = _currentOverseerData!['districts'] as List<dynamic>;
-                                      final selectedDistrict = districts.firstWhere((d) => d['districtElderName'] == val);
-                                      final communities = selectedDistrict['communities'] as List<dynamic>? ?? [];
-                                      _communityNames = communities.map((c) => c['communityName'] as String).toList();
+                                      final districts =
+                                          _currentOverseerData!['districts']
+                                              as List<dynamic>;
+                                      final selectedDistrict = districts
+                                          .firstWhere(
+                                            (d) =>
+                                                d['districtElderName'] == val,
+                                          );
+                                      final communities =
+                                          selectedDistrict['communities']
+                                              as List<dynamic>? ??
+                                          [];
+                                      _communityNames = communities
+                                          .map(
+                                            (c) => c['communityName'] as String,
+                                          )
+                                          .toList();
                                     });
                                   },
                                 );
                               },
                             ),
 
-                          // 4. Select Community (Depends on District)
                           if (_selectedDistrictElder != null)
                             _buildListTile(
                               context: context,
@@ -639,10 +659,7 @@ class _MyProfileState extends State<MyProfile> {
                               leadingIcon: Icons.home,
                               trailingText: _selectedCommunityName ?? 'Select',
                               onTap: () {
-                                if (_communityNames.isEmpty) {
-                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No communities found for this district")));
-                                   return;
-                                }
+                                if (_communityNames.isEmpty) return;
                                 _buildActionSheet(
                                   context: context,
                                   title: 'Select Community',
@@ -658,26 +675,23 @@ class _MyProfileState extends State<MyProfile> {
 
                           const SizedBox(height: 24),
 
-                          // --- Save Button ---
                           isIOSPlatform
                               ? CupertinoButton.filled(
                                   child: const Text(
                                     'Save Changes',
                                     style: TextStyle(fontSize: 16),
                                   ),
-                                  onPressed: () {
-                                    _saveProfileChanges();
-                                  },
+                                  onPressed: _saveProfileChanges,
                                 )
                               : ElevatedButton(
-                                  onPressed: () {
-                                    _saveProfileChanges();
-                                  },
+                                  onPressed: _saveProfileChanges,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        Theme.of(context).primaryColor,
-                                    foregroundColor: Theme.of(context)
-                                        .scaffoldBackgroundColor,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).primaryColor,
+                                    foregroundColor: Theme.of(
+                                      context,
+                                    ).scaffoldBackgroundColor,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 40,
                                       vertical: 12,
@@ -708,7 +722,6 @@ class _MyProfileState extends State<MyProfile> {
   }
 
   void _saveProfileChanges() {
-    // Basic Validation
     if (_nameController.text.trim().isEmpty ||
         _surnameController.text.trim().isEmpty ||
         _contactNumberController.text.trim().isEmpty ||
@@ -719,13 +732,14 @@ class _MyProfileState extends State<MyProfile> {
       return;
     }
 
-    // Organization Validation (only if they started selecting)
     if (_selectedProvince != null &&
-        (_selectedMemberUid == null || 
-         _selectedDistrictElder == null || 
-         _selectedCommunityName == null)) {
-       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please complete all organization details.')),
+        (_selectedMemberUid == null ||
+            _selectedDistrictElder == null ||
+            _selectedCommunityName == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please complete all organization details.'),
+        ),
       );
       return;
     }
@@ -735,7 +749,6 @@ class _MyProfileState extends State<MyProfile> {
       'surname': _surnameController.text.trim(),
       'phone': _contactNumberController.text.trim(),
       'address': _addressController.text.trim(),
-      // Organization fields
       'province': _selectedProvince,
       'overseerUid': _selectedMemberUid,
       'districtElderName': _selectedDistrictElder,
@@ -743,7 +756,7 @@ class _MyProfileState extends State<MyProfile> {
     };
 
     _updateUserData(updatedData);
-    Navigator.of(context).pop(); 
+    Navigator.of(context).pop();
   }
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
@@ -757,10 +770,13 @@ class _MyProfileState extends State<MyProfile> {
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: Icon(CupertinoIcons.pencil, color: theme.scaffoldBackgroundColor),
+          child: Icon(
+            CupertinoIcons.pencil,
+            color: theme.scaffoldBackgroundColor,
+          ),
           onPressed: _onEditPressed,
         ),
-        brightness: Brightness.dark, 
+        brightness: Brightness.dark,
       );
     } else {
       return AppBar(
@@ -769,10 +785,7 @@ class _MyProfileState extends State<MyProfile> {
         foregroundColor: theme.scaffoldBackgroundColor,
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: _onEditPressed,
-          ),
+          IconButton(icon: const Icon(Icons.edit), onPressed: _onEditPressed),
         ],
       );
     }
@@ -782,13 +795,12 @@ class _MyProfileState extends State<MyProfile> {
     final String? userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
 
-    final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
     if (userDoc.exists) {
-      _showEditProfileSheet(
-        context,
-        userDoc.data() as Map<String, dynamic>,
-      );
+      _showEditProfileSheet(context, userDoc.data() as Map<String, dynamic>);
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -799,9 +811,6 @@ class _MyProfileState extends State<MyProfile> {
       }
     }
   }
-
-  // ... (Build method and other build helpers remain largely same, omitted for brevity but preserved in logic above) ...
-  // The build method below is identical to previous, just ensuring it uses the helper methods defined above.
 
   @override
   Widget build(BuildContext context) {
@@ -837,7 +846,10 @@ class _MyProfileState extends State<MyProfile> {
         child: Container(
           constraints: BoxConstraints(maxWidth: 900),
           child: FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
@@ -845,13 +857,21 @@ class _MyProfileState extends State<MyProfile> {
                       ? CupertinoActivityIndicator()
                       : CircularProgressIndicator(color: theme.primaryColor),
                 );
-              } else if (snapshot.hasError) {
+              }
+
+              if (snapshot.hasError) {
                 return Center(child: Text('Error: ${snapshot.error}'));
-              } else if (!snapshot.hasData || !snapshot.data!.exists) {
+              }
+
+              // Defensive check
+              if (!snapshot.hasData ||
+                  snapshot.data == null ||
+                  !snapshot.data!.exists) {
                 return const Center(child: Text('No User Data Found.'));
               }
 
-              var data = snapshot.data!.data() as Map<String, dynamic>;
+              // Safe Cast
+              final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
 
               return ListView(
                 padding: const EdgeInsets.all(16.0),
@@ -862,22 +882,37 @@ class _MyProfileState extends State<MyProfile> {
                         CircleAvatar(
                           radius: 50,
                           backgroundColor: theme.primaryColor.withOpacity(0.1),
-                          backgroundImage: (data['profileUrl'] != null && data['profileUrl'].toString().isNotEmpty)
+                          backgroundImage:
+                              (data['profileUrl'] != null &&
+                                  data['profileUrl'].toString().isNotEmpty)
                               ? NetworkImage(data['profileUrl'])
-                              : const AssetImage('assets/no_profile.png') as ImageProvider,
+                              : const AssetImage('assets/no_profile.png')
+                                    as ImageProvider,
                         ),
                         const SizedBox(height: 16),
                         Text(
                           '${data['name'] ?? ''} ${data['surname'] ?? ''}',
-                          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 4),
-                        Text(data['email'] ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600])),
+                        Text(
+                          data['email'] ?? '',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Chip(
-                          label: Text((data['role'] ?? 'N/A').toString().toUpperCase()),
+                          label: Text(
+                            (data['role'] ?? 'N/A').toString().toUpperCase(),
+                          ),
                           backgroundColor: theme.primaryColor.withOpacity(0.2),
-                          labelStyle: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold),
+                          labelStyle: TextStyle(
+                            color: theme.primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -887,16 +922,27 @@ class _MyProfileState extends State<MyProfile> {
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: _buildPersonalAndOrgDetails(theme, data['phone']??'N/A', data['address']??'N/A', data['province']??'N/A', data['communityName']??'N/A', data['districtElderName']??'N/A')),
+                            Expanded(
+                              child: _buildPersonalAndOrgDetails(
+                                theme,
+                                data['phone'] ?? 'N/A',
+                                data['address'] ?? 'N/A',
+                                data['province'] ?? 'N/A',
+                                data['communityName'] ?? 'N/A',
+                                data['districtElderName'] ?? 'N/A',
+                              ),
+                            ),
                             SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 children: [
-                                  _buildWeeklyProgressCard(theme, 
-                                    (data['week1'] as num?)?.toDouble() ?? 0.0, 
-                                    (data['week2'] as num?)?.toDouble() ?? 0.0, 
-                                    (data['week3'] as num?)?.toDouble() ?? 0.0, 
-                                    (data['week4'] as num?)?.toDouble() ?? 0.0),
+                                  _buildWeeklyProgressCard(
+                                    theme,
+                                    (data['week1'] as num?)?.toDouble() ?? 0.0,
+                                    (data['week2'] as num?)?.toDouble() ?? 0.0,
+                                    (data['week3'] as num?)?.toDouble() ?? 0.0,
+                                    (data['week4'] as num?)?.toDouble() ?? 0.0,
+                                  ),
                                   _buildUserApplicationsCard(theme, userId),
                                 ],
                               ),
@@ -905,16 +951,25 @@ class _MyProfileState extends State<MyProfile> {
                         )
                       : Column(
                           children: [
-                            _buildPersonalAndOrgDetails(theme, data['phone']??'N/A', data['address']??'N/A', data['province']??'N/A', data['communityName']??'N/A', data['districtElderName']??'N/A'),
+                            _buildPersonalAndOrgDetails(
+                              theme,
+                              data['phone'] ?? 'N/A',
+                              data['address'] ?? 'N/A',
+                              data['province'] ?? 'N/A',
+                              data['communityName'] ?? 'N/A',
+                              data['districtElderName'] ?? 'N/A',
+                            ),
                             _buildUserApplicationsCard(theme, userId),
-                            _buildWeeklyProgressCard(theme, 
-                                (data['week1'] as num?)?.toDouble() ?? 0.0, 
-                                (data['week2'] as num?)?.toDouble() ?? 0.0, 
-                                (data['week3'] as num?)?.toDouble() ?? 0.0, 
-                                (data['week4'] as num?)?.toDouble() ?? 0.0),
+                            _buildWeeklyProgressCard(
+                              theme,
+                              (data['week1'] as num?)?.toDouble() ?? 0.0,
+                              (data['week2'] as num?)?.toDouble() ?? 0.0,
+                              (data['week3'] as num?)?.toDouble() ?? 0.0,
+                              (data['week4'] as num?)?.toDouble() ?? 0.0,
+                            ),
                           ],
                         ),
-                  AdManager().bannerAdWidget(),
+                  tryBuildAd(),
                 ],
               );
             },
@@ -924,10 +979,19 @@ class _MyProfileState extends State<MyProfile> {
     );
   }
 
-  // ... (Keep _buildCardWrapper, _buildPersonalAndOrgDetails, _buildUserApplicationsCard, _buildWeeklyProgressCard, _buildTableRow, _buildUserApplicationsList, _getStatusColor EXACTLY as they were in your code) ...
-  // I'll include them here for completeness so you can copy the whole file.
+  Widget tryBuildAd() {
+    try {
+      return AdManager().bannerAdWidget();
+    } catch (e) {
+      return SizedBox();
+    }
+  }
 
-  Widget _buildCardWrapper({required ThemeData theme, required List<Widget> children, required String title}) {
+  Widget _buildCardWrapper({
+    required ThemeData theme,
+    required List<Widget> children,
+    required String title,
+  }) {
     return Card(
       color: theme.scaffoldBackgroundColor.withOpacity(0.9),
       elevation: 3,
@@ -935,33 +999,84 @@ class _MyProfileState extends State<MyProfile> {
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-          const Divider(height: 20, thickness: 1),
-          ...children,
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Divider(height: 20, thickness: 1),
+            ...children,
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPersonalAndOrgDetails(ThemeData theme, String contactNumber, String address, String province, String communityName, String districtElderName) {
+  Widget _buildPersonalAndOrgDetails(
+    ThemeData theme,
+    String contactNumber,
+    String address,
+    String province,
+    String communityName,
+    String districtElderName,
+  ) {
     return Column(
       children: [
         _buildCardWrapper(
           theme: theme,
           title: 'Personal Information',
           children: [
-            _buildListTile(context: context, leadingIcon: isIOSPlatform ? CupertinoIcons.phone : Icons.phone, title: 'Contact Number', trailingText: contactNumber, onTap: () {}),
-            _buildListTile(context: context, leadingIcon: isIOSPlatform ? CupertinoIcons.location : Icons.location_on, title: 'Address', trailingText: address, onTap: () {}),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.phone : Icons.phone,
+              title: 'Contact Number',
+              trailingText: contactNumber,
+              onTap: () {},
+            ),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform
+                  ? CupertinoIcons.location
+                  : Icons.location_on,
+              title: 'Address',
+              trailingText: address,
+              onTap: () {},
+            ),
           ],
         ),
         _buildCardWrapper(
           theme: theme,
           title: 'Organizational Details',
           children: [
-            _buildListTile(context: context, leadingIcon: isIOSPlatform ? CupertinoIcons.building_2_fill : Icons.apartment, title: 'Province', trailingText: province, onTap: () {}),
-            _buildListTile(context: context, leadingIcon: isIOSPlatform ? CupertinoIcons.group : Icons.group, title: 'Community Name', trailingText: communityName, onTap: () {}),
-            _buildListTile(context: context, leadingIcon: isIOSPlatform ? CupertinoIcons.person_3 : Icons.supervisor_account, title: 'District Elder', trailingText: districtElderName, onTap: () {}),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform
+                  ? CupertinoIcons.building_2_fill
+                  : Icons.apartment,
+              title: 'Province',
+              trailingText: province,
+              onTap: () {},
+            ),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform ? CupertinoIcons.group : Icons.group,
+              title: 'Community Name',
+              trailingText: communityName,
+              onTap: () {},
+            ),
+            _buildListTile(
+              context: context,
+              leadingIcon: isIOSPlatform
+                  ? CupertinoIcons.person_3
+                  : Icons.supervisor_account,
+              title: 'District Elder',
+              trailingText: districtElderName,
+              onTap: () {},
+            ),
           ],
         ),
       ],
@@ -969,10 +1084,20 @@ class _MyProfileState extends State<MyProfile> {
   }
 
   Widget _buildUserApplicationsCard(ThemeData theme, String userId) {
-    return _buildCardWrapper(theme: theme, title: 'My Applications', children: [_buildUserApplicationsList(theme, userId)]);
+    return _buildCardWrapper(
+      theme: theme,
+      title: 'My Applications',
+      children: [_buildUserApplicationsList(theme, userId)],
+    );
   }
 
-  Widget _buildWeeklyProgressCard(ThemeData theme, double w1, double w2, double w3, double w4) {
+  Widget _buildWeeklyProgressCard(
+    ThemeData theme,
+    double w1,
+    double w2,
+    double w3,
+    double w4,
+  ) {
     return _buildCardWrapper(
       theme: theme,
       title: 'Weekly Progress',
@@ -992,34 +1117,101 @@ class _MyProfileState extends State<MyProfile> {
   }
 
   TableRow _buildTableRow(String label, String value, ThemeData theme) {
-    return TableRow(children: [
-      Padding(padding: const EdgeInsets.all(8.0), child: Text(label, style: theme.textTheme.titleSmall)),
-      Padding(padding: const EdgeInsets.all(8.0), child: Text(value, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold))),
-    ]);
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(label, style: theme.textTheme.titleSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            value,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
+  // --- FIXED STREAM BUILDER LOGIC ---
   Widget _buildUserApplicationsList(ThemeData theme, String userId) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('university_applications').orderBy('submissionDate', descending: true).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('university_applications')
+          .orderBy('submissionDate', descending: true)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: isIOSPlatform ? CupertinoActivityIndicator() : CircularProgressIndicator());
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Padding(padding: EdgeInsets.all(8.0), child: Text('No applications submitted yet.'));
+        // 1. Handle Waiting
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: isIOSPlatform
+                ? CupertinoActivityIndicator()
+                : CircularProgressIndicator(),
+          );
+        }
+
+        // 2. Handle Errors
+        if (snapshot.hasError) {
+          return Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text('Error loading applications'),
+          );
+        }
+
+        // 3. Handle Empty Data (Null or Empty List)
+        if (!snapshot.hasData ||
+            snapshot.data == null ||
+            snapshot.data!.docs.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text('No applications submitted yet.'),
+          );
+        }
+
+        // 4. Safe to display
+        final docs = snapshot.data!.docs;
+
         return ListView.builder(
           shrinkWrap: true,
+          primary: false, // Helps preventing scroll conflict in nested lists
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            var data = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+            // Safely cast the data with checks
+            var data = docs[index].data() as Map<String, dynamic>? ?? {};
+
             return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+              margin: const EdgeInsets.symmetric(
+                vertical: 8.0,
+                horizontal: 4.0,
+              ),
               elevation: 2,
               child: ListTile(
                 leading: Icon(Icons.school, color: theme.primaryColor),
-                title: Text(data['universityName'] ?? 'N/A', style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Program: ${data['primaryProgram'] ?? 'N/A'}'),
-                  Text('Status: ${data['status'] ?? 'N/A'}', style: TextStyle(fontWeight: FontWeight.bold, color: _getStatusColor(data['status'] ?? 'N/A'))),
-                ]),
+                title: Text(
+                  data['universityName'] ?? 'N/A',
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Program: ${data['primaryProgram'] ?? 'N/A'}'),
+                    Text(
+                      'Status: ${data['status'] ?? 'N/A'}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _getStatusColor(data['status'] ?? 'N/A'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -1030,11 +1222,16 @@ class _MyProfileState extends State<MyProfile> {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'New': return Colors.orange;
-      case 'Reviewed': return Colors.blue;
-      case 'Applied': return Colors.purple;
-      case 'Accepted': return Colors.green;   
-      default: return Colors.black;
+      case 'New':
+        return Colors.orange;
+      case 'Reviewed':
+        return Colors.blue;
+      case 'Applied':
+        return Colors.purple;
+      case 'Accepted':
+        return Colors.green;
+      default:
+        return Colors.black;
     }
   }
 }

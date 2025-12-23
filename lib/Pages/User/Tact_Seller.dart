@@ -1020,12 +1020,11 @@ class _SellerProductPageState extends State<SellerProductPage>
   // --- END Price Update Dialog ---
 
   // --- ADD PRODUCT TAB (Modal Constrained) ---
-  Widget addProductTab() {
+ Widget addProductTab() {
     if (user == null) {
       return const Center(child: Text("Please log in to add products."));
     }
 
-    // ⭐️ FIX 1: Return a dedicated widget instead of calling Api().showMessage()
     if (!isVerified) {
       return _buildNotVerifiedWidget();
     }
@@ -1046,8 +1045,8 @@ class _SellerProductPageState extends State<SellerProductPage>
             ConnectionState.waiting) {
           return Center(
             child: isIOSPlatform
-                ? CupertinoActivityIndicator()
-                : CircularProgressIndicator(),
+                ? const CupertinoActivityIndicator()
+                : const CircularProgressIndicator(),
           );
         }
         if (existingProductIdsSnapshot.hasError) {
@@ -1068,8 +1067,8 @@ class _SellerProductPageState extends State<SellerProductPage>
                 ConnectionState.waiting) {
               return Center(
                 child: isIOSPlatform
-                    ? CupertinoActivityIndicator()
-                    : CircularProgressIndicator(),
+                    ? const CupertinoActivityIndicator()
+                    : const CircularProgressIndicator(),
               );
             }
             if (allProductsSnapshot.hasError) {
@@ -1082,6 +1081,7 @@ class _SellerProductPageState extends State<SellerProductPage>
               );
             }
 
+            // Filter out products the seller already has
             final availableProducts = allProductsSnapshot.data!.docs.where((
               prod,
             ) {
@@ -1097,16 +1097,23 @@ class _SellerProductPageState extends State<SellerProductPage>
             // Wrap the ListView in a constrained container for web aesthetic
             return Center(
               child: Container(
-                constraints: BoxConstraints(maxWidth: 800),
+                constraints: const BoxConstraints(maxWidth: 800),
                 child: ListView.builder(
                   itemCount: availableProducts.length,
                   itemBuilder: (context, index) {
                     final prod = availableProducts[index];
+                    final data = prod.data() as Map<String, dynamic>;
+
                     final String adminProductName =
-                        prod['name'] ?? 'Unnamed Product (Admin)';
+                        data['name'] ?? 'Unnamed Product';
                     final String adminProductDescription =
-                        prod['description'] ?? 'No description (Admin)';
-                    final dynamic adminProductImageUrl = prod['imageUrl'];
+                        data['description'] ?? 'No description';
+                    final dynamic adminProductImageUrl = data['imageUrl'];
+                    
+                    // ⭐️ NEW: Fetch Type and Category
+                    final String productType = data['type'] ?? 'Product'; 
+                    final String category = data['category'] ?? 'General';
+                    final bool isService = productType == 'Service';
 
                     return Card(
                       margin: const EdgeInsets.symmetric(
@@ -1131,7 +1138,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                                     const Icon(Icons.broken_image),
                               )
                             : Icon(
-                                Icons.inventory_2_outlined,
+                                isService 
+                                    ? Icons.handyman_outlined // Icon for Service
+                                    : Icons.inventory_2_outlined, // Icon for Product
                                 size: 40,
                                 color: Colors.grey,
                               ),
@@ -1141,11 +1150,21 @@ class _SellerProductPageState extends State<SellerProductPage>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(
-                          adminProductDescription,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "$category • $productType", // Show type and category
+                              style: TextStyle(fontSize: 12, color: Theme.of(context).primaryColor),
+                            ),
+                            Text(
+                              adminProductDescription,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
+                        trailing: const Icon(Icons.add_circle_outline),
                         onTap: () async {
                           // ... (Location fetching logic - Kept As Is)
                           if (_sellerAddress == null) {
@@ -1171,13 +1190,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                               }
                             } catch (e) {
                               print("Error fetching seller location: $e");
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Error fetching location.'),
-                                  ),
-                                );
-                              }
+                              // Handle error
                             } finally {
                               if (context.mounted) {
                                 Navigator.pop(context);
@@ -1204,9 +1217,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                               builder: (context) {
                                 return Center(
                                   child: ConstrainedBox(
-                                    constraints: BoxConstraints(
+                                    constraints: const BoxConstraints(
                                       maxWidth: 600,
-                                    ), // Constraint for web/desktop modal
+                                    ),
                                     child: StatefulBuilder(
                                       builder:
                                           (
@@ -1231,7 +1244,9 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                   children: [
                                                     Center(
                                                       child: Text(
-                                                        "Add Your Price, Location, Colors & Sizes for:",
+                                                        isService 
+                                                          ? "Set Rates & Location for:" 
+                                                          : "Add Price, Location, Colors & Sizes:",
                                                         style: TextStyle(
                                                           fontSize: 18,
                                                           fontWeight:
@@ -1265,12 +1280,13 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                         ),
                                                       ),
                                                     ),
-                                                    // --- PLATFORM AWARE ---
+                                                    
+                                                    // --- COMMON FIELDS (Price & Location) ---
                                                     _buildPlatformTextField(
                                                       context: context,
                                                       controller:
                                                           priceController,
-                                                      placeholder: "Price (R)",
+                                                      placeholder: isService ? "Rate/Price (R)" : "Price (R)",
                                                       keyboardType:
                                                           TextInputType.number,
                                                       prefixIcon: isIOSPlatform
@@ -1290,151 +1306,155 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                                 .location_solid
                                                           : Icons.location_on,
                                                     ),
-                                                    // --- END PLATFORM AWARE ---
+                                                    
                                                     const SizedBox(height: 20),
                                                     const Divider(),
-                                                    Text(
-                                                      "Select Colors:",
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 16,
-                                                        color: Colors.grey[700],
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    Wrap(
-                                                      spacing: 8.0,
-                                                      runSpacing: 8.0,
-                                                      children: _availableColors.map((
-                                                        color,
-                                                      ) {
-                                                        final isSelected =
-                                                            _selectedColors
-                                                                .contains(
-                                                                  color,
-                                                                );
-                                                        return FilterChip(
-                                                          label: Text(color),
-                                                          selected: isSelected,
-                                                          onSelected: (selected) {
-                                                            setModalState(() {
-                                                              if (selected) {
-                                                                _selectedColors
-                                                                    .add(color);
-                                                              } else {
-                                                                _selectedColors
-                                                                    .remove(
-                                                                      color,
-                                                                    );
-                                                              }
-                                                            });
-                                                          },
-                                                          backgroundColor:
-                                                              isSelected
-                                                              ? Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .primaryColor
-                                                                    .withOpacity(
-                                                                      0.2,
-                                                                    )
-                                                              : Colors
-                                                                    .grey
-                                                                    .shade100,
-                                                          selectedColor:
-                                                              Theme.of(
-                                                                context,
-                                                              ).primaryColor,
-                                                          labelStyle: TextStyle(
-                                                            color: isSelected
-                                                                ? Colors.white
-                                                                : Theme.of(
-                                                                        context,
-                                                                      )
-                                                                      .textTheme
-                                                                      .bodyMedium!
-                                                                      .color,
-                                                          ),
-                                                        );
-                                                      }).toList(),
-                                                    ),
-                                                    const SizedBox(height: 20),
-                                                    const Divider(),
-                                                    Text(
-                                                      "Select Size Type:",
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 16,
-                                                        color: Colors.grey[700],
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    // --- PLATFORM AWARE ---
-                                                    _buildListTile(
-                                                      context: context,
-                                                      title: "Select Size Type",
-                                                      trailingText:
-                                                          _selectedSizeType ??
-                                                          "Choose type",
-                                                      onTap: () {
-                                                        _buildActionSheet(
-                                                          context: context,
-                                                          title:
-                                                              "Choose a size type",
-                                                          actions:
-                                                              _availableSizeTypes,
-                                                          onSelected: (value) {
-                                                            setModalState(() {
-                                                              _selectedSizeType =
-                                                                  value;
-                                                              _selectedStandardSizes
-                                                                  .clear();
-                                                              _selectedNumericSizes
-                                                                  .clear();
-                                                              _selectedSuitSizes
-                                                                  .clear();
-                                                            });
-                                                          },
-                                                        );
-                                                      },
-                                                    ),
-                                                    // --- END PLATFORM AWARE ---
-                                                    const SizedBox(height: 20),
-                                                    if (_selectedSizeType !=
-                                                        null) ...[
+
+                                                    // ⭐️ CONDITIONAL UI: Only show Colors/Sizes if it is a PRODUCT
+                                                    if (!isService) ...[
                                                       Text(
-                                                        "Select Size:",
+                                                        "Select Colors:",
                                                         style: TextStyle(
                                                           fontWeight:
                                                               FontWeight.bold,
                                                           fontSize: 16,
-                                                          color:
-                                                              Colors.grey[700],
+                                                          color: Colors.grey[700],
                                                         ),
                                                       ),
                                                       const SizedBox(height: 8),
-                                                      if (_selectedSizeType ==
-                                                          'Standard/Missy Sizes')
-                                                        _buildStandardSizeSelector(
-                                                          setModalState,
-                                                        )
-                                                      else if (_selectedSizeType ==
-                                                          'Numeric Sizes (US/UK)')
-                                                        _buildNumericSizeSelector(
-                                                          setModalState,
-                                                        )
-                                                      else if (_selectedSizeType ==
-                                                          'Suit Sizes')
-                                                        _buildSuitSizeSelector(
-                                                          setModalState,
-                                                        ),
-                                                      const SizedBox(
-                                                        height: 20,
+                                                      Wrap(
+                                                        spacing: 8.0,
+                                                        runSpacing: 8.0,
+                                                        children: _availableColors.map((
+                                                          color,
+                                                        ) {
+                                                          final isSelected =
+                                                              _selectedColors
+                                                                  .contains(
+                                                                    color,
+                                                                  );
+                                                          return FilterChip(
+                                                            label: Text(color),
+                                                            selected: isSelected,
+                                                            onSelected: (selected) {
+                                                              setModalState(() {
+                                                                if (selected) {
+                                                                  _selectedColors
+                                                                      .add(color);
+                                                                } else {
+                                                                  _selectedColors
+                                                                      .remove(
+                                                                        color,
+                                                                      );
+                                                                }
+                                                              });
+                                                            },
+                                                            backgroundColor:
+                                                                isSelected
+                                                                ? Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .primaryColor
+                                                                      .withOpacity(
+                                                                        0.2,
+                                                                      )
+                                                                : Colors
+                                                                      .grey
+                                                                      .shade100,
+                                                            selectedColor:
+                                                                Theme.of(
+                                                                  context,
+                                                                ).primaryColor,
+                                                            labelStyle: TextStyle(
+                                                              color: isSelected
+                                                                  ? Colors.white
+                                                                  : Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .textTheme
+                                                                        .bodyMedium!
+                                                                        .color,
+                                                            ),
+                                                          );
+                                                        }).toList(),
                                                       ),
+                                                      const SizedBox(height: 20),
+                                                      const Divider(),
+                                                      Text(
+                                                        "Select Size Type:",
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 16,
+                                                          color: Colors.grey[700],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      _buildListTile(
+                                                        context: context,
+                                                        title: "Select Size Type",
+                                                        trailingText:
+                                                            _selectedSizeType ??
+                                                            "Choose type",
+                                                        onTap: () {
+                                                          _buildActionSheet(
+                                                            context: context,
+                                                            title:
+                                                                "Choose a size type",
+                                                            actions:
+                                                                _availableSizeTypes,
+                                                            onSelected: (value) {
+                                                              setModalState(() {
+                                                                _selectedSizeType =
+                                                                    value;
+                                                                _selectedStandardSizes
+                                                                    .clear();
+                                                                _selectedNumericSizes
+                                                                    .clear();
+                                                                _selectedSuitSizes
+                                                                    .clear();
+                                                              });
+                                                            },
+                                                          );
+                                                        },
+                                                      ),
+                                                      const SizedBox(height: 20),
+                                                      if (_selectedSizeType !=
+                                                          null) ...[
+                                                        Text(
+                                                          "Select Size:",
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 16,
+                                                            color:
+                                                                Colors.grey[700],
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 8),
+                                                        if (_selectedSizeType ==
+                                                            'Standard/Missy Sizes')
+                                                          _buildStandardSizeSelector(
+                                                            setModalState,
+                                                          )
+                                                        else if (_selectedSizeType ==
+                                                            'Numeric Sizes (US/UK)')
+                                                          _buildNumericSizeSelector(
+                                                            setModalState,
+                                                          )
+                                                        else if (_selectedSizeType ==
+                                                            'Suit Sizes')
+                                                          _buildSuitSizeSelector(
+                                                            setModalState,
+                                                          ),
+                                                        const SizedBox(
+                                                          height: 20,
+                                                        ),
+                                                      ],
                                                     ],
-                                                    // --- PLATFORM AWARE ---
+                                                    // --- END CONDITIONAL UI ---
+
+                                                    // --- BUTTONS ---
                                                     Row(
                                                       mainAxisAlignment:
                                                           MainAxisAlignment.end,
@@ -1475,6 +1495,7 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                                     adminProductName,
                                                                     adminProductDescription,
                                                                     adminProductImageUrl,
+                                                                    // Pass empty lists if Service to avoid errors
                                                                   );
                                                                 },
                                                               )
@@ -1494,7 +1515,6 @@ class _SellerProductPageState extends State<SellerProductPage>
                                                               ),
                                                       ],
                                                     ),
-                                                    // --- END PLATFORM AWARE ---
                                                     const SizedBox(height: 10),
                                                   ],
                                                 ),
@@ -1518,8 +1538,7 @@ class _SellerProductPageState extends State<SellerProductPage>
         );
       },
     );
-  }
-  // --- END ADD PRODUCT TAB ---
+  } // --- END ADD PRODUCT TAB ---
 
   // --- NEW: Helper for Submit Logic ---
   void _handleSubmitProduct(

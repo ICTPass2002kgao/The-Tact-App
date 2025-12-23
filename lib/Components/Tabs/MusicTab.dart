@@ -16,8 +16,8 @@ import 'package:ttact/Components/AdBanner.dart' hide isAndroidPlatform;
 import 'package:ttact/Components/HomePageHelpers.dart'; // Import helpers
 import 'package:ttact/Components/LiabraryHelper.dart';
 import 'package:ttact/Components/MusicPlayerSheet.dart'; 
-import 'package:ttact/Pages/Downloaded_Songs.dart' hide isIOSPlatform;
-import 'package:ttact/Pages/LibrarySongs.dart' hide isIOSPlatform;
+import 'package:ttact/Pages/User/Downloaded_Songs.dart' hide isIOSPlatform;
+import 'package:ttact/Pages/User/LibrarySongs.dart' hide isIOSPlatform;
 import 'package:ttact/main.dart'; // To get audioHandler
 
 class MusicTab extends StatefulWidget {
@@ -353,6 +353,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
       'Apostle choir',
       'Slow Jam',
       'Instrumental songs',
+      'Evangelical Brothers Songs'
     ];
 
     return Column(

@@ -11,19 +11,19 @@ import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/NotificationService.dart';
 import 'package:ttact/Pages/InitialRoadWrapper.dart';
+import 'package:ttact/Pages/Overseer/Overseer_Page.dart';
 import 'package:ttact/firebase_options.dart';
 
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/Audio_Handler.dart';
-import 'package:ttact/Pages/Admin_Portal.dart';
-import 'package:ttact/Pages/CartPage.dart';
+import 'package:ttact/Pages/Admin/Admin_Portal.dart';
+import 'package:ttact/Pages/User/CartPage.dart';
 import 'package:ttact/Pages/Login.dart';
-import 'package:ttact/Pages/MotherPage.dart';
-import 'package:ttact/Pages/OverseerPage.dart';
-import 'package:ttact/Pages/SignUpPage.dart';
-import 'package:ttact/Pages/Tact_Seller.dart';
-import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
-import 'package:ttact/Pages/orders.dart';
+import 'package:ttact/Pages/User/MotherPage.dart'; 
+import 'package:ttact/Pages/User/SignUpPage.dart';
+import 'package:ttact/Pages/User/Tact_Seller.dart';
+import 'package:ttact/Pages/User/Tactso_Branches_Applications.dart';
+import 'package:ttact/Pages/User/orders.dart';
 import 'package:ttact/introductionPage.dart';
 
 MyAudioHandler? audioHandler;

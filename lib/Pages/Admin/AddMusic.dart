@@ -283,6 +283,7 @@ class _AddMusicState extends State<AddMusic> {
     'Apostle choir',
     'choreography',
     'Instrumental songs',
+    'Evangelical Brothers Songs',
   ];
   String category = '';
 
@@ -302,6 +303,7 @@ class _AddMusicState extends State<AddMusic> {
         videoExtensions.contains(
           selectedFileName.split('.').last.toLowerCase(),
         );
+    if (selectedFileName != null) songNameController.text = selectedFileName!;
 
     return Center(
       child: ConstrainedBox(

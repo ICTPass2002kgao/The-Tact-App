@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Added for lookup
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; 
+import 'package:flutter/cupertino.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
@@ -13,22 +13,34 @@ import 'package:just_audio/just_audio.dart' hide AudioPlayer;
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Pages/Tactso_Branches_Applications.dart';
+import 'package:ttact/Pages/Admin/Admin_Portal.dart';
+import 'package:ttact/Pages/Overseer/Overseer_Page.dart';
+import 'package:ttact/Pages/User/Tactso_Branches_Applications.dart';
 
 class FaceVerificationScreen extends StatefulWidget {
   final String email;
   final String password;
-  final List<String> authorizedFaceUrls;
-  final String universityUID;
+  final String entityUid; // Kept for reference, but verification is now dynamic
+  final String role; // 'Admin', 'Overseer', or 'Tactso Branch'
   final CameraDescription camera;
+
+  // Optional params (can be null now that we fetch dynamically)
+  final List<String>? authorizedFaceUrls;
+  final String? loggedMemberName;
+  final String? loggedMemberRole;
+  final String? faceUrl;
 
   const FaceVerificationScreen({
     super.key,
-    required this.authorizedFaceUrls,
-    required this.universityUID,
+    required this.entityUid,
     required this.camera,
     required this.email,
     required this.password,
+    this.role = 'Tactso Branch',
+    this.authorizedFaceUrls,
+    this.loggedMemberName,
+    this.loggedMemberRole,
+    this.faceUrl,
   });
 
   @override
@@ -40,8 +52,13 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
   late FlutterTts _flutterTts;
   late AudioPlayer _audioPlayer;
   final Api _api = Api();
+
   bool _isVerifying = false;
   String _statusMessage = 'Initializing camera...';
+
+  // --- NEW: List to hold all potential staff members ---
+  List<Map<String, dynamic>> _allStaffList = [];
+  bool _isLoadingStaff = true;
 
   bool get _isIOS =>
       defaultTargetPlatform == TargetPlatform.iOS ||
@@ -56,6 +73,52 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     _initializeCamera();
     _audioPlayer = AudioPlayer();
     _flutterTts = FlutterTts();
+
+    // --- NEW: Load all staff members immediately ---
+    if (widget.role == 'Admin') {
+      _fetchAllStaffMembers();
+    } else {
+      // If not Admin, we might rely on the old method or just skip this
+      setState(() => _isLoadingStaff = false);
+    }
+  }
+
+  // --- NEW: Fetch Logic ---
+  Future<void> _fetchAllStaffMembers() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('staff_members')
+          .get();
+
+      List<Map<String, dynamic>> tempStaff = [];
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        // Only add if they have a faceUrl
+        if (data['faceUrl'] != null && data['faceUrl'].toString().isNotEmpty) {
+          tempStaff.add({
+            'fullName':
+                data['fullName'] ?? "${data['name']} ${data['surname']}",
+            'portfolio': data['portfolio'] ?? 'Staff',
+            'province': data['province'] ?? 'Unknown',
+            'faceUrl': data['faceUrl'],
+            'role': data['role'] ?? 'Admin',
+            'uid': data['uid'], // Useful if you need to reference the doc later
+          });
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _allStaffList = tempStaff;
+          _isLoadingStaff = false;
+        });
+        print("Loaded ${_allStaffList.length} staff members for verification.");
+      }
+    } catch (e) {
+      print("Error fetching staff: $e");
+      if (mounted) setState(() => _isLoadingStaff = false);
+    }
   }
 
   Future<void> playSound(bool isSuccess) async {
@@ -115,60 +178,22 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     }
   }
 
-  // --- NEW: Identify User from Database ---
-  Future<void> _identifyUser(String matchedUrl) async {
-    setState(() => _statusMessage = "Identifying Member...");
-
-    try {
-      // 1. Sign in first (Required to read Firestore)
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: widget.email,
-        password: widget.password,
-      );
-
-      // 2. Query Firestore to find who owns this face URL
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('tactso_branches')
-          .doc(widget.universityUID)
-          .collection('committee_members')
-          .where('faceUrl', isEqualTo: matchedUrl)
-          .limit(1)
-          .get();
-
-      String memberName = "Authorized Member";
-      String memberRole = "Committee";
-      String memberFaceUrl = "";
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final data = querySnapshot.docs.first.data();
-        memberName = data['name'] ?? "Member";
-        memberRole = data['role'] ?? "Committee";
-        memberFaceUrl = data['faceUrl'] ?? "";
-
-      }
-
-      // 3. Pass details to success handler
-      await _handleSuccess(memberName, memberRole, memberFaceUrl);
-
-    } catch (e) {
-      print("Identification Error: $e");
-      // Fallback if lookup fails but face matched
-      await _handleSuccess("Authorized Member", "Verified", "" );
-    }
-  }
-
-  // --- MODIFIED VERIFICATION LOGIC ---
   Future<void> _verifyFace() async {
     if (_isVerifying || !_cameraController.value.isInitialized) return;
 
-    if (widget.authorizedFaceUrls.isEmpty) {
-      _api.showMessage(
-        context,
-        'No authorized faces found in database.',
-        'Error',
-        Colors.red,
-      );
-      return;
+    // Check if we have staff loaded
+    if (widget.role == 'Admin' && _allStaffList.isEmpty) {
+      // Fallback to widget.authorizedFaceUrls if list is empty
+      if (widget.authorizedFaceUrls == null ||
+          widget.authorizedFaceUrls!.isEmpty) {
+        _api.showMessage(
+          context,
+          'No staff members found in database.',
+          'Error',
+          Colors.red,
+        );
+        return;
+      }
     }
 
     setState(() {
@@ -179,25 +204,58 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     try {
       final XFile capturedFile = await _cameraController.takePicture();
 
-      String? matchedUrl; // To store the specific URL that matches
+      Map<String, dynamic>? matchedUser;
 
-      // LOOP through ALL authorized faces
-      for (String refImageUrl in widget.authorizedFaceUrls) {
-        final result = await _compareFaces(capturedFile, refImageUrl);
+      // --- UPDATED LOOP: Iterate through _allStaffList ---
+      if (widget.role == 'Admin' && _allStaffList.isNotEmpty) {
+        for (var staffMember in _allStaffList) {
+          String refUrl = staffMember['faceUrl'];
 
-        if (result['matched'] == true) {
-          matchedUrl = refImageUrl; // Found the match
-          break; 
+          // Compare against API
+          final result = await _compareFaces(capturedFile, refUrl);
+
+          if (result['matched'] == true) {
+            matchedUser = staffMember;
+            break; // Stop loop immediately on match
+          }
+        }
+      } else {
+        // Fallback for other roles or if local list is empty (using passed List)
+        if (widget.authorizedFaceUrls != null) {
+          for (String refUrl in widget.authorizedFaceUrls!) {
+            final result = await _compareFaces(capturedFile, refUrl);
+            if (result['matched'] == true) {
+              // Create a dummy user map since we don't have details
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('staff_members').where(   'faceUrl', isEqualTo: refUrl)
+          .get();
+
+              matchedUser = { 
+                'fullName': snapshot.docs.isNotEmpty
+                    ? snapshot.docs.first.data()['fullName']
+                    : 'Authorized User',
+                'portfolio': snapshot.docs.isNotEmpty
+                    ? snapshot.docs.first.data()['portfolio']
+                    : 'Staff',
+                'province': snapshot.docs.isNotEmpty
+                    ? snapshot.docs.first.data()['province']
+                    : 'Unknown',
+                'faceUrl': refUrl,
+              };
+              break;
+            }
+          }
         }
       }
 
-      if (matchedUrl != null) {
-        // Match found, now find out who it is
-        await _identifyUser(matchedUrl);
+      if (matchedUser != null) {
+        await _finalizeLogin(matchedUser);
       } else {
         _handleFailure();
       }
     } catch (e) {
+      print("Verification Error: $e");
       _handleFailure();
     }
   }
@@ -234,26 +292,60 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     }
   }
 
-  // Updated to accept Name and Role
-  Future<void> _handleSuccess(String name, String role, String faceUrl) async {
-    if (!mounted) return;
+  // --- NEW: Finalize Login with Specific Data ---
+  Future<void> _finalizeLogin(Map<String, dynamic> userData) async {
+    setState(() => _statusMessage = "Logging in...");
 
-    // Note: Sign-in already happened in _identifyUser
+    try {
+      // Ensure Auth session exists
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: widget.email,
+          password: widget.password,
+        );
+      }
 
-    await playSound(true);
-    _api.showMessage(context, 'Welcome, $name', 'Access Granted', Colors.green);
+      if (!mounted) return;
+      await playSound(true);
 
-    if (mounted) {
+      _api.showMessage(
+        context,
+        'Welcome, ${userData['fullName']}',
+        'Access Granted',
+        Colors.green,
+      );
+
+      // Navigate
+      Widget nextScreen;
+      if (widget.role == 'Admin') {
+        nextScreen = AdminPortal(
+          // Pass the specific data we found in the list!
+          fullName: userData['fullName'],
+          portfolio: userData['portfolio'],
+          province: userData['province'],
+          faceUrl: userData['faceUrl'],
+        );
+      } else if (widget.role == 'Overseer') {
+        nextScreen = OverseerPage(
+          loggedMemberName: userData['fullName'],
+          loggedMemberRole: userData['portfolio'],
+          faceUrl: userData['faceUrl'],
+        );
+      } else {
+        nextScreen = TactsoBranchesApplications(
+          loggedMemberName: userData['fullName'],
+          loggedMemberRole: userData['portfolio'],
+          faceUrl: userData['faceUrl'],
+        );
+      }
+
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => TactsoBranchesApplications(
-            loggedMemberName: name,
-            loggedMemberRole: role,
-            faceUrl: faceUrl,
-          ),
-        ),
+        MaterialPageRoute(builder: (context) => nextScreen),
         (route) => false,
       );
+    } catch (e) {
+      print("Login Error: $e");
+      _handleFailure();
     }
   }
 
@@ -264,9 +356,11 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
       _isVerifying = false;
       _statusMessage = "Face not recognized. Try again.";
     });
+    // Optional: Sign out if you want strict security
+    await FirebaseAuth.instance.signOut();
     _api.showMessage(
       context,
-      "Access denied. Face not in committee list.",
+      "Access denied. Face not authorized.",
       'Denied',
       Colors.red,
     );
@@ -292,8 +386,8 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text(
-          'Biometric Check 📸',
+        title: Text(
+          '${widget.role} Verification 📸',
           style: TextStyle(color: Colors.black87),
         ),
         centerTitle: true,
@@ -308,8 +402,8 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
   Widget _buildCupertinoPage(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Biometric Check'),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('${widget.role} Check'),
         automaticallyImplyLeading: false,
         backgroundColor: Colors.blue,
         border: null,
@@ -320,40 +414,18 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
 
   Widget _buildBodyContent(BuildContext context) {
     if (!_cameraController.value.isInitialized) {
-      final color = Theme.of(context);
       return Center(
-        child: Container(
-          decoration: BoxDecoration(
-            color: color.primaryColor,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: color.primaryColor.withOpacity(0.7),
-              width: 2,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(25.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator.adaptive(),
-                const SizedBox(height: 20),
-                Text(
-                  _statusMessage,
-                  style: _isIOS
-                      ? CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                          color: CupertinoColors.systemGrey,
-                        )
-                      : Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                ),
-              ],
-            ),
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator.adaptive(),
+            const SizedBox(height: 20),
+            Text(_statusMessage),
+          ],
         ),
       );
     }
+
     final color = Theme.of(context);
 
     return Center(
@@ -378,35 +450,31 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 40),
+                // Show loading indicator if fetching staff
+                if (_isLoadingStaff && widget.role == 'Admin')
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 20),
+                    child: Text(
+                      "Loading Staff Database...",
+                      style: TextStyle(color: Colors.orange),
+                    ),
+                  ),
 
                 Padding(
                   padding: const EdgeInsets.all(30),
                   child: Text(
                     _statusMessage,
                     textAlign: TextAlign.center,
-                    style: _isIOS
-                        ? CupertinoTheme.of(
-                            context,
-                          ).textTheme.navLargeTitleTextStyle.copyWith(
-                            fontSize: 18,
-                            color: _isVerifying
-                                ? CupertinoColors.systemGrey
-                                : CupertinoColors.black,
-                            fontWeight: FontWeight.w600,
-                          )
-                        : Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontSize: 18,
-                            color: _isVerifying
-                                ? Colors.grey.shade600
-                                : Colors.black87,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: 18,
+                      color: _isVerifying
+                          ? Colors.grey.shade600
+                          : Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-
                 const SizedBox(height: 40),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 40,
@@ -414,10 +482,10 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
                   ),
                   child: _buildAdaptiveButton(
                     context: context,
-                    text: _isVerifying
-                        ? 'Verifying Identity...'
-                        : 'Verify Face',
-                    onPressed: _isVerifying ? null : _verifyFace,
+                    text: _isVerifying ? 'Verifying...' : 'Verify Face',
+                    onPressed: (_isVerifying || _isLoadingStaff)
+                        ? null
+                        : _verifyFace,
                     isLoading: _isVerifying,
                   ),
                 ),
@@ -439,7 +507,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
       final size = MediaQuery.of(context).size.width;
       return CupertinoButton.filled(
         minimumSize: Size(size > 600 ? 400 : double.infinity, 60),
-        sizeStyle: CupertinoButtonSize.large,
         color: Theme.of(context).primaryColor,
         onPressed: onPressed,
         disabledColor: CupertinoColors.systemGrey3,
@@ -475,7 +542,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
         style: ElevatedButton.styleFrom(
           minimumSize: const Size(double.infinity, 60),
           elevation: 4,
-          shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
           ),

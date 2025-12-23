@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/Item_Card.dart';
-import 'package:ttact/Pages/Payment.dart';
+import 'package:ttact/Pages/User/Payment.dart';
 import 'package:lottie/lottie.dart';
 
 // --- PLATFORM UTILITIES ---

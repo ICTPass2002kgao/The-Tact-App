@@ -9,11 +9,11 @@ import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart';
-import 'package:ttact/Pages/MyProfile.dart';
-import 'package:ttact/Pages/Rate.dart';
-import 'package:ttact/Pages/ShoppingPage.dart';
-import 'package:ttact/Pages/Tact_Seller.dart';
-import 'package:ttact/Pages/orders.dart';
+import 'package:ttact/Pages/User/MyProfile.dart';
+import 'package:ttact/Pages/User/Rate.dart';
+import 'package:ttact/Pages/User/ShoppingPage.dart';
+import 'package:ttact/Pages/User/Tact_Seller.dart';
+import 'package:ttact/Pages/User/orders.dart';
 import 'Events.dart';
 import 'HistoryPage.dart';
 import 'HomePage.dart';
@@ -362,6 +362,7 @@ class _MotherPageState extends State<MotherPage>
   Widget _buildMobileLayout(ThemeData theme, Widget content) {
     return Scaffold(
       appBar: AppBar(
+        elevation: 0,
         backgroundColor: theme.primaryColor, // Blue
         foregroundColor: Colors.white,
         centerTitle: true,

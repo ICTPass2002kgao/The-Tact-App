@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Pages/Tact_Seller.dart';
+import 'package:ttact/Pages/User/Tact_Seller.dart';
 
 class VerificationScreen extends StatefulWidget {
   final String name;

@@ -15,12 +15,12 @@ import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:ttact/Components/AdBanner.dart';
-import 'package:ttact/Pages/Email_Verification_Page.dart';
+import 'package:ttact/Components/AdBanner.dart'; 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:ttact/Pages/Email_Verification_Page.dart';
 
-import '../Components/CustomOutlinedButton.dart';
-import '../Components/API.dart';
+import '../../Components/CustomOutlinedButton.dart';
+import '../../Components/API.dart';
 
 // --- PLATFORM UTILITIES ---
 // UPDATED: This logic now checks the OS, even on the web.

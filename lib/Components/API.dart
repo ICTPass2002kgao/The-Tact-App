@@ -219,22 +219,16 @@ class Api {
           businessName: '${name} ${surname}\' s Shopping',
           email: email,
           accountNumber: accountNumber,
-          bankCode: bankCode, // get this from user input
-        );
+          bankCode: bankCode,  );
 
         if (subaccountCode != null) {
           sendEmail(email, "Seller Account Created – Pending Verification", """
   <p>Dear ${name} ${surname},</p>
-
   <p>Welcome to <strong>Dankie Mobile (TACT)</strong>! Your seller account has been created successfully.</p>
-
   <p>Our team will now review and verify your account details to ensure everything is in order. 
   This process usually takes a short while, and you’ll receive an email notification once your account has been approved.</p>
-
   <p>After verification, you’ll be able to start adding your products and managing your sales on the platform.</p>
-
   <p>If you did not register as a seller or believe this was a mistake, please contact our support team immediately.</p>
-
   <br>
   <p>Best regards,<br>
   The Dankie Mobile Support Team</p>
@@ -245,30 +239,43 @@ class Api {
             "New Seller Registration – Verification Required",
             """
   <p>Hello Admin,</p>
-
   <p>A new seller has registered on <strong>Dankie Mobile (TACT)</strong>:</p>
-
   <ul>
     <li>Name: ${name} ${surname}</li>
     <li>Email: ${email}</li>
     <li>Registered At: ${DateTime.now().toLocal()}</li>
   </ul>
-
   <p>Please review and verify this seller account as soon as possible so they can start selling on the platform.</p>
-
   <br>
   <p>Best regards,<br>
   Dankie Mobile System Notification</p>
+
   """,
             context,
           );
           print('Subaccount created: $subaccountCode');
         } else {
           // Handle failure
-          print('Failed to create Paystack subaccount');
+          // A. Delete the data we just wrote to Firestore
+          await _firestore.collection('users').doc(user?.uid).delete();
+
+          // B. Delete the User from Firebase Auth
+          await user?.delete();
+          Navigator.pop(context);
+          Navigator.pop(context);
+          debugPrint('Failed to create Paystack subaccount');
+          // C. Stop execution immediately by throwing an error
+          Api().showMessage(
+            context,
+            'Could not verify bank details. Account creation cancelled',
+            'Error',
+            Colors.red,
+          );
+          throw Exception(
+            "Could not verify bank details. Account creation cancelled.",
+          );
         }
       }
-      await user?.sendEmailVerification();
 
       Navigator.pop(context);
       if (role == 'Member ') {
@@ -461,36 +468,6 @@ class Api {
           Center(child: CupertinoActivityIndicator(color: color.primaryColor)),
     );
   }
-
-  // Future<void> sendEmail(
-
-  // String recipientEmail, String subject, String body) async {
-
-  // final smtpServer = gmail('accomate33@gmail.com', 'nhle ndut leqq baho');
-
-  // final message = Message()
-
-  // ..from = Address('accomate33@gmail.com', 'Accomate')
-
-  // ..recipients.add(recipientEmail)
-
-  // ..subject = subject
-
-  // ..html = body;
-
-  // try {
-
-  // await send(message, smtpServer);
-
-  // print('Email sent successfully');
-
-  // } catch (e) {
-
-  // print('Error sending email: $e');
-
-  // }}
-
-  //Music API
 }
 
 class AudioPlayerService {
@@ -528,102 +505,6 @@ class AudioPlayerService {
     isPlaying = false;
   }
 }
-
-// Assuming your Song model is in lib/Components/song.dart
-
-// You'll need to modify it as well to include 'localFilePath'
-
-// If you haven't, please update your Song class first:
-
-/*
-
-class Song {
-
-final String? id;
-
-final String? songName;
-
-final String? artist;
-
-final String? songUrl; // URL to the song on Firebase Storage
-
-final Timestamp? createdAt;
-
-final String? localFilePath; // NEW: Path to the locally downloaded file
-
-
-
-Song({
-
-this.id,
-
-this.songName,
-
-this.artist,
-
-this.songUrl,
-
-this.createdAt,
-
-this.localFilePath,
-
-});
-
-
-
-factory Song.fromMap(Map<String, dynamic> map) {
-
-return Song(
-
-id: map['id'] as String?,
-
-songName: map['songName'] as String?,
-
-artist: map['artist'] as String?,
-
-songUrl: map['songUrl'] as String?,
-
-createdAt: map['createdAt'] is Timestamp
-
-? map['createdAt'] as Timestamp
-
-: (map['createdAt'] != null
-
-? Timestamp.fromDate(DateTime.parse(map['createdAt']))
-
-: null),
-
-localFilePath: map['localFilePath'] as String?,
-
-);
-
-}
-
-
-
-Map<String, dynamic> toMap() {
-
-return {
-
-'id': id,
-
-'songName': songName,
-
-'artist': artist,
-
-'songUrl': songUrl,
-
-'createdAt': createdAt,
-
-'localFilePath': localFilePath,
-
-};
-
-}
-
-}
-
-*/
 
 class LocalStorageService {
   static final LocalStorageService _instance = LocalStorageService._internal();

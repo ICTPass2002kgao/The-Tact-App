@@ -31,12 +31,13 @@ class CareerOpportunities extends StatefulWidget {
 }
 
 class _CareerOpportunitiesState extends State<CareerOpportunities> {
-  // Categories for Tabs
+  // Categories for Tabs - UPDATED with In-Service Training
   final List<String> _tabs = [
     'All',
     'Bursary',
     'Scholarship',
     'Internship',
+    'In-Service Training',
     'Job',
     'Learnership',
   ];
@@ -73,21 +74,32 @@ class _CareerOpportunitiesState extends State<CareerOpportunities> {
     if (cat == 'job') {
       return """Dear Hiring Manager,
 
-I hope you are well.
+I hope this message finds you well.
 
-My name is $userName, and I would like to formally apply for the $titleUpper position. I am in need of this opportunity, as it would greatly support me in advancing my career and improving my personal stability.
+My name is $userName, and I am writing to formally apply for the $titleUpper position. I am highly motivated and eager to contribute my skills, dedication, and willingness to learn within your organization.
 
-Sincerely,
-$userName""";
+This opportunity would allow me to further develop my professional experience while adding value to your team through hard work, reliability, and a positive attitude. I am confident that I can adapt quickly and perform effectively in a professional environment.
+
+Thank you for considering my application. I would appreciate the opportunity to discuss how my skills and enthusiasm can benefit your organization.
+
+Sincerely,  
+$userName
+""";
     } else {
+      // General Body for Internships, In-Service, Bursaries, Learnerships
       return """Dear Hiring Team,
 
 I hope you are doing well.
 
-My name is $userName, and I am writing to apply for the $titleUpper ($cat) opportunity.
+My name is $userName, and I am writing to express my interest in the $titleUpper opportunity. I am enthusiastic about the possibility of gaining practical experience and expanding my knowledge in this field.
 
-Kind regards,
-$userName""";
+I am committed, eager to learn, and ready to contribute positively while developing valuable skills through this opportunity. I believe this experience would play an important role in my personal and professional growth.
+
+Thank you for your time and consideration. I look forward to the possibility of hearing from you.
+
+Kind regards,  
+$userName
+""";
     }
   }
 
@@ -121,7 +133,6 @@ $userName""";
   }
 
   // --- 3. REUSABLE DETAILS CONTENT ---
-  // Extracted this so it can be used in both the BottomSheet (Mobile) and SidePanel (Desktop)
   Widget _buildDetailsContent({
     required Map<String, dynamic> data,
     required String docId,
@@ -130,25 +141,32 @@ $userName""";
     required VoidCallback onClose,
   }) {
     String title = data['title'] ?? 'Opportunity';
+    String category = data['category'] ?? 'General';
+    String instructions = data['instructions'] ?? '';
     String oldDescription = data['description'] ?? '';
     List<dynamic> docs = data['requiredDocuments'] ?? [];
     String email = data['applicationEmail'] ?? '';
+    String? applicationFormUrl = data['applicationFormUrl'];
 
+    // Extract Details from Map
     Map<String, dynamic> details = data['details'] ?? {};
     String subtitle = details['subtitle'] ?? '';
     String address = details['address'] ?? '';
     String contactNum = details['contactNumber'] ?? '';
+    String financial = details['financial'] ?? ''; // Salary/Stipend
+    String duration = details['duration'] ?? '';
+    String location = details['location'] ?? '';
 
     List<dynamic> requirementsList = details['requirementsList'] ?? [];
     List<dynamic> dutiesList = details['dutiesList'] ?? [];
+    List<dynamic> benefitsList = details['benefits'] ?? []; // For Bursaries
+    List<dynamic> coursesList = details['coursesList'] ?? []; // For Bursaries
 
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: ListView(
-        // IMPORTANT: On mobile sheet, we MUST use the provided scrollController
         controller: scrollController,
-        shrinkWrap:
-            !isScrollableSheet, // If in side panel, don't shrink wrap excessively
+        shrinkWrap: !isScrollableSheet,
         children: [
           if (isScrollableSheet) ...[
             Center(
@@ -163,7 +181,6 @@ $userName""";
             ),
             SizedBox(height: 20),
           ] else ...[
-            // Close button for Desktop Side Panel
             Align(
               alignment: Alignment.topRight,
               child: IconButton(icon: Icon(Icons.close), onPressed: onClose),
@@ -176,6 +193,22 @@ $userName""";
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        category.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 5),
                     Text(
                       title.toUpperCase(),
                       style: TextStyle(
@@ -203,7 +236,293 @@ $userName""";
               ),
             ],
           ),
+          SizedBox(height: 15),
+
+          // --- ⭐️ NEW: Quick Info Row (Salary, Location, Duration) ---
+          if (financial.isNotEmpty ||
+              location.isNotEmpty ||
+              duration.isNotEmpty)
+            Container(
+              margin: EdgeInsets.only(bottom: 20),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  if (financial.isNotEmpty)
+                    _buildQuickInfoItem(
+                      Icons.payments_outlined,
+                      financial,
+                      "Stipend/Salary",
+                    ),
+                  if (location.isNotEmpty)
+                    _buildQuickInfoItem(
+                      Icons.location_on_outlined,
+                      location,
+                      "Location",
+                    ),
+                  if (duration.isNotEmpty)
+                    _buildQuickInfoItem(
+                      Icons.timer_outlined,
+                      duration,
+                      "Duration",
+                    ),
+                ],
+              ),
+            ),
+
+          // --- Z83 / Application Form Download Section ---
+          if (applicationFormUrl != null && applicationFormUrl.isNotEmpty) ...[
+            Container(
+              margin: EdgeInsets.only(bottom: 20),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.file_present, color: Colors.orange[800], size: 30),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Application Form Required",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.orange[900],
+                          ),
+                        ),
+                        Text(
+                          "Download, fill and attach to application.",
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _launchWebURL(applicationFormUrl),
+                    icon: Icon(Icons.download, size: 16),
+                    label: Text("Download"),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.orange[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (instructions.isNotEmpty) ...[
+            Container(
+              margin: EdgeInsets.only(bottom: 20),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.yellow.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange[800], size: 30),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Read Application Instructions",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.orange[900],
+                          ),
+                        ),
+                        Text(
+                          instructions,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          //space
           SizedBox(height: 10),
+          // --- ⭐️ NEW: Fields of Study (For Bursaries) ---
+          if (coursesList.isNotEmpty) ...[
+            Text(
+              "Fields of Study:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: coursesList.map((course) {
+                return Chip(
+                  label: Text(
+                    course.toString(),
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  backgroundColor: Theme.of(
+                    context,
+                  ).primaryColor.withOpacity(0.1),
+                  side: BorderSide.none,
+                );
+              }).toList(),
+            ),
+            Divider(height: 30),
+          ],
+
+          // Requirements List
+          if (requirementsList.isNotEmpty) ...[
+            Text(
+              "Requirements:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            ...requirementsList.map(
+              (r) => Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("• ", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Expanded(child: Text(r.toString())),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 30),
+          ],
+
+          // Duties/Modules/Description
+          if (dutiesList.isNotEmpty) ...[
+            Text(
+              category == 'Learnership'
+                  ? "Modules / Syllabus:"
+                  : "Qualifications / Duties:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            ...dutiesList.map(
+              (d) => Padding(
+                padding: const EdgeInsets.only(bottom: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("• ", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Expanded(child: Text(d.toString())),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 30),
+          ] else if (oldDescription.isNotEmpty) ...[
+            Text(
+              "Description:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(oldDescription, style: TextStyle(fontSize: 14, height: 1.5)),
+            Divider(height: 30),
+          ],
+
+          // --- ⭐️ NEW: Benefits (For Bursaries) ---
+          if (benefitsList.isNotEmpty) ...[
+            Text(
+              "What it Covers:",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: benefitsList.map((b) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    SizedBox(width: 4),
+                    Text(b.toString(), style: TextStyle(fontSize: 13)),
+                    SizedBox(width: 10),
+                  ],
+                );
+              }).toList(),
+            ),
+            Divider(height: 30),
+          ],
+
+          // Documents
+          Text(
+            "Required Documents:",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).primaryColor,
+            ),
+          ),
+          SizedBox(height: 10),
+          if (docs.isEmpty)
+            Text(
+              "• CV & ID (Standard Requirement)",
+              style: TextStyle(fontStyle: FontStyle.italic),
+            )
+          else
+            ...docs.map(
+              (doc) => Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.check_box_outlined,
+                      size: 18,
+                      color: Colors.green,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        doc.toString(),
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          Divider(height: 30),
 
           // Contact & Submission Section
           if (address.isNotEmpty ||
@@ -286,107 +605,8 @@ $userName""";
                   onPressed: () => _launchCall(contactNum),
                 ),
               ),
-            Divider(),
           ],
 
-          // Requirements List
-          if (requirementsList.isNotEmpty) ...[
-            Text(
-              "Requirements:",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            SizedBox(height: 8),
-            ...requirementsList.map(
-              (r) => Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("• ", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(r.toString())),
-                  ],
-                ),
-              ),
-            ),
-            Divider(height: 30),
-          ],
-
-          // Duties/Modules/Description
-          if (dutiesList.isNotEmpty) ...[
-            Text(
-              "Duties / Modules:",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            SizedBox(height: 8),
-            ...dutiesList.map(
-              (d) => Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("• ", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(d.toString())),
-                  ],
-                ),
-              ),
-            ),
-            Divider(height: 30),
-          ] else if (oldDescription.isNotEmpty) ...[
-            Text(
-              "Description:",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(oldDescription, style: TextStyle(fontSize: 14, height: 1.5)),
-            Divider(height: 30),
-          ],
-
-          // Documents
-          Text(
-            "Required Documents:",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).primaryColor,
-            ),
-          ),
-          SizedBox(height: 10),
-          if (docs.isEmpty)
-            Text(
-              "• CV & ID (Standard Requirement)",
-              style: TextStyle(fontStyle: FontStyle.italic),
-            )
-          else
-            ...docs.map(
-              (doc) => Padding(
-                padding: const EdgeInsets.only(bottom: 6.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.check_box_outlined,
-                      size: 18,
-                      color: Colors.green,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        doc.toString(),
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           SizedBox(height: 30),
           SizedBox(
             width: double.infinity,
@@ -411,6 +631,22 @@ $userName""";
           ),
         ],
       ),
+    );
+  }
+
+  // --- Helper Widget for Quick Info ---
+  Widget _buildQuickInfoItem(IconData icon, String text, String label) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.grey[700], size: 20),
+        SizedBox(height: 4),
+        Text(
+          text,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+        Text(label, style: TextStyle(color: Colors.grey, fontSize: 10)),
+      ],
     );
   }
 
@@ -628,7 +864,7 @@ $userName""";
 
   Future<void> _launchWebURL(String urlString) async {
     final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.inAppBrowserView)) {
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -642,7 +878,7 @@ $userName""";
     if (!await launchUrl(url)) {
       await launchUrl(
         Uri.parse(
-          "https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}",
+          "http://googleusercontent.com/maps.google.com/?q=${Uri.encodeComponent(address)}",
         ),
       );
     }
@@ -961,12 +1197,18 @@ $userName""";
               SizedBox(
                 width: 110,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (ctx, err, stack) => Image.asset(
-                          "assets/dankie_logo.PNG",
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.network(
+                          imageUrl,
                           fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, stack) => ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: Image.asset(
+                              "assets/dankie_logo.PNG",
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       )
                     : Image.asset("assets/dankie_logo.PNG", fit: BoxFit.cover),

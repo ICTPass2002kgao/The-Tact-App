@@ -12,6 +12,10 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:ttact/Components/API.dart';
 
+// ⭐️ IMPORTS
+import 'package:ttact/Components/BibleVerseRepository.dart';
+import 'package:ttact/Components/Upcoming_events_card.dart';
+
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 700.0;
 
@@ -38,6 +42,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   DateTime? _selectedDate;
   XFile? _pickedPoster;
   String? _selectedProvince;
+  String? _selectedCategoryForAdd; // ⭐️ For adding new event
 
   // Controllers for EDIT Event Sheet
   final TextEditingController _editDescriptionController =
@@ -45,6 +50,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   final TextEditingController _liveStreamLinkController =
       TextEditingController();
   XFile? _editPickedPoster;
+  String? _selectedCategoryForEdit; // ⭐️ For editing event
 
   final List<String> _southAfricanProvinces = [
     'Eastern Cape',
@@ -58,11 +64,27 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     'Western Cape',
   ];
 
-  List<Map<String, dynamic>> _filteredEvents = [];
+  // ⭐️ CATEGORIES LIST (Consistent across app)
+  final List<String> _eventCategories = [
+    "Youth",
+    "Worship",
+    "Outreach",
+    "Academic",
+    "Gala",
+    "General",
+  ];
+
+  List<Map<String, dynamic>> _allFetchedEvents = []; // Store ALL events here
+  List<Map<String, dynamic>> _filteredEvents = []; // Store FILTERED events here
   bool _isLoadingEvents = true;
 
   // Helper to track segmented control index for iOS
   int _currentSegment = 0;
+
+  // ⭐️ FILTER STATE (For Viewing)
+  int _selectedCategoryFilterIndex = 0;
+  // "All" is index 0 for filters, followed by the actual categories
+  List<String> get _filterCategories => ["All", ..._eventCategories];
 
   @override
   void initState() {
@@ -92,6 +114,771 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     super.dispose();
   }
 
+  // --- CORE FUNCTIONALITY ---
+
+  Future<String> _uploadFile(XFile file, String path) async {
+    final ref = FirebaseStorage.instance.ref(path);
+    UploadTask uploadTask;
+
+    if (_isWeb) {
+      final bytes = await file.readAsBytes();
+      uploadTask = ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+    } else {
+      uploadTask = ref.putFile(io.File(file.path));
+    }
+
+    final snapshot = await uploadTask;
+    return await snapshot.ref.getDownloadURL();
+  }
+
+  Future<void> _fetchAndFilterEvents() async {
+    setState(() {
+      _isLoadingEvents = true;
+    });
+
+    try {
+      final QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('upcoming_events')
+          .orderBy('parsedDate', descending: false)
+          .get();
+
+      // 1. Parse all documents
+      List<Map<String, dynamic>> fetchedEvents = snapshot.docs
+          .map((doc) => doc.data() as Map<String, dynamic>..['id'] = doc.id)
+          .toList();
+
+      final DateTime now = DateTime.now();
+
+      // 2. Filter by Date (Future only)
+      _allFetchedEvents = fetchedEvents.where((event) {
+        final DateTime? eventDate = _parseEventStartDate(event);
+        if (eventDate == null) {
+          return event['day']?.toLowerCase()?.contains('to be confirmed') ??
+              false;
+        }
+        final DateTime today = DateTime(now.year, now.month, now.day);
+        final DateTime eventDay = DateTime(
+          eventDate.year,
+          eventDate.month,
+          eventDate.day,
+        );
+        return eventDay.isAfter(today) || eventDay.isAtSameMomentAs(today);
+      }).toList();
+
+      // 3. Apply Category Filter
+      _applyCategoryFilter();
+    } catch (e) {
+      print('Error fetching events: $e');
+      if (mounted) {
+        Api().showMessage(
+          context,
+          "Failed to load: ${e.toString()}",
+          '',
+          Theme.of(context).primaryColorDark,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingEvents = false);
+      }
+    }
+  }
+
+  // ⭐️ NEW: Apply Filter Logic
+  void _applyCategoryFilter() {
+    String selectedCategory = _filterCategories[_selectedCategoryFilterIndex];
+
+    setState(() {
+      if (selectedCategory == "All") {
+        _filteredEvents = List.from(_allFetchedEvents);
+      } else {
+        _filteredEvents = _allFetchedEvents.where((event) {
+          // Check if event has 'category' field and matches
+          String? eventCat = event['category'];
+          return eventCat == selectedCategory;
+        }).toList();
+      }
+
+      // Sort by date
+      _filteredEvents.sort((a, b) {
+        final DateTime? dateA = _parseEventStartDate(a);
+        final DateTime? dateB = _parseEventStartDate(b);
+
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateA.compareTo(dateB);
+      });
+    });
+  }
+
+  Future<void> _addEvent() async {
+    // ⭐️ Validation Check including Category
+    if (_titleController.text.isEmpty ||
+        _descriptionController.text.isEmpty ||
+        _selectedDate == null ||
+        _selectedProvince == null ||
+        _selectedCategoryForAdd == null) {
+      Api().showMessage(
+        context,
+        "Please fill all fields (Name, Desc, Date, Province, Category)",
+        '',
+        Theme.of(context).colorScheme.error,
+      );
+      return;
+    }
+
+    Api().showLoading(context);
+
+    try {
+      String? posterUrl;
+      if (_pickedPoster != null) {
+        final String fileName =
+            'event_posters/${DateTime.now().millisecondsSinceEpoch}_${_titleController.text.replaceAll(' ', '_')}.jpg';
+        posterUrl = await _uploadFile(_pickedPoster!, fileName);
+      }
+
+      await FirebaseFirestore.instance.collection('upcoming_events').add({
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'day': DateFormat('dd').format(_selectedDate!),
+        'month': DateFormat('MMM').format(_selectedDate!),
+        'year': DateFormat('yyyy').format(_selectedDate!),
+        'parsedDate': Timestamp.fromDate(_selectedDate!),
+        'posterUrl': posterUrl ?? '',
+        'province': _selectedProvince,
+        'category': _selectedCategoryForAdd, // ⭐️ Save Category
+        'liveStreamLink': '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        "Event added successfully!",
+        '',
+        Theme.of(context).splashColor,
+      );
+
+      _titleController.clear();
+      _descriptionController.clear();
+      setState(() {
+        _selectedDate = null;
+        _pickedPoster = null;
+        _selectedProvince = null;
+        _selectedCategoryForAdd = null; // Reset
+      });
+
+      if (isIOSPlatform) {
+        setState(() => _currentSegment = 0);
+        _tabController.animateTo(0);
+      } else {
+        _tabController.animateTo(0);
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        "Failed to add event: ${e.toString()}",
+        '',
+        Theme.of(context).primaryColorDark,
+      );
+    }
+  }
+
+  Future<void> _updateEventDetails({
+    required String documentId,
+    required String newDescription,
+    required String newLink,
+    required String? newCategory, // ⭐️ Update Category
+    required XFile? newPosterFile,
+    required String? currentPosterUrl,
+  }) async {
+    Api().showLoading(context);
+
+    try {
+      String updatedPosterUrl = currentPosterUrl ?? '';
+
+      if (newPosterFile != null) {
+        final String fileName =
+            'event_posters/${documentId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        updatedPosterUrl = await _uploadFile(newPosterFile, fileName);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('upcoming_events')
+          .doc(documentId)
+          .update({
+            'description': newDescription.trim(),
+            'liveStreamLink': newLink.trim(),
+            'category': newCategory, // ⭐️ Save Update
+            'posterUrl': updatedPosterUrl,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      Navigator.pop(context); // Close Loading
+      Navigator.pop(context); // Close Sheet
+
+      Api().showMessage(
+        context,
+        "Event updated successfully!",
+        '',
+        Theme.of(context).splashColor,
+      );
+
+      _fetchAndFilterEvents();
+    } catch (e) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        "Failed to update event: ${e.toString()}",
+        '',
+        Theme.of(context).primaryColorDark,
+      );
+    }
+  }
+
+  // --- EDIT SHEET (Adaptive) ---
+  void _showEditEventSheet(Map<String, dynamic> event) {
+    final String documentId = event['id'] as String;
+    final String currentPosterUrl = event['posterUrl'] as String? ?? '';
+    final String currentTitle = event['title'] as String? ?? 'N/A';
+
+    // Initialize Controllers
+    _editDescriptionController.text = event['description'] as String? ?? '';
+    _liveStreamLinkController.text = event['liveStreamLink'] as String? ?? '';
+
+    // ⭐️ Initialize Category for Edit
+    String? currentCat = event['category'] as String?;
+    if (currentCat != null && _eventCategories.contains(currentCat)) {
+      _selectedCategoryForEdit = currentCat;
+    } else {
+      _selectedCategoryForEdit = _eventCategories.last; // Default to 'General'
+    }
+
+    _editPickedPoster = null;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isIOSPlatform ? Colors.transparent : null,
+      builder: (context) {
+        final color = Theme.of(context);
+        final childContent = Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 600),
+            child: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setModalState) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                    top: 20,
+                    left: 16,
+                    right: 16,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (isIOSPlatform)
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              margin: const EdgeInsets.only(bottom: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        Text(
+                          'Edit: $currentTitle',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: color.primaryColor,
+                          ),
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 16),
+                        _buildPlatformTextField(
+                          controller: _editDescriptionController,
+                          label: 'Update Description',
+                          maxLines: 5,
+                          minLines: 3,
+                          keyboardType: TextInputType.multiline,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ⭐️ EDIT CATEGORY DROPDOWN
+                        _buildPlatformDropdown(
+                          value: _selectedCategoryForEdit,
+                          items: _eventCategories,
+                          hint: "Event Category",
+                          onChanged: (val) {
+                            setModalState(() => _selectedCategoryForEdit = val);
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+                        _buildPlatformTextField(
+                          controller: _liveStreamLinkController,
+                          label: 'Live Stream/URL Link',
+                          prefixIcon: isIOSPlatform
+                              ? CupertinoIcons.link
+                              : Icons.link,
+                          keyboardType: TextInputType.url,
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildPlatformButton(
+                                onPressed: () async {
+                                  final ImagePicker picker = ImagePicker();
+                                  final XFile? image = await picker.pickImage(
+                                    source: ImageSource.gallery,
+                                  );
+                                  if (image != null) {
+                                    setModalState(
+                                      () => _editPickedPoster = image,
+                                    );
+                                  }
+                                },
+                                text: _editPickedPoster == null
+                                    ? 'Change Poster'
+                                    : 'New Selected',
+                                icon: isIOSPlatform
+                                    ? CupertinoIcons.photo
+                                    : Icons.image,
+                                color: color.splashColor,
+                              ),
+                            ),
+                            if (currentPosterUrl.isNotEmpty ||
+                                _editPickedPoster != null) ...[
+                              const SizedBox(width: 8),
+                              isIOSPlatform
+                                  ? CupertinoButton(
+                                      child: const Text('Clear'),
+                                      onPressed: () => setModalState(
+                                        () => _editPickedPoster = null,
+                                      ),
+                                    )
+                                  : TextButton(
+                                      onPressed: () => setModalState(
+                                        () => _editPickedPoster = null,
+                                      ),
+                                      child: const Text('Clear'),
+                                    ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (_editPickedPoster != null)
+                          _buildImagePreview(
+                            _editPickedPoster!,
+                            150,
+                            setModalState,
+                          )
+                        else if (currentPosterUrl.isNotEmpty)
+                          _buildNetworkImagePreview(currentPosterUrl),
+                        const SizedBox(height: 24),
+                        _buildPlatformButton(
+                          onPressed: () {
+                            if (_editDescriptionController.text.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                "Description cannot be empty.",
+                                '',
+                                Theme.of(context).colorScheme.error,
+                              );
+                              return;
+                            }
+                            _updateEventDetails(
+                              documentId: documentId,
+                              newDescription: _editDescriptionController.text,
+                              newLink: _liveStreamLinkController.text,
+                              newCategory: _selectedCategoryForEdit, // ⭐️ Pass
+                              newPosterFile: _editPickedPoster,
+                              currentPosterUrl: currentPosterUrl,
+                            );
+                          },
+                          text: 'Save Updates',
+                          icon: isIOSPlatform
+                              ? CupertinoIcons.floppy_disk
+                              : Icons.save,
+                        ),
+                        const SizedBox(height: 8),
+                        if (isIOSPlatform)
+                          CupertinoButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          )
+                        else
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+
+        if (isIOSPlatform) {
+          return Container(
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemBackground.resolveFrom(context),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+            ),
+            child: childContent,
+          );
+        } else {
+          return childContent;
+        }
+      },
+    );
+  }
+
+  // --- UI WIDGETS ---
+
+  Widget _buildDailyVerseCard(ThemeData color, Map<String, String> verseData) {
+    return Card(
+      elevation: 8,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: [color.primaryColor, color.primaryColor.withOpacity(0.8)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(1.0),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(19),
+              color: color.scaffoldBackgroundColor,
+            ),
+            padding: const EdgeInsets.all(15.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Daily Verse',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: color.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Divider(
+                  height: 25,
+                  thickness: 1,
+                  color: color.primaryColor.withOpacity(0.2),
+                ),
+                Text(
+                  '"${verseData['text']}"',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    height: 1.5,
+                    fontWeight: FontWeight.w400,
+                    fontSize: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 15),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '- ${verseData['ref']}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: color.primaryColor.withOpacity(0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOpportunityBanner(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0D47A1), Color(0xFF42A5F5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            top: -20,
+            child: CircleAvatar(
+              radius: 60,
+              backgroundColor: Colors.white.withOpacity(0.1),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          "NEW OPPORTUNITIES",
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        "Bursaries & Internships",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        "Boost your career today!",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      InkWell(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Navigating to Opportunities..."),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: const Text(
+                            "Check Now",
+                            style: TextStyle(
+                              color: Color(0xFF0D47A1),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.school_rounded,
+                  size: 80,
+                  color: Colors.white.withOpacity(0.2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ⭐️ MERGED: Category Filter Chips
+  Widget _buildCategoryFilters(ThemeData color) {
+    return SizedBox(
+      height: 40,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _filterCategories.length,
+        itemBuilder: (context, index) {
+          final isSelected = _selectedCategoryFilterIndex == index;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedCategoryFilterIndex = index;
+                  _applyCategoryFilter(); // Apply Filter locally without fetch
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? color.primaryColor : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? color.primaryColor
+                        : Colors.grey.withOpacity(0.3),
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: color.primaryColor.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Center(
+                  child: Text(
+                    _filterCategories[index],
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.grey.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ⭐️ MERGED: Interactive Empty State (Admin Version)
+  Widget _buildInteractiveEmptyState(ThemeData color) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+        margin: const EdgeInsets.only(top: 20),
+        decoration: BoxDecoration(
+          color: color.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.primaryColor.withOpacity(0.05),
+              ),
+              child: Icon(
+                Icons.event_note,
+                size: 60,
+                color: color.primaryColor.withOpacity(0.5),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "No Events Found",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color.primaryColor,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "There are no events in this category.\nTry clearing the filter or add one!",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+            const SizedBox(height: 25),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedCategoryFilterIndex = 0; // Reset to "All"
+                      _applyCategoryFilter();
+                    });
+                  },
+                  icon: const Icon(Icons.clear_all, size: 18),
+                  label: const Text("Clear Filter"),
+                ),
+                const SizedBox(width: 15),
+                // Admin specific "Add Event" button
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // Switch to Add Tab
+                    setState(() => _currentSegment = 1);
+                    _tabController.animateTo(1);
+                  },
+                  icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                  label: const Text(
+                    "Add Event",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // --- PLATFORM BUILDER HELPERS ---
 
   Widget _buildPlatformLoader() {
@@ -118,7 +905,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
           disabledColor: CupertinoColors.quaternarySystemFill,
           borderRadius: BorderRadius.circular(10),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          // Use provided color or default primary
           minSize: 45,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -235,7 +1021,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
               CupertinoButton(
                 child: const Text('Done'),
                 onPressed: () => Navigator.pop(ctx),
-              )
+              ),
             ],
           ),
         ),
@@ -305,7 +1091,13 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     }
   }
 
-  Widget _buildPlatformDropdown() {
+  // ⭐️ Reusable Dropdown for Province AND Category
+  Widget _buildPlatformDropdown({
+    required String? value,
+    required List<String> items,
+    required String hint,
+    required ValueChanged<String?> onChanged,
+  }) {
     if (isIOSPlatform) {
       return GestureDetector(
         onTap: () {
@@ -321,11 +1113,9 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                     child: CupertinoPicker(
                       itemExtent: 32,
                       onSelectedItemChanged: (int index) {
-                        setState(() {
-                          _selectedProvince = _southAfricanProvinces[index];
-                        });
+                        onChanged(items[index]);
                       },
-                      children: _southAfricanProvinces
+                      children: items
                           .map((e) => Center(child: Text(e)))
                           .toList(),
                     ),
@@ -333,16 +1123,13 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                   CupertinoButton(
                     child: const Text('Done'),
                     onPressed: () => Navigator.pop(ctx),
-                  )
+                  ),
                 ],
               ),
             ),
           );
-          // Set default if null when opening
-          if (_selectedProvince == null) {
-            setState(() {
-              _selectedProvince = _southAfricanProvinces[0];
-            });
+          if (value == null && items.isNotEmpty) {
+            onChanged(items[0]);
           }
         },
         child: Container(
@@ -356,447 +1143,39 @@ class _PortalAddFeedState extends State<PortalAddFeed>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _selectedProvince ?? 'Select Province',
+                value ?? hint,
                 style: TextStyle(
-                  color: _selectedProvince == null
+                  color: value == null
                       ? CupertinoColors.placeholderText
                       : CupertinoColors.label.resolveFrom(context),
                 ),
               ),
-              const Icon(CupertinoIcons.chevron_down,
-                  size: 16, color: CupertinoColors.systemGrey),
+              const Icon(
+                CupertinoIcons.chevron_down,
+                size: 16,
+                color: CupertinoColors.systemGrey,
+              ),
             ],
           ),
         ),
       );
     } else {
       return DropdownButtonFormField<String>(
-        value: _selectedProvince,
-        decoration: const InputDecoration(
-          labelText: 'Province',
+        value: value,
+        decoration: InputDecoration(
+          labelText: hint,
           border: OutlineInputBorder(),
         ),
-        hint: const Text('Select Province'),
-        items: _southAfricanProvinces
+        hint: Text(hint),
+        items: items
             .map(
-              (String province) => DropdownMenuItem<String>(
-                value: province,
-                child: Text(province),
-              ),
+              (String item) =>
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
             )
             .toList(),
-        onChanged: (String? newValue) =>
-            setState(() => _selectedProvince = newValue),
+        onChanged: onChanged,
       );
     }
-  }
-
-  // --- CORE FUNCTIONALITY (Unchanged Logic) ---
-
-  Future<String> _uploadFile(XFile file, String path) async {
-    final ref = FirebaseStorage.instance.ref(path);
-    UploadTask uploadTask;
-
-    if (_isWeb) {
-      final bytes = await file.readAsBytes();
-      uploadTask = ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-    } else {
-      uploadTask = ref.putFile(io.File(file.path));
-    }
-
-    final snapshot = await uploadTask;
-    return await snapshot.ref.getDownloadURL();
-  }
-
-  Future<void> _fetchAndFilterEvents() async {
-    setState(() {
-      _isLoadingEvents = true;
-    });
-
-    try {
-      final QuerySnapshot snapshot = await FirebaseFirestore.instance
-          .collection('upcoming_events')
-          .orderBy('parsedDate', descending: false)
-          .get();
-
-      List<Map<String, dynamic>> fetchedEvents = snapshot.docs
-          .map((doc) => doc.data() as Map<String, dynamic>..['id'] = doc.id)
-          .toList();
-
-      final DateTime now = DateTime.now();
-      _filteredEvents = fetchedEvents.where((event) {
-        final DateTime? eventDate = _parseEventStartDate(event);
-        if (eventDate == null) {
-          return event['day']?.toLowerCase()?.contains('to be confirmed') ??
-              false;
-        }
-        final DateTime today = DateTime(now.year, now.month, now.day);
-        final DateTime eventDay = DateTime(
-          eventDate.year,
-          eventDate.month,
-          eventDate.day,
-        );
-        return eventDay.isAfter(today) || eventDay.isAtSameMomentAs(today);
-      }).toList();
-
-      _filteredEvents.sort((a, b) {
-        final DateTime? dateA = _parseEventStartDate(a);
-        final DateTime? dateB = _parseEventStartDate(b);
-
-        if (dateA == null && dateB == null) return 0;
-        if (dateA == null) return 1;
-        if (dateB == null) return -1;
-        return dateA.compareTo(dateB);
-      });
-    } catch (e) {
-      print('Error fetching and filtering events: $e');
-      if (mounted) {
-        Api().showMessage(
-          context,
-          "Failed to load events: ${e.toString()}",
-          '',
-          Theme.of(context).primaryColorDark,
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingEvents = false);
-      }
-    }
-  }
-
-  Future<void> _addEvent() async {
-    if (_titleController.text.isEmpty ||
-        _descriptionController.text.isEmpty ||
-        _selectedDate == null ||
-        _selectedProvince == null) {
-      Api().showMessage(
-        context,
-        "Please fill all required fields (Name, Description, Date, Province)",
-        '',
-        Theme.of(context).colorScheme.error,
-      );
-      return;
-    }
-
-    Api().showLoading(context);
-
-    try {
-      String? posterUrl;
-      if (_pickedPoster != null) {
-        final String fileName =
-            'event_posters/${DateTime.now().millisecondsSinceEpoch}_${_titleController.text.replaceAll(' ', '_')}.jpg';
-        posterUrl = await _uploadFile(_pickedPoster!, fileName);
-      }
-
-      await FirebaseFirestore.instance.collection('upcoming_events').add({
-        'title': _titleController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'day': DateFormat('dd').format(_selectedDate!),
-        'month': DateFormat('MMM').format(_selectedDate!),
-        'year': DateFormat('yyyy').format(_selectedDate!),
-        'parsedDate': Timestamp.fromDate(_selectedDate!),
-        'posterUrl': posterUrl ?? '',
-        'province': _selectedProvince,
-        'liveStreamLink': '',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      Navigator.pop(context);
-      Api().showMessage(
-        context,
-        "Event added successfully!",
-        '',
-        Theme.of(context).splashColor,
-      );
-
-      _titleController.clear();
-      _descriptionController.clear();
-      setState(() {
-        _selectedDate = null;
-        _pickedPoster = null;
-        _selectedProvince = null;
-      });
-
-      // Platform aware tab switching
-      if (isIOSPlatform) {
-        setState(() {
-          _currentSegment = 0;
-        });
-        _tabController.animateTo(0);
-      } else {
-        _tabController.animateTo(0);
-      }
-    } catch (e) {
-      Navigator.pop(context);
-      Api().showMessage(
-        context,
-        "Failed to add event: ${e.toString()}",
-        '',
-        Theme.of(context).primaryColorDark,
-      );
-    }
-  }
-
-  Future<void> _updateEventDetails({
-    required String documentId,
-    required String newDescription,
-    required String newLink,
-    required XFile? newPosterFile,
-    required String? currentPosterUrl,
-  }) async {
-    Api().showLoading(context);
-
-    try {
-      String updatedPosterUrl = currentPosterUrl ?? '';
-
-      if (newPosterFile != null) {
-        final String fileName =
-            'event_posters/${documentId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        updatedPosterUrl = await _uploadFile(newPosterFile, fileName);
-
-        if (currentPosterUrl != null && currentPosterUrl.isNotEmpty) {
-          try {
-            await FirebaseStorage.instance
-                .refFromURL(currentPosterUrl)
-                .delete();
-          } catch (e) {
-            print('Error deleting old poster: $e');
-          }
-        }
-      }
-
-      await FirebaseFirestore.instance
-          .collection('upcoming_events')
-          .doc(documentId)
-          .update({
-            'description': newDescription.trim(),
-            'liveStreamLink': newLink.trim(),
-            'posterUrl': updatedPosterUrl,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      Navigator.pop(context);
-      Navigator.pop(context);
-
-      Api().showMessage(
-        context,
-        "Event updated successfully!",
-        '',
-        Theme.of(context).splashColor,
-      );
-
-      _fetchAndFilterEvents();
-    } catch (e) {
-      Navigator.pop(context);
-      Api().showMessage(
-        context,
-        "Failed to update event: ${e.toString()}",
-        '',
-        Theme.of(context).primaryColorDark,
-      );
-    }
-  }
-
-  // --- EDIT SHEET (Adaptive) ---
-  void _showEditEventSheet(Map<String, dynamic> event) {
-    final String documentId = event['id'] as String;
-    final String currentPosterUrl = event['posterUrl'] as String? ?? '';
-    final String currentTitle = event['title'] as String? ?? 'N/A';
-
-    _editDescriptionController.text = event['description'] as String? ?? '';
-    _liveStreamLinkController.text = event['liveStreamLink'] as String? ?? '';
-    _editPickedPoster = null;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: isIOSPlatform ? Colors.transparent : null,
-      builder: (context) {
-        final color = Theme.of(context);
-        final childContent = Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 600),
-            child: StatefulBuilder(
-              builder: (BuildContext context, StateSetter setModalState) {
-                return Padding(
-                  padding: EdgeInsets.only(
-                    top: 20,
-                    left: 16,
-                    right: 16,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Drag handle for iOS style
-                        if (isIOSPlatform)
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 5,
-                              margin: const EdgeInsets.only(bottom: 15),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[300],
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-
-                        Text(
-                          'Edit Details for: $currentTitle',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: color.primaryColor,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                        const Divider(),
-                        const SizedBox(height: 16),
-
-                        _buildPlatformTextField(
-                          controller: _editDescriptionController,
-                          label: 'Update Description',
-                          maxLines: 5,
-                          minLines: 3,
-                          keyboardType: TextInputType.multiline,
-                        ),
-                        const SizedBox(height: 16),
-
-                        _buildPlatformTextField(
-                          controller: _liveStreamLinkController,
-                          label: 'Live Stream/URL Link (Optional)',
-                          prefixIcon:
-                              isIOSPlatform ? CupertinoIcons.link : Icons.link,
-                          keyboardType: TextInputType.url,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Poster Management
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildPlatformButton(
-                                onPressed: () async {
-                                  final ImagePicker picker = ImagePicker();
-                                  final XFile? image = await picker.pickImage(
-                                    source: ImageSource.gallery,
-                                  );
-                                  if (image != null) {
-                                    setModalState(() {
-                                      _editPickedPoster = image;
-                                    });
-                                  }
-                                },
-                                text: _editPickedPoster == null
-                                    ? 'Pick New Poster'
-                                    : 'Poster Selected',
-                                icon: isIOSPlatform
-                                    ? CupertinoIcons.photo
-                                    : Icons.image,
-                                color: color.splashColor,
-                              ),
-                            ),
-                            if (currentPosterUrl.isNotEmpty ||
-                                _editPickedPoster != null) ...[
-                              const SizedBox(width: 8),
-                              isIOSPlatform
-                                  ? CupertinoButton(
-                                      child: const Text('Clear'),
-                                      onPressed: () {
-                                        setModalState(() {
-                                          _editPickedPoster = null;
-                                        });
-                                      },
-                                    )
-                                  : TextButton(
-                                      onPressed: () {
-                                        setModalState(() {
-                                          _editPickedPoster = null;
-                                        });
-                                      },
-                                      child: const Text('Clear New Pick'),
-                                    ),
-                            ],
-                          ],
-                        ),
-
-                        const SizedBox(height: 16),
-                        if (_editPickedPoster != null)
-                          _buildImagePreview(
-                            _editPickedPoster!,
-                            150,
-                            setModalState,
-                          )
-                        else if (currentPosterUrl.isNotEmpty)
-                          _buildNetworkImagePreview(currentPosterUrl),
-                        const SizedBox(height: 24),
-
-                        _buildPlatformButton(
-                          onPressed: () {
-                            if (_editDescriptionController.text.isEmpty) {
-                              Api().showMessage(
-                                context,
-                                "Description cannot be empty.",
-                                '',
-                                Theme.of(context).colorScheme.error,
-                              );
-                              return;
-                            }
-                            _updateEventDetails(
-                              documentId: documentId,
-                              newDescription: _editDescriptionController.text,
-                              newLink: _liveStreamLinkController.text,
-                              newPosterFile: _editPickedPoster,
-                              currentPosterUrl: currentPosterUrl,
-                            );
-                          },
-                          text: 'Save Updates',
-                          icon: isIOSPlatform
-                              ? CupertinoIcons.floppy_disk
-                              : Icons.save,
-                        ),
-                        const SizedBox(height: 8),
-                        if (isIOSPlatform)
-                          CupertinoButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          )
-                        else
-                          OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-
-        if (isIOSPlatform) {
-          return Container(
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemBackground.resolveFrom(context),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-            ),
-            child: childContent,
-          );
-        } else {
-          return childContent;
-        }
-      },
-    );
   }
 
   Widget _buildImagePreview(
@@ -858,149 +1237,84 @@ class _PortalAddFeedState extends State<PortalAddFeed>
     );
   }
 
+  // ⭐️ MERGED: The New Hybrid Upcoming Events Tab
   Widget _buildUpcomingEventsTab() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
-        child: _isLoadingEvents
-            ? _buildPlatformLoader()
-            : _filteredEvents.isEmpty
-            ? const Center(child: Text('No upcoming events found.'))
-            : ListView.builder(
-                padding: const EdgeInsets.all(16.0),
-                itemCount: _filteredEvents.length,
-                itemBuilder: (context, index) {
-                  final event = _filteredEvents[index];
-                  final String dayMonthYear =
-                      '${event['day']} ${event['month']} ${event['year'] ?? ''}'
-                          .trim();
-                  final String? posterUrl = event['posterUrl'] as String?;
+    final dailyVerse = BibleVerseRepository.getDailyVerse();
+    final color = Theme.of(context);
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: InkWell(
-                      onTap: () {
-                        if (event['id'] != null) {
-                          _showEditEventSheet(event);
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              event['title'] ?? 'No Title',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              event['description'] ?? 'No Description',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            if (event['liveStreamLink'] != null &&
-                                (event['liveStreamLink'] as String)
-                                    .isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(
-                                    isIOSPlatform
-                                        ? CupertinoIcons.link
-                                        : Icons.link,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Live Link Available',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Theme.of(context).primaryColor,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  isIOSPlatform
-                                      ? CupertinoIcons.calendar
-                                      : Icons.calendar_today,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  dayMonthYear.isNotEmpty
-                                      ? dayMonthYear
-                                      : 'Date To Be Confirmed',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (event['province'] != null &&
-                                (event['province'] as String).isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    isIOSPlatform
-                                        ? CupertinoIcons.location_solid
-                                        : Icons.location_on,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    event['province'] as String,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            if (posterUrl != null && posterUrl.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              _buildNetworkImagePreview(posterUrl),
-                            ],
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: Text(
-                                'Tap Card to Edit/Update Details',
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+    if (_isLoadingEvents) return _buildPlatformLoader();
+
+    return RefreshIndicator(
+      onRefresh: _fetchAndFilterEvents,
+      child: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          // 1. Verse Card
+          _buildDailyVerseCard(color, dailyVerse),
+          const SizedBox(height: 25),
+
+          // 2. Banner
+          _buildOpportunityBanner(context),
+          const SizedBox(height: 25),
+
+          // 3. Filters
+          _buildCategoryFilters(color),
+          const SizedBox(height: 20),
+
+          // 4. Section Title
+          Row(
+            children: [
+              Icon(Icons.calendar_month_rounded, color: color.primaryColor),
+              const SizedBox(width: 8),
+              Text(
+                'Manage Events',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: color.primaryColor,
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 15),
+
+          // 5. The List
+          if (_filteredEvents.isEmpty)
+            _buildInteractiveEmptyState(color)
+          else
+            Column(
+              children: _filteredEvents.map((event) {
+                // Extract Data safely
+                final String date = event['day'] ?? '';
+                final String eventMonth = event['month'] ?? '';
+                final String eventTitle = event['title'] ?? 'No Title';
+                final String eventDescription =
+                    event['description'] ?? 'No Description';
+                final String? posterUrl = event['posterUrl'];
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 15.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      // ⭐️ IMPORTANT: TAP OPENS ADMIN EDIT SHEET
+                      _showEditEventSheet(event);
+                    },
+                    // Use the beautiful card for display
+                    child: UpcomingEventsCard(
+                      posterUrl: (posterUrl != null && posterUrl.isNotEmpty)
+                          ? posterUrl
+                          : null,
+                      date: date,
+                      eventMonth: eventMonth,
+                      eventTitle: eventTitle,
+                      eventDescription: eventDescription,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 50),
+        ],
       ),
     );
   }
@@ -1037,15 +1351,28 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                 keyboardType: TextInputType.multiline,
               ),
               const SizedBox(height: 16),
-              // Platform Adaptive Date Picker
               _buildPlatformDatePickerSelector(),
+              const SizedBox(height: 16),
+
+              // ⭐️ PROVINCE DROPDOWN
+              _buildPlatformDropdown(
+                value: _selectedProvince,
+                items: _southAfricanProvinces,
+                hint: "Select Province",
+                onChanged: (val) => setState(() => _selectedProvince = val),
+              ),
+              const SizedBox(height: 16),
+
+              // ⭐️ CATEGORY DROPDOWN
+              _buildPlatformDropdown(
+                value: _selectedCategoryForAdd,
+                items: _eventCategories,
+                hint: "Select Category",
+                onChanged: (val) =>
+                    setState(() => _selectedCategoryForAdd = val),
+              ),
 
               const SizedBox(height: 16),
-              // Platform Adaptive Dropdown
-              _buildPlatformDropdown(),
-
-              const SizedBox(height: 16),
-              // Platform Adaptive Poster Button
               _buildPlatformButton(
                 onPressed: () async {
                   final ImagePicker picker = ImagePicker();
@@ -1061,7 +1388,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                 color: Theme.of(context).scaffoldBackgroundColor,
                 textColor: Theme.of(context).primaryColor,
               ),
-
               if (_pickedPoster != null) ...[
                 const SizedBox(height: 10),
                 _buildImagePreview(_pickedPoster!, 150, (_) {}),
@@ -1093,7 +1419,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
 
   @override
   Widget build(BuildContext context) {
-    // iOS uses Segmented Control instead of TabBar for better UX
     if (isIOSPlatform) {
       return Column(
         children: [
@@ -1120,11 +1445,9 @@ class _PortalAddFeedState extends State<PortalAddFeed>
                   if (val == 0) _fetchAndFilterEvents();
                 },
                 groupValue: _currentSegment,
-                // Using system colors for native look
                 borderColor: Theme.of(context).primaryColor,
                 selectedColor: Theme.of(context).primaryColor,
-                pressedColor:
-                    Theme.of(context).primaryColor.withOpacity(0.2),
+                pressedColor: Theme.of(context).primaryColor.withOpacity(0.2),
               ),
             ),
           ),
@@ -1136,7 +1459,6 @@ class _PortalAddFeedState extends State<PortalAddFeed>
         ],
       );
     } else {
-      // Android / Web / Windows Standard TabBar
       return Column(
         children: [
           TabBar(
@@ -1149,10 +1471,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildUpcomingEventsTab(),
-                _buildAddEventTab(),
-              ],
+              children: [_buildUpcomingEventsTab(), _buildAddEventTab()],
             ),
           ),
         ],

@@ -6,12 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/HomePageHelpers.dart';
+import 'package:ttact/Components/NotificationService.dart';
 import 'package:ttact/Components/Tabs/BranchesTab.dart';
 import 'package:ttact/Components/Tabs/Career_Opportunities.dart'
     hide isLargeScreen;
 import 'package:ttact/Components/Tabs/EventsTab.dart';
 import 'package:ttact/Components/Tabs/MusicTab.dart';
-import 'package:ttact/Pages/MotherPage.dart' hide isLargeScreen;
+import 'package:ttact/Pages/User/MotherPage.dart' hide isLargeScreen;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -70,6 +71,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
     // Initialize rewarded ad manager
     adManager.loadRewardedInterstitialAd();
+    NotificationService.scheduleDailyVerses();
   }
 
   @override
@@ -102,16 +104,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         children: [
           // 1. TabBar
           Card(
+              elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(0),
-            ),
-            elevation: isDesktop ? 8 : 15,
+            ), 
             margin: EdgeInsets.zero,
             color: color.primaryColor,
             child: SizedBox(
               height: tabHeight,
               child: contentWrapper(
                 child: TabBar(
+                  
                   controller: _tabController,
                   isScrollable: true,
                   indicatorColor: color.scaffoldBackgroundColor,

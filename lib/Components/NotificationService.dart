@@ -1,23 +1,33 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:ttact/Components/BibleVerseRepository.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:ttact/Components/BibleVerseRepository.dart'; // Verify this path
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    // 1. Initialize Timezones
+    // 1. Initialize Timezones Database
     tz.initializeTimeZones();
 
-    // 2. Android Settings
-    // Ensure 'ic_notification.png' exists in android/app/src/main/res/drawable/
-    // It should be a transparent image with white lines/shapes for best results.
+    // 2. Set the Local Timezone (Critical for 11:00 AM to be accurate)
+    try {
+      final dynamic tzResult = await FlutterTimezone.getLocalTimezone();
+      final String timeZoneName =
+          tzResult is String ? tzResult : tzResult.toString();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      print("Could not get local timezone: $e");
+      tz.setLocalLocation(tz.getLocation('UTC'));
+    }
+
+    // 3. Android Settings
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('ic_notification');
 
-    // 3. iOS Settings
+    // 4. iOS Settings
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -30,60 +40,56 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    // 4. Initialize the plugin
+    // 5. Initialize Plugin
     await _notificationsPlugin.initialize(settings);
 
-    // 5. ⭐️ EXPLICITLY REQUEST ANDROID 13+ PERMISSIONS
-    // This is required for newer Android phones (API 33+) to show the popup.
+    // 6. Request Permission (Android 13+)
     final platform = _notificationsPlugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-        
     if (platform != null) {
       await platform.requestNotificationsPermission();
     }
   }
 
-  // --- DAILY SCHEDULING LOGIC ---
+  // --- SCHEDULING LOGIC ---
   static Future<void> scheduleDailyVerses() async {
-    // Clear old queue to prevent duplicates
-    await _notificationsPlugin.cancelAll();
+    await _notificationsPlugin.cancelAll(); // Clear old queue
 
-    final now = DateTime.now();
+    final now = tz.TZDateTime.now(tz.local);
 
-    // Schedule verses for the next 30 days
     for (int i = 0; i < 30; i++) {
       final targetDate = now.add(Duration(days: i));
       final verse = BibleVerseRepository.getDailyVerse(date: targetDate);
 
       await _scheduleNotification(
-        id: i, // Unique ID for each day (0-29)
+        id: i,
         title: "Verse of the Day: ${verse['category']}",
         body: '"${verse['text']}" - ${verse['ref']}',
-        scheduledDate: targetDate,
+        targetDate: targetDate,
       );
     }
+    print("✅ Scheduled 30 days of verses at 11:00 AM");
   }
 
   static Future<void> _scheduleNotification({
     required int id,
     required String title,
     required String body,
-    required DateTime scheduledDate,
+    required DateTime targetDate,
   }) async {
-    
-    // Set to 8:00 AM
+    // Set to 11:00 AM
     var scheduledTime = tz.TZDateTime(
       tz.local,
-      scheduledDate.year,
-      scheduledDate.month,
-      scheduledDate.day,
-      8, // Hour (8 AM)
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      11, // Hour
       00, // Minute
     );
 
-    // If 8:00 AM has already passed for today, do not schedule for today.
+    // Skip if time passed today
     if (scheduledTime.isBefore(tz.TZDateTime.now(tz.local))) {
-      return; 
+      return;
     }
 
     await _notificationsPlugin.zonedSchedule(
@@ -98,40 +104,35 @@ class NotificationService {
           channelDescription: 'Word of the day biblical',
           importance: Importance.max,
           priority: Priority.high,
-          // Used for the image on the right side (must exist in drawable)
-          largeIcon: DrawableResourceAndroidBitmap('ic_notification'), 
+          largeIcon: DrawableResourceAndroidBitmap('ic_notification'),
           styleInformation: BigTextStyleInformation(''),
         ),
         iOS: DarwinNotificationDetails(),
       ),
+      // ⭐️ PARAMETER REMOVED (Not needed in your version)
       
-      // ⭐️ FIX: Use inexact mode to prevent crash on Android 12+
+      // ⭐️ REQUIRED in your version
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-       
     );
   }
 
-  // --- 🧪 TEST FUNCTION (Call this from HomePage to verify it works) ---
+  // --- TEST FUNCTION ---
   static Future<void> showInstantTest() async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'test_channel',
-      'Test Notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-      largeIcon: DrawableResourceAndroidBitmap('ic_notification'),
-      styleInformation: BigTextStyleInformation(''),
-    );
-
     const NotificationDetails details = NotificationDetails(
-      android: androidDetails, 
-      iOS: DarwinNotificationDetails()
+      android: AndroidNotificationDetails(
+        'test_channel',
+        'Test Notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        largeIcon: DrawableResourceAndroidBitmap('ic_notification'),
+      ),
+      iOS: DarwinNotificationDetails(),
     );
 
     await _notificationsPlugin.show(
       999,
-      'Testing DANKIE Notifications',
-      'If you can see this, your Bible Verses will arrive safely at 8:00 AM!',
+      'Test Notification',
+      'If you see this, notifications work!',
       details,
     );
   }

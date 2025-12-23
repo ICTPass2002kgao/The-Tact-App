@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:ttact/Components/LiabraryHelper.dart';
 import 'package:ttact/Components/MusicPlayerSheet.dart';
 import 'package:ttact/Components/Tabs/MusicTab.dart';
-import 'package:ttact/Pages/HomePage.dart';
+import 'package:ttact/Pages/User/HomePage.dart';
 import 'package:ttact/main.dart';
 
 bool get isIOSPlatform {

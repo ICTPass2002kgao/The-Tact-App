@@ -14,7 +14,7 @@ import 'package:ttact/Pages/ForgotPassword.dart';
 import '../Components/API.dart';
 import '../Components/Custom_Buttons.dart';
 // import 'package:ttact/Components/TextFields.dart'; // No longer needed
-import 'SignUpPage.dart';
+import 'User/SignUpPage.dart';
 import 'package:text_field_validation/text_field_validation.dart';
 import 'package:camera/camera.dart';
 

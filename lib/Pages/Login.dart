@@ -13,11 +13,11 @@ import 'package:ttact/Pages/FaceVerificationPage.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
 import 'package:ttact/Pages/ForgotPassword.dart';
-import 'package:ttact/Pages/SongsUpdate.dart';
+import 'package:ttact/Pages/User/SongsUpdate.dart';
 import '../Components/API.dart';
 import '../Components/Custom_Buttons.dart';
 // import '../Components/TextField.dart'; // No longer needed
-import 'SignUpPage.dart';
+import 'User/SignUpPage.dart';
 import 'package:text_field_validation/text_field_validation.dart';
 import 'package:camera/camera.dart';
 
@@ -162,11 +162,16 @@ class _Login_PageState extends State<Login_Page>
     super.dispose();
   }
 
+  String loggedMemberName = '';
+  String loggedMemberRole = '';
+  // Email/Password Login Handler with Face Verification Step
   // Email/Password Login Handler with Face Verification Step
   Future<void> _handleEmailPasswordLogin() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     isIOSPlatform ? Api().showIosLoading(context) : Api().showLoading(context);
+
     try {
+      // 1. Firebase Auth Login
       final userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: txtEmail.text.trim(),
@@ -179,101 +184,172 @@ class _Login_PageState extends State<Login_Page>
         Navigator.pop(context);
         Api().showMessage(
           context,
-          'Login failed: User object is null.',
+          'Login failed: User is null.',
           'Error',
-          Theme.of(context).primaryColorDark,
+          Colors.red,
         );
         return;
       }
 
       var uid = user.uid;
-
-      // 🚀 PERSISTENT LOGIN IMPLEMENTATION START 🚀
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'authToken',
-        uid,
-      ); // Save the UID as the persistent token
-      // 🚀 PERSISTENT LOGIN IMPLEMENTATION END 🚀
+      await prefs.setString('authToken', uid);
 
-      // 🚀 REVENUECAT IMPLEMENTATION: Set the App User ID here
-      // await Purchases.logIn(uid);
-      // --------------------------------------------------------
-
+      // -----------------------------------------------------------------------
+      // CHECK 1: TACTSO BRANCH ADMIN (University)
+      // -----------------------------------------------------------------------
       final tactsoBranchesQuery = await FirebaseFirestore.instance
           .collection('tactso_branches')
           .where('email', isEqualTo: txtEmail.text.trim())
           .get();
 
-      // 1. TACTSO Branch Admin Login (Requires Biometric Verification)
       if (tactsoBranchesQuery.docs.isNotEmpty) {
         final branchDoc = tactsoBranchesQuery.docs.first;
         final faceUrls =
             branchDoc.data()['authorizedUserFaceUrls'] as List<dynamic>? ?? [];
 
-        if (!context.mounted) return;
-        Navigator.pop(context); // Dismiss loading dialog
-
-        // Obtain available cameras
-        final cameras = await availableCameras();
-        if (cameras.isEmpty) {
-          if (!context.mounted) return;
-          Api().showMessage(
-            context,
-            'No camera found on this device.',
-            'Error',
-            Theme.of(context).primaryColorDark,
-          );
-          return;
-        }
-        final CameraDescription camera = cameras.first;
-
-        if (!context.mounted) return;
-
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => FaceVerificationScreen(
-              email: txtEmail.text.trim(),
-              password: txtPassword.text.trim(),
-              camera: camera,
-              authorizedFaceUrls: faceUrls.cast<String>(),
-              universityUID: uid,
-            ),
-          ),
+        await _launchFaceVerification(
+          context,
+          faceUrls.cast<String>(),
+          uid,
+          role: 'Tactso Branch',
         );
-
-        return;
+        return; // Stops execution here
       }
 
-      // 2. Other Roles (Standard Login)
+      // -----------------------------------------------------------------------
+      // CHECK 2: OVERSEER
+      // -----------------------------------------------------------------------
       final overseerQuery = await FirebaseFirestore.instance
           .collection('overseers')
           .where('email', isEqualTo: txtEmail.text.trim())
           .get();
 
       if (overseerQuery.docs.isNotEmpty) {
-        if (!context.mounted) return;
-        Navigator.pop(context);
-        Navigator.pushReplacementNamed(context, "/overseer");
-        return;
+        final overseerDoc = overseerQuery.docs.first;
+        List<String> faceUrls = [];
+
+        // Check main doc
+        if (overseerDoc.data().containsKey('authorizedUserFaceUrls')) {
+          var mainList =
+              overseerDoc.data()['authorizedUserFaceUrls'] as List<dynamic>?;
+          if (mainList != null) faceUrls.addAll(mainList.cast<String>());
+        }
+
+        // Check committee sub-collection
+        if (faceUrls.isEmpty) {
+          final committeeSnapshot = await overseerDoc.reference
+              .collection('committee_members')
+              .get();
+
+          for (var doc in committeeSnapshot.docs) {
+            if (doc.data().containsKey('faceUrl')) {
+              faceUrls.add(doc.data()['faceUrl'] as String);
+              // We temporarily set this, but ideally, we pass it explicitly if we know who logged in
+              setState(() {
+                loggedMemberName = doc.data()['name'] ?? 'Overseer Member';
+                loggedMemberRole = doc.data()['portfolio'] ?? 'Committee';
+              });
+            }
+          }
+        }
+
+        await _launchFaceVerification(
+          context,
+          faceUrls,
+          uid,
+          role: 'Overseer',
+          loggedMemberName: loggedMemberName,
+          loggedMemberRole: loggedMemberRole,
+        );
+        return; // Stops execution here
       }
 
+      // -----------------------------------------------------------------------
+      // CHECK 3: STAFF MEMBERS (Updated for your DB Schema)
+      // -----------------------------------------------------------------------
+      final staffQuery = await FirebaseFirestore.instance
+          .collection('staff_members')
+          .where('email', isEqualTo: txtEmail.text.trim())
+          .get();
+
+      if (staffQuery.docs.isNotEmpty) {
+        final staffDoc = staffQuery.docs.first;
+        final staffData = staffDoc.data();
+
+        // 1. Get Face URL (Handle singular 'faceUrl' from your DB)
+        List<String> targetFaces = [];
+        if (staffData['faceUrl'] != null &&
+            staffData['faceUrl'].toString().isNotEmpty) {
+          targetFaces.add(staffData['faceUrl'] as String);
+        }
+
+        // 2. Get Details (Matches your DB: 'name', 'portfolio', 'role')
+        final String staffName =
+            staffData['name'] ?? 'Staff Member'; // e.g., "Kgaogelo"
+        final String staffPortfolio =
+            staffData['portfolio'] ?? 'Staff'; // e.g., "Super User"
+        final String staffRole = staffData['role'] ?? 'Admin'; // e.g., "Admin"
+
+        // 3. Get Camera
+        final cameras = await availableCameras();
+        if (cameras.isEmpty) {
+          if (context.mounted) {
+            Navigator.pop(context); // Close loading
+            Api().showMessage(context, 'No camera found.', 'Error', Colors.red);
+          }
+          return;
+        }
+
+        // 4. Launch Verification
+        if (!context.mounted) return;
+
+        // OPTIONAL: Close the loading spinner here so it doesn't overlap the camera
+        // Navigator.pop(context);
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FaceVerificationScreen(
+              email: txtEmail.text.trim(),
+              password: txtPassword.text.trim(),
+              camera: cameras.first,
+              authorizedFaceUrls:
+                  targetFaces, // Passed as a List ["https://..."]
+              entityUid: uid,
+              role: staffRole,
+              loggedMemberName: staffName,
+              loggedMemberRole: staffPortfolio,
+            ),
+          ),
+        );
+        return; // <--- CRITICAL FIX: PREVENTS FALLING THROUGH TO CHECK 4
+      }
+
+      // -----------------------------------------------------------------------
+      // CHECK 4: STANDARD USERS (Member, Seller, External)
+      // -----------------------------------------------------------------------
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
 
-      final Map<String, dynamic>? userData = userDoc.data();
-      final String role = userData?['role'] ?? '';
-
-      if (role == 'Admin') {
+      if (!userDoc.exists) {
         if (!context.mounted) return;
         Navigator.pop(context);
-        Navigator.pushReplacementNamed(context, "/admin");
-      } else if (role == 'Member' ||
-          role == 'Seller' ||
-          role == 'External Member') {
-        // Added External Member
+        Api().showMessage(
+          context,
+          'User profile not found.',
+          'Error',
+          Colors.red,
+        );
+        return;
+      }
+
+      final Map<String, dynamic>? userData = userDoc.data();
+      final String role = userData?['role'] ?? 'Member';
+
+      if (role == 'Member' || role == 'Seller' || role == 'External Member') {
         if (!context.mounted) return;
         Navigator.pop(context);
         Navigator.pushReplacementNamed(context, "/main-menu");
@@ -282,42 +358,81 @@ class _Login_PageState extends State<Login_Page>
         Navigator.pop(context);
         Api().showMessage(
           context,
-          'Unknown role or no specific access found for this user: $role',
+          'Access denied for role: $role',
           'Error',
-          Theme.of(context).primaryColorDark,
+          Colors.red,
         );
       }
     } on FirebaseAuthException catch (e) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      String errorMessage;
-      if (e.code == 'user-not-found') {
-        errorMessage = 'No user found for that email.';
-      } else if (e.code == 'wrong-password') {
-        errorMessage = 'Wrong password provided for that user.';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'The email address is not valid.';
-      } else {
-        errorMessage =
-            'Login failed: ${e.message ?? 'An unknown authentication error occurred.'}';
-      }
+      if (context.mounted) Navigator.pop(context);
       Api().showMessage(
         context,
-        errorMessage,
-        'Authentication Error',
-        Theme.of(context).primaryColorDark,
+        e.message ?? 'Auth Error',
+        'Error',
+        Colors.red,
       );
     } catch (e) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      Api().showMessage(
-        context,
-        'An unexpected error occurred during login: ${e.toString()}',
-        'Error',
-        Theme.of(context).primaryColorDark,
+      if (context.mounted) Navigator.pop(context);
+      Api().showMessage(context, 'Login Error: $e', 'Error', Colors.red);
+    }
+  }
+
+  // --- UPDATED HELPER FUNCTION ---
+  Future<void> _launchFaceVerification(
+    BuildContext context,
+    List<String> faceUrls,
+    String uid, {
+    required String role, // Added Role Parameter
+    String? loggedMemberName,
+
+    final String? loggedMemberRole,
+  }) async {
+    // 1. Close the Loading Dialog
+    if (context.mounted) Navigator.pop(context);
+
+    // 2. Check if we actually found faces
+    if (faceUrls.isEmpty) {
+      if (context.mounted) {
+        // Fallback: If absolutely no faces found, maybe allow login or show specific error?
+        // For security, we usually block.
+        Api().showMessage(
+          context,
+          'No registered faces found for this account.',
+          'Access Denied',
+          Colors.red,
+        );
+      }
+      return;
+    }
+
+    // 3. Check Camera Availability
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      if (context.mounted) {
+        Api().showMessage(context, 'No camera found.', 'Error', Colors.red);
+      }
+      return;
+    }
+
+    // 4. Navigate
+    if (context.mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => FaceVerificationScreen(
+            email: txtEmail.text.trim(),
+            password: txtPassword.text.trim(),
+            camera: cameras.first,
+            authorizedFaceUrls: faceUrls,
+            entityUid: uid, // Renamed from universityUID
+            role: role, // Pass the identified role
+            loggedMemberName: loggedMemberName,
+            loggedMemberRole: loggedMemberRole,
+          ),
+        ),
       );
     }
   }
+  // --- HELPER FUNCTION TO AVOID REPEATING CAMERA LOGIC ---
 
   // [REPLACED build METHOD]
   @override
@@ -495,7 +610,7 @@ class _Login_PageState extends State<Login_Page>
               ),
             ),
           ),
- 
+
           isIOSPlatform
               ? CupertinoButton.filled(
                   foregroundColor: colorScheme.primaryColor,
@@ -558,9 +673,9 @@ class _Login_PageState extends State<Login_Page>
                   onPressed: () async {
                     try {
                       await FirebaseAuth.instance.signOut();
- 
+
                       final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('authToken'); 
+                      await prefs.remove('authToken');
 
                       if (!context.mounted) return;
                       Navigator.pushNamed(context, '/main-menu');
@@ -577,7 +692,7 @@ class _Login_PageState extends State<Login_Page>
                 ),
 
           const SizedBox(height: 20),
- 
+
           const Divider(color: Colors.grey, thickness: 1),
 
           const SizedBox(height: 20),
@@ -606,7 +721,6 @@ class _Login_PageState extends State<Login_Page>
           ),
           const SizedBox(height: 30),
           const SizedBox(height: 30),
- 
         ],
       ),
     );

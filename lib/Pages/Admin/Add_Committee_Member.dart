@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/AuditService.dart'; // Ensure this import exists
+import 'package:ttact/Components/Aduit_Logs/Tactso_Audit_Logs.dart'; // Ensure this import exists
 
 // --- PLATFORM UTILITIES ---
 const double _desktopBreakpoint = 900.0;
@@ -19,6 +19,7 @@ bool get isDesktop =>
         defaultTargetPlatform == TargetPlatform.linux);
 
 class AddCommitteeMember extends StatefulWidget {
+  
   const AddCommitteeMember({super.key});
 
   @override
@@ -343,7 +344,7 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
         logoUrl = widget.branchData['imageUrl'];
       }
 
-      await AuditService.logAction(
+      await TactsoAuditLogs.logAction(
         action: "ADMIN_ADD_MEMBER",
         details: "Super Admin added ${_nameController.text} as $_selectedRole",
         referenceId: widget.branchId,
@@ -404,7 +405,7 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
         logoUrl = widget.branchData['imageUrl'];
       }
 
-      await AuditService.logAction(
+      await TactsoAuditLogs.logAction(
         action: "ADMIN_DELETE_MEMBER",
         details: "Super Admin removed $name",
         referenceId: widget.branchId,
