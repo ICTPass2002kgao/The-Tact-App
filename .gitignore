@@ -52,3 +52,4 @@ Front-end/android/*.iml
 
 Back-end/*.env
 Back-end/new_env
+Back-end/api/utils.py
