@@ -1,0 +1,54 @@
+# Miscellaneous
+Front-end/*.class
+Front-end/*.log
+Front-end/*.pyc
+Front-end/*.swp
+Front-end/.DS_Store
+Front-end/.atom/
+Front-end/.build/
+Front-end/.buildlog/
+Front-end/.history
+Front-end/.svn/
+Front-end/.swiftpm/
+Front-end/migrate_working_dir/
+Front-end/*.pem
+# IntelliJ related
+Front-end/*.iml
+Front-end/*.ipr
+Front-end/*.iws
+Front-end/*env
+Front-end/android/app/upload-keystore.jks
+Front-end/android/local.properties
+Front-end/.idea/ 
+Front-end/node_modules
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+Front-end/**/doc/api/
+Front-end/**/ios/Flutter/.last_build_id
+Front-end/.dart_tool/
+Front-end/.flutter-plugins
+Front-end/.flutter-plugins-dependencies
+Front-end/.pub-cache/
+Front-end/.pub/
+Front-end/build/
+
+# Symbolication related
+Front-end/app.*.symbols
+
+# Obfuscation related
+Front-end/app.*.map.json
+
+# Android Studio will place build artifacts here
+Front-end/android/app/debug
+Front-end/android/app/profile
+Front-end/android/app/release
+Front-end/android/.gradle
+Front-end/android/.kotlin
+Front-end/android/*.iml
+
+Back-end/.env
+Back-end/new_env
