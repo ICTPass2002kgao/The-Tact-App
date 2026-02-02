@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "tact-3c612"
+  },
+  "targets": {
+    "tact-3c612": {
+      "hosting": {
+        "dankie": [
+          "dankie-website"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
