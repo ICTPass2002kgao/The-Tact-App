@@ -50,5 +50,5 @@ Front-end/android/.gradle
 Front-end/android/.kotlin
 Front-end/android/*.iml
 
-Back-end/.env
+Back-end/*.env
 Back-end/new_env
