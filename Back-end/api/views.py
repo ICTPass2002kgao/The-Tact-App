@@ -82,22 +82,33 @@ try:
 except Exception as e:
     GLOBAL_FACE_APP = None
     print(f"❌ Error loading InsightFace: {e}")
-
-# C. Firebase
 if not firebase_admin._apps:
-    firebase_cred_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-    if firebase_cred_path:
+    # Get the raw string (the curly brackets you pasted in Railway)
+    firebase_config = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+
+    if firebase_config:
         try:
-            cred = credentials.Certificate(firebase_cred_path)
+            # 2. Check if it's a file path or raw JSON
+            if os.path.exists(str(firebase_config)):
+                 # It's a file path (Local Dev)
+                cred = credentials.Certificate(firebase_config)
+            else:
+                # It's raw JSON string (Railway / Production)
+                # Parse the string into a Python dictionary
+                cred_dict = json.loads(firebase_config)
+                cred = credentials.Certificate(cred_dict)
+
             bucket_name = getattr(settings, 'FIREBASE_STORAGE_BUCKET', 'tact-3c612.appspot.com')
-            firebase_admin.initialize_app(cred, {'storageBucket': bucket_name})
+            
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': bucket_name
+            })
             print(f"✅ Firebase initialized: {bucket_name}")
+            
         except Exception as e:
             print(f"❌ Firebase Init Error: {e}")
     else:
         print("⚠️ Warning: FIREBASE_SERVICE_ACCOUNT_JSON missing in .env")
-
-
 # ==========================================
 # 2. HELPER FUNCTIONS (Security, AI, Email)
 # ==========================================
