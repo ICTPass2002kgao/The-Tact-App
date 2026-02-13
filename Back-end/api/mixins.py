@@ -10,7 +10,9 @@ class CachedListMixin:
 
     def list(self, request, *args, **kwargs):
         # 1. Get the Model Name (e.g., "Songs", "Product")
-        model_name = self.queryset.model.__name__
+        # Try to get queryset property, if None, call get_queryset()
+        qs = self.queryset if self.queryset is not None else self.get_queryset()
+        model_name = qs.model.__name__
         cache_key = f"list_cache_{model_name}"
 
         # 2. SAFETY CHECK: If the user is filtering (using query params), SKIP CACHE.

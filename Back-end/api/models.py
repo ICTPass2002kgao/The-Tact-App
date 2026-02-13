@@ -11,49 +11,160 @@ class Songs(models.Model):
     artist = models.TextField(max_length=255, verbose_name="Artist", blank=False)
     category = models.TextField(max_length=255, verbose_name="Category", blank=False)
     released = models.TextField(null=True, blank=True, verbose_name="Released Date")
-    songUrl = models.URLField(verbose_name="Song url", blank=False)
-    songName = models.TextField(max_length=255, verbose_name="Song Name", blank=False)
+    song_url = models.URLField(verbose_name="Song url", blank=False)
+    song_name = models.TextField(max_length=255, verbose_name="Song Name", blank=False)
     
     def __str__(self):
-        return self.songName
+        return self.songName 
+  
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.TextField(max_length=255, verbose_name="Product Name", null=True, blank=True)
+    name = models.CharField(max_length=255, verbose_name="Product Name", null=True, blank=True)
     description = models.TextField(max_length=1000, verbose_name="Product Description", blank=False)
-    category = models.TextField(max_length=255, verbose_name="Category", blank=False)
+    category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     createdAt = models.DateTimeField(default=timezone.now, verbose_name="Created At")
-    imageUrl = models.URLField(verbose_name="Image url", blank=False) 
     
+    # 1. The Main Image (MANDATORY - "Initially one is important")
+    # This acts as the thumbnail/cover.
+    image_url = models.URLField(verbose_name="Main Image URL", blank=True) 
+    
+    # 2. The Gallery (OPTIONAL - "Come back to add others")
+    # Stores a list of strings. Validation for "Max 10" happens in the Serializer.
+    additional_images = models.JSONField(default=list, blank=True, verbose_name="Gallery Images")
+    
+    # Variants
+    all_available_colors = models.JSONField(default=list, blank=True) 
+    all_available_sizes = models.JSONField(default=list, blank=True)
+
     def __str__(self):
         return self.name if self.name else "Unnamed Product"
-
-# ===========================
-# 2. USER & OVERSEER MODELS
-# ===========================
-
-class Users(models.Model):
-    uid = models.TextField(max_length=50, primary_key=True, blank=False)
-    address = models.TextField(max_length=50, blank=True, null=True)
-    role = models.TextField(max_length=50, blank=True, null=True)
-    communityName = models.TextField(max_length=50, blank=True, null=True)
-    districtElderName = models.TextField(max_length=50, blank=True, null=True)
-    email = models.TextField(max_length=50, blank=True, null=True)
-    overseerUid = models.TextField(max_length=50, blank=True, null=True)
-    phone = models.TextField(max_length=50, blank=True, null=True)
-    province = models.TextField(max_length=50, blank=True, null=True)
-    profileUrl = models.TextField(max_length=255, blank=True, null=True)  
-    surname = models.TextField(max_length=50, blank=True, null=True)     
-    week1 = models.TextField(max_length=50, blank=True, null=True)  
-    week2 = models.TextField(max_length=50, blank=True, null=True)  
-    week3 = models.TextField(max_length=50, blank=True, null=True)  
-    week4 = models.TextField(max_length=50, blank=True, null=True) 
+  
+class Users(models.Model): 
+    # Use 'uid' as the link target for other models
+    uid = models.CharField(max_length=128, unique=True, db_index=True) 
+    email = models.EmailField(max_length=255, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    name = models.CharField(max_length=255,blank=True)
+    surname = models.CharField(max_length=100, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    province = models.CharField(max_length=100, blank=True, null=True)
     
+    # Financial / Seller Specific Fields
+    seller_paystack_account = models.CharField(max_length=100, blank=True, null=True)
+    account_verified = models.BooleanField(default=False)
     
+    # App Specifics
+    role = models.CharField(max_length=50, blank=True, null=True)
+    community_name = models.CharField(max_length=100, blank=True, null=True)
+    district_elder_name = models.CharField(max_length=100, blank=True, null=True)
+    overseer_uid = models.CharField(max_length=128, blank=True, null=True)
+    profile_url = models.URLField(max_length=500, blank=True, null=True)  
+    week1 = models.CharField(max_length=50, blank=True, null=True)
+    week2 = models.CharField(max_length=50, blank=True, null=True)
+    week3 = models.CharField(max_length=50, blank=True, null=True)
+    week4 = models.CharField(max_length=50, blank=True, null=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     def __str__(self):
         return f"{self.email} ({self.role})"
 
-# ... (Keep all existing models) ...
+
+class SellerListing(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # The Link: This listing belongs to ONE global product
+    product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='listings')
+    
+    # Seller Specifics - UPDATED to ForeignKey
+    # to_field='uid' links this directly to the 'uid' field in Users, not the auto-ID.
+    seller = models.ForeignKey(
+        Users, 
+        to_field='uid', 
+        on_delete=models.CASCADE, 
+        related_name='seller_listings',
+        db_column='seller_uid' # Optional: keeps the column name in the DB as 'seller_uid'
+    )
+    
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    location = models.CharField(max_length=255)
+    
+    # What variants does THIS seller actually have in stock?
+    seller_colors = models.JSONField(default=list) 
+    seller_sizes = models.JSONField(default=list)
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Prevent a seller from listing the exact same product twice
+        unique_together = ('product', 'seller') 
+
+    def __str__(self):
+        return f"{self.product.name} - {self.seller.uid}"
+# api/models.py
+ 
+class Order(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('shipped', 'Shipped'),
+        ('delivered', 'Delivered'),
+        ('cancelled', 'Cancelled'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # FIX: Changed from CharField to ForeignKey linking to your Users model
+    # db_column='user_uid' ensures the database column is named 'user_uid'
+    user = models.ForeignKey(
+        Users, 
+        on_delete=models.CASCADE, 
+        to_field='uid', 
+        db_column='user_uid',
+        related_name='orders'
+    )
+    
+    full_name = models.CharField(max_length=255)
+    email = models.EmailField()
+    phone_number = models.CharField(max_length=20)
+    address = models.TextField()
+    city = models.CharField(max_length=100)
+    postal_code = models.CharField(max_length=20)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_paid = models.BooleanField(default=False)
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    paystack_transaction_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Order {self.id} - {self.user} - {self.status}"
+class OrderItem(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
+    product = models.ForeignKey('Product', on_delete=models.PROTECT) # Using string 'Product' in case it's defined below
+    price = models.DecimalField(max_digits=10, decimal_places=2) # Price at time of purchase
+    quantity = models.PositiveIntegerField(default=1)
+    color = models.CharField(max_length=255)
+    size = models.CharField(max_length=255,)
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product} in Order {self.order.id}"
+
+    def get_cost(self):
+        return self.price * self.quantity
+
+# ===========================
+# 2. USER & OVERSEER MODELS
+
 
 class UserUniversityApplication(models.Model):
     """
@@ -87,14 +198,21 @@ class UserUniversityApplication(models.Model):
  
 
 class Overseer(models.Model):
-    # uid = models.TextField(primary_key=True,null=False,blank=False)
+    uid = models.TextField(null=False, unique=True,blank=False)
     overseer_initials_surname = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     province = models.CharField(max_length=100)
     region = models.CharField(max_length=100)
     code = models.CharField(max_length=50)
-    
-    # Biometric/Committee Info
+    paystack_auth_code = models.CharField(max_length=255,blank=True)
+    subscription_status = models.CharField(max_length=55,default='inactive')
+    last_charged=models.DateField(auto_now=True,  ) 
+    last_charged_amount = models.DecimalField( decimal_places=2,max_digits=10,blank=True,null=True)
+    current_member_count = models.IntegerField(default=0) 
+    next_charge_date = models.CharField(blank=True) 
+    current_plan = models.CharField(max_length=100, blank=True, null=True, default='free_tier')
+    has_agreed_to_terms = models.BooleanField(default=False)
+    has_agreed_to_privacy = models.BooleanField(default=False)
     secretary_name = models.CharField(max_length=255, blank=True)
     chairperson_name = models.CharField(max_length=255, blank=True)
     secretary_face_url = models.TextField(blank=True, null=True)
@@ -102,52 +220,6 @@ class Overseer(models.Model):
 
     def __str__(self):
         return self.overseer_initials_surname
-
-class District(models.Model):
-    overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
-    district_elder_name = models.CharField(max_length=255)
-
-    def __str__(self):
-        return f"{self.district_elder_name} ({self.overseer})"
-
-class Community(models.Model):
-    district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
-    district_elder_name =models.TextField(max_length=255,blank=True,null=True)
-    community_name = models.CharField(max_length=255)
-    
-    # Auto-Generated Fields
-    full_address = models.TextField(blank=True)
-    latitude = models.FloatField(blank=True, null=True)
-    longitude = models.FloatField(blank=True, null=True)
-
-    def save(self, *args, **kwargs):
-        # 1. Construct the Address automatically
-        # Logic: Community Name + Overseer Region + Overseer Province
-        overseer = self.district.overseer
-        address_string = f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa"
-        self.full_address = address_string
-
-        # 2. Geocode (Get Lat/Lon) ONLY if they are missing
-        if not self.latitude or not self.longitude:
-            try:
-                print(f"📍 Geocoding: {address_string}")
-                geolocator = Nominatim(user_agent="tact_backend_v1")
-                location = geolocator.geocode(address_string, timeout=10)
-                
-                if location:
-                    self.latitude = location.latitude
-                    self.longitude = location.longitude
-                    print(f"✅ Found: {self.latitude}, {self.longitude}")
-                else:
-                    print("⚠️ Address not found by Google/OSM")
-            except Exception as e:
-                print(f"❌ Geocoding Error: {e}")
-
-        super(Community, self).save(*args, **kwargs)
-
-    def __str__(self):
-        return self.community_name
-
 
 class CommitteeMember(models.Model):
     overseer = models.ForeignKey(Overseer, related_name="committee_members", on_delete=models.CASCADE)
@@ -161,6 +233,64 @@ class CommitteeMember(models.Model):
     def __str__(self):
         return f"{self.name} - {self.portfolio}"
 
+class District(models.Model):
+    overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
+    district_elder_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.district_elder_name} ({self.overseer})"
+ 
+
+class Community(models.Model):
+    district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
+    district_elder_name = models.TextField(max_length=255, blank=True, null=True)
+    community_name = models.CharField(max_length=255)
+    
+    # Auto-Generated Fields
+    full_address = models.TextField(blank=True)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        overseer = self.district.overseer
+        
+        # 1. Define backup strategies (In order of preference)
+        address_attempts = [
+            f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa", # Most Specific
+            f"{self.community_name}, {overseer.province}, South Africa",                     # Standard (Best Hit Rate)
+            f"{self.community_name}, South Africa",                                           # Broad
+            f"{overseer.region}, {overseer.province}, South Africa"                           # Fallback (Point to Region center)
+        ]
+
+        # Set default address string (just in case none work, we keep the specific one)
+        self.full_address = address_attempts[0]
+
+        # 2. Geocode (Loop through strategies until one works)
+        if not self.latitude or not self.longitude:
+            geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
+            
+            for address in address_attempts:
+                try:
+                    print(f"📍 Geocoding Attempt: {address}")
+                    location = geolocator.geocode(address, timeout=10)
+                    
+                    if location:
+                        self.latitude = location.latitude
+                        self.longitude = location.longitude
+                        self.full_address = address # Update to the one that actually worked
+                        print(f"✅ Success! Found coords: {self.latitude}, {self.longitude}")
+                        break # Stop the loop, we found it!
+                    else:
+                        print("⚠️ Not found, trying next format...")
+                        
+                except Exception as e:
+                    print(f"❌ Error on '{address}': {e}")
+                    continue # Try next format even if error occurs
+ 
+        super(Community, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return self.community_name
 # ===========================
 # 3. FINANCIAL & EVENTS
 # ===========================
@@ -226,16 +356,22 @@ class CareerOpportunity(models.Model):
 
     def __str__(self):
         return self.title
+ 
 
-class TactsoBranch(models.Model):
+
+# ===========================
+# 4. CAREERS & EDUCATION
+# ===========================
+
+class TactsoBranch(models.Model): 
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     address = models.TextField(blank=True, verbose_name="Address")
     application_link = models.URLField(blank=True, verbose_name="Application Link")
-    
-    # Updated: To handle multiple images (JSON) and officer info
-    image_urls = models.TextField(blank=True, default="[]", verbose_name="Image URLs (JSON)")
+    education_officer_email = models.EmailField(blank=True, verbose_name="Email")
+    chairperson_email = models.EmailField(blank=True, verbose_name="Email") 
+    image_url = models.URLField(blank=True, verbose_name="Image URLs (JSON)")
     education_officer_name = models.CharField(max_length=255, blank=True, verbose_name="Education Officer Name")
     education_officer_face_url = models.URLField(blank=True, verbose_name="Education Officer Face URL")
     authorized_user_face_urls = models.TextField(blank=True, default="[]", verbose_name="Authorized Face URLs (JSON)")
@@ -247,55 +383,76 @@ class TactsoBranch(models.Model):
     def __str__(self):
         return self.university_name
 
-class Campus(models.Model):
-    branch = models.ForeignKey(TactsoBranch, related_name="campuses", on_delete=models.CASCADE)
-    campus_name = models.CharField(max_length=255, verbose_name="Campus Name")
-
-    def __str__(self):
-        return f"{self.campus_name} ({self.branch.university_name})"
-
-class BranchCommitteeMember(models.Model):
-    """
-    Sub-collection for TactsoBranch
-    """
-    branch = models.ForeignKey(TactsoBranch, related_name="committee_members", on_delete=models.CASCADE)
-    name = models.CharField(max_length=255, verbose_name="Name")
-    email = models.EmailField(blank=True, verbose_name="Email")
-    role = models.CharField(max_length=100, verbose_name="Role")
-    face_url = models.URLField(blank=True, verbose_name="Face URL")
-    added_at = models.TextField(blank=True, verbose_name="Added At")
-
-    def __str__(self):
-        return f"{self.name} ({self.branch.university_name})"
-
 class ApplicationRequest(models.Model):
     """
-    Sub-collection for TactsoBranch
+    THE UNIFIED APPLICATION MODEL (SAFE VERSION)
     """
-    branch = models.ForeignKey(TactsoBranch, related_name="applications", on_delete=models.CASCADE)
+    # Link to the University (Branch)
+    branch = models.ForeignKey(
+        TactsoBranch, 
+        related_name="applications", 
+        on_delete=models.CASCADE,
+        null=True,   # <--- ADDED THIS (Allows existing rows to exist without a branch)
+        blank=True   # <--- ADDED THIS
+    )
+    
+    # Link to the Student (User)
+    user = models.ForeignKey(
+        'Users', 
+        related_name="my_applications", 
+        on_delete=models.CASCADE,
+        to_field='uid', 
+        db_column='user_uid',
+        null=True,   # <--- ADDED THIS (Allows existing rows to exist without a user)
+        blank=True   # <--- ADDED THIS
+    )
+
     uid = models.CharField(max_length=255, verbose_name="Application UID")
-    user_id = models.CharField(max_length=255, verbose_name="User ID")
+    
+    # Status tracking
+    status = models.CharField(max_length=100, default="New", verbose_name="Status")
+    submission_date = models.DateTimeField(auto_now_add=True, verbose_name="Submission Date")
+    
+    # Personal Snapshot
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=50, blank=True, verbose_name="Phone")
-    status = models.CharField(max_length=100, verbose_name="Status")
-    submission_date = models.TextField(blank=True, verbose_name="Submission Date")
     
-    # Application Details
+    # Academic Choices
+    campus = models.CharField(max_length=255, blank=True, verbose_name="Campus", null=True)
+    primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
+    second_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Second Choice")
+    third_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Third Choice")
+    
+    # Details
+    highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Qualification")
+    previous_school = models.CharField(max_length=255, blank=True, verbose_name="Previous School")
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
-    highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Qualification")
-    campus = models.CharField(max_length=255, blank=True, verbose_name="Campus",null=True)
-    primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
 
-    # Document URLs (Flattened from 'documents' map)
+    # Document URLs
     id_passport_url = models.URLField(blank=True, verbose_name="ID/Passport URL")
     school_results_url = models.URLField(blank=True, verbose_name="School Results URL")
     proof_of_registration_url = models.URLField(blank=True, verbose_name="Proof of Reg URL")
     other_qualifications_url = models.URLField(blank=True, verbose_name="Other Docs URL")
 
     def __str__(self):
-        return f"{self.full_name} - {self.status}"
+        # Safety check in case branch is null during print
+        uni_name = self.branch.university_name if self.branch else "No University"
+        return f"{self.full_name} -> {uni_name}"
+class BranchCommitteeMember(models.Model):
+    """
+    Sub-collection for TactsoBranch
+    """
+    branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
+    fullname = models.CharField(max_length=255, verbose_name="Name")
+    email = models.EmailField(blank=True, verbose_name="Email")
+    role = models.CharField(max_length=100, verbose_name="Role")
+    face_url = models.URLField(blank=True, verbose_name="Face URL")
+    added_at = models.TextField(blank=True, verbose_name="Added At")
+
+    def __str__(self):
+        return f"{self.fullname} ({self.branch.university_name})"
 
 # ===========================
 # 5. STAFF & LOGS
@@ -339,3 +496,70 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} - {self.actor_name}"
+    
+class UsersHelp(models.Model):
+    description =models.TextField(max_length =255,verbose_name="Description")
+    status=models.BooleanField(default=False)
+    subject = models.TextField(max_length=255,blank=True)
+    user_email = models.EmailField(max_length=255,blank=True)
+    time_stamp = models.DateTimeField(max_length=255,default=timezone.now,auto_created=True)
+    user_id = models.TextField(max_length=255,verbose_name="User ID")
+    
+    def __str__(self):
+        return f"Ticket {self.user_email}"
+    
+ 
+class ContributionHistory(models.Model):
+    overseer_uid = models.CharField(max_length=255)
+    user_uid = models.CharField(max_length=255) # Link to original user
+    name = models.CharField(max_length=255)
+    surname = models.CharField(max_length=255)
+    district_elder = models.CharField(max_length=255)
+    community = models.CharField(max_length=255)
+    month = models.IntegerField()
+    year = models.IntegerField()
+    week1 = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    week2 = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    week3 = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    week4 = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.month}/{self.year}"
+
+class MonthlyReport(models.Model):
+    # ID format: "CommunityName_Year_Month" to ensure uniqueness per community per month
+    id = models.CharField(primary_key=True, max_length=255) 
+    
+    community_name = models.CharField(max_length=255)
+    year = models.IntegerField()
+    month = models.IntegerField()
+
+    # Financials
+    month_end = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    others = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    rent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    wine = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    power = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    sundries = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    council = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    equipment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # Dates (Stored as strings or DateFields, using Text for simplicity with Flutter strings)
+    date_week1 = models.CharField(max_length=50, blank=True, null=True)
+    date_week2 = models.CharField(max_length=50, blank=True, null=True)
+    date_week3 = models.CharField(max_length=50, blank=True, null=True)
+    date_week4 = models.CharField(max_length=50, blank=True, null=True)
+    date_month_end = models.CharField(max_length=50, blank=True, null=True)
+    date_others = models.CharField(max_length=50, blank=True, null=True)
+    date_rent = models.CharField(max_length=50, blank=True, null=True)
+    date_wine = models.CharField(max_length=50, blank=True, null=True)
+    date_power = models.CharField(max_length=50, blank=True, null=True)
+    date_sundries = models.CharField(max_length=50, blank=True, null=True)
+    date_council = models.CharField(max_length=50, blank=True, null=True)
+    date_equipment = models.CharField(max_length=50, blank=True, null=True)
+    
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.id

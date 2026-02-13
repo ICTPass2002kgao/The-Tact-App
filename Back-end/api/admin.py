@@ -3,8 +3,10 @@ from .models import (
     Songs, Product, Users, UserUniversityApplication,
     Overseer, District, Community, CommitteeMember,
     OverseerExpenseReport, UpcomingEvent,
-    CareerOpportunity, TactsoBranch, Campus, BranchCommitteeMember, ApplicationRequest,
-    StaffMember, AuditLog
+    CareerOpportunity, TactsoBranch, BranchCommitteeMember, ApplicationRequest,
+    StaffMember, AuditLog,
+    # NEW MARKETPLACE MODELS
+    SellerListing, Order, OrderItem
 )
 
 # ===========================
@@ -13,13 +15,14 @@ from .models import (
 
 @admin.register(Songs)
 class SongsAdmin(admin.ModelAdmin):
-    list_display = ('songName', 'artist', 'category', 'released')
-    search_fields = ('songName', 'artist')
+    list_display = ('song_name', 'artist', 'category', 'released')
+    search_fields = ('song_name', 'artist')
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'createdAt')
     search_fields = ('name', 'description')
+    list_filter = ('category', 'createdAt')
 
 # ===========================
 # 2. USER & OVERSEER
@@ -27,9 +30,9 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Users)
 class UsersAdmin(admin.ModelAdmin):
-    list_display = ('email', 'role', 'province', 'uid')
-    search_fields = ('email', 'uid', 'surname')
-    list_filter = ('role', 'province')
+    list_display = ('email', 'role', 'province', 'uid', 'seller_paystack_account')
+    search_fields = ('email', 'uid', 'surname', 'name')
+    list_filter = ('role', 'province', 'account_verified')
 
 @admin.register(UserUniversityApplication)
 class UserUniversityApplicationAdmin(admin.ModelAdmin):
@@ -90,26 +93,16 @@ class CareerOpportunityAdmin(admin.ModelAdmin):
     list_display = ('title', 'category', 'expiry_date', 'is_active')
     list_filter = ('category', 'is_active')
     search_fields = ('title', 'description')
-
-class CampusInline(admin.TabularInline):
-    model = Campus
-    extra = 0
-
+ 
 @admin.register(TactsoBranch)
 class TactsoBranchAdmin(admin.ModelAdmin):
     list_display = ('university_name', 'email', 'is_application_open')
     search_fields = ('university_name', 'email')
-    inlines = [CampusInline]
-
-@admin.register(Campus)
-class CampusAdmin(admin.ModelAdmin):
-    list_display = ('campus_name', 'branch')
-    search_fields = ('campus_name', 'branch__university_name')
-
+    
 @admin.register(BranchCommitteeMember)
 class BranchCommitteeMemberAdmin(admin.ModelAdmin):
-    list_display = ('name', 'role', 'branch')
-    search_fields = ('name', 'branch__university_name')
+    list_display = ('fullname', 'role', 'branch')
+    search_fields = ('fullname', 'branch__university_name')
 
 @admin.register(ApplicationRequest)
 class ApplicationRequestAdmin(admin.ModelAdmin):
@@ -132,3 +125,27 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ('action', 'actor_name', 'timestamp', 'university_name')
     list_filter = ('action', 'actor_role')
     search_fields = ('actor_name', 'details', 'uid')
+
+# ===========================
+# 6. MARKETPLACE
+# ===========================
+
+@admin.register(SellerListing)
+class SellerListingAdmin(admin.ModelAdmin):
+    list_display = ('product', 'seller', 'price', 'location', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('product__name', 'seller__email', 'location')
+    autocomplete_fields = ['product', 'seller']
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0
+    readonly_fields = ('product', 'price', 'quantity', 'get_cost')
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'email', 'total_amount', 'status', 'is_paid', 'created_at')
+    list_filter = ('status', 'is_paid', 'created_at')
+    search_fields = ('id', 'email', 'full_name', 'transaction_id')
+    inlines = [OrderItemInline]
+    readonly_fields = ('created_at', 'updated_at', 'transaction_id', 'paystack_transaction_data')

@@ -26,14 +26,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY', get_random_secret_key())
 # On Railway, set DJANGO_DEBUG=False. Locally it defaults to True.
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '.railway.app',           # Covers all railway subdomains
-    'tact-api.up.railway.app',
-    'tact-3c612.web.app',     # Your Frontend
-    'dankie-website.web.app', # Your Website
-    '*',                      # CAUTION: Only strictly for testing mobile connections
+ALLOWED_HOSTS = [ "127.0.0.1","192.168.19.151",
+                 '*',                      # CAUTION: Only strictly for testing mobile connections
 ]
 
 # ==================================================================================
@@ -42,15 +36,7 @@ ALLOWED_HOSTS = [
 
 CORS_ALLOW_ALL_ORIGINS = True  # Useful for mobile apps during dev, strictly restrict in high-security
 
-# Trusted Origins for CSRF (Must include http/https scheme)
-CSRF_TRUSTED_ORIGINS = [
-    'https://tact-api.up.railway.app',
-    'https://tact-3c612.web.app',
-    'https://dankie-website.web.app',
-    'http://localhost',
-    'http://127.0.0.1',
-]
-
+ 
 # ==========================================
 # 3. INSTALLED APPS & MIDDLEWARE
 # ==========================================
@@ -179,9 +165,10 @@ except Exception as e:
 
 # Firebase
 FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-
+APPEND_SLASH=False
 FIREBASE_STORAGE_BUCKET = 'tact-3c612.firebasestorage.app'
-
+PAYSTACK_SECRET_KEY=os.environ.get('PAYSTACK_SECRET_KEY')
+PAYSTACK_API_BASE = os.environ.get('PAYSTACK_API_BASE')
 # =======================================================================
 # 10. PRODUCTION HEADERS
 # =======================================================================
@@ -195,10 +182,3 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
-
-
-
-
-
-
-

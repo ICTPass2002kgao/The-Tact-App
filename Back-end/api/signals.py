@@ -4,7 +4,7 @@ from django.core.cache import cache
 from .models import (
     Songs, Product, Users, Overseer, District, Community, 
     CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
-    CareerOpportunity, TactsoBranch, Campus, StaffMember, AuditLog,
+    CareerOpportunity, TactsoBranch,   StaffMember, AuditLog,
     BranchCommitteeMember, ApplicationRequest, UserUniversityApplication
 )
 
@@ -12,7 +12,7 @@ from .models import (
 ALL_MODELS = [
     Songs, Product, Users, Overseer, District, Community, 
     CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
-    CareerOpportunity, TactsoBranch, Campus, StaffMember, AuditLog,
+    CareerOpportunity, TactsoBranch,   StaffMember, AuditLog,
     BranchCommitteeMember, ApplicationRequest, UserUniversityApplication
 ]
 
