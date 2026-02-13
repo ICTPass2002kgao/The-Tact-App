@@ -7,36 +7,47 @@ import dj_database_url
 from cryptography.fernet import Fernet
 from django.core.management.utils import get_random_secret_key
 
-# --- ADD THIS SECTION ---
-from dotenv import load_dotenv # Import
-load_dotenv()                  # Load variables from .env
-# ------------------------
+# --- ENV LOADING ---
+from dotenv import load_dotenv
+load_dotenv() 
+# -------------------
 
 # Build paths inside the project...
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 # ==========================================
 # 1. SECURITY & ENVIRONMENT
 # ==========================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# If SECRET_KEY is not in env, generates a random one (safe fallback)
 SECRET_KEY = os.environ.get('SECRET_KEY', get_random_secret_key())
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# On Railway, set DJANGO_DEBUG=False. Locally it defaults to True.
+# On Railway, ensure you set the Environment Variable DJANGO_DEBUG = False
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [ "127.0.0.1","192.168.19.151",
-                 '*',                      # CAUTION: Only strictly for testing mobile connections
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "192.168.19.151",
+    ".railway.app",  # <--- REQUIRED FOR RAILWAY
+    "*",             # CAUTION: Remove this '*' when fully live for better security
 ]
 
 # ==================================================================================
 # 2. CORS & CSRF (Flutter Connection)
 # ==================================================================================
 
-CORS_ALLOW_ALL_ORIGINS = True  # Useful for mobile apps during dev, strictly restrict in high-security
+# CORS allows your Flutter app to make requests
+CORS_ALLOW_ALL_ORIGINS = True 
 
- 
+# CSRF Trusted Origins (CRITICAL FOR RAILWAY)
+# Railway puts your app behind a proxy (HTTPS), so Django needs to know it's safe.
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+]
+
 # ==========================================
 # 3. INSTALLED APPS & MIDDLEWARE
 # ==========================================
@@ -47,16 +58,16 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles', # Required for Whitenoise
     'rest_framework',
     'corsheaders',
-    'api',
+    'api', # Ensure your main app folder is named 'api' or change this line
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  
+    "whitenoise.middleware.WhiteNoiseMiddleware", # <--- MUST BE AFTER SECURITY
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -65,7 +76,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'tact_api.urls'
+ROOT_URLCONF = 'tact_api.urls' # Double check if your inner folder is named 'tact_api'
 
 TEMPLATES = [
     {
@@ -127,14 +138,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Use WhiteNoise to serve static files in production
-if not DEBUG:
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Storage configuration for Whitenoise
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ==========================================
 # 8. EMAIL CONFIGURATION (Gmail)
-# ========================================================================
-
+# ==========================================
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -143,20 +152,21 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER') 
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD') 
 
-# =========================================================================
+# ==========================================
 # 9. ENCRYPTION & FIREBASE 
-# =========================================================================
+# ==========================================
  
 ENCRYPTION_KEY = os.environ.get('FERNET_KEY')
  
 if not ENCRYPTION_KEY:
-    print("⚠️ WARNING: FERNET_KEY not found in env. Using temporary key (DATA LOSS RISK).")
+    # Only print warning in dev, or check DEBUG status
+    if DEBUG:
+        print("⚠️ WARNING: FERNET_KEY not found in env. Using temporary key (DATA LOSS RISK).")
     ENCRYPTION_KEY = Fernet.generate_key()
 else:
     # Ensure it's bytes
     if isinstance(ENCRYPTION_KEY, str):
         ENCRYPTION_KEY = ENCRYPTION_KEY.encode()
-         
 
 try:
     Fernet(ENCRYPTION_KEY)
@@ -165,20 +175,25 @@ except Exception as e:
 
 # Firebase
 FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-APPEND_SLASH=False
 FIREBASE_STORAGE_BUCKET = 'tact-3c612.firebasestorage.app'
-PAYSTACK_SECRET_KEY=os.environ.get('PAYSTACK_SECRET_KEY')
-PAYSTACK_API_BASE = os.environ.get('PAYSTACK_API_BASE')
-# =======================================================================
-# 10. PRODUCTION HEADERS
-# =======================================================================
 
+# Paystack
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY')
+PAYSTACK_API_BASE = os.environ.get('PAYSTACK_API_BASE')
+
+# System Misc
+APPEND_SLASH = False
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ==========================================
+# 10. PRODUCTION HEADERS
+# ==========================================
+
 if not DEBUG:
-    
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
+    # Ensure HTTPS is recognized behind proxy
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
