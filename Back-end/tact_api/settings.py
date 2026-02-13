@@ -182,9 +182,9 @@ PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY')
 PAYSTACK_API_BASE = os.environ.get('PAYSTACK_API_BASE')
 
 # System Misc
-APPEND_SLASH = False
+APPEND_SLASH = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
+ 
 # ==========================================
 # 10. PRODUCTION HEADERS
 # ==========================================
