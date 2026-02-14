@@ -1,21 +1,25 @@
-import uuid
+import uuid  # <--- Added UUID import
 from django.db import models
 from django.utils import timezone
-from geopy.geocoders import Nominatim # <--- Import this
+from geopy.geocoders import Nominatim 
+
 # ===========================
 # 1. CORE CONTENT MODELS
 # ===========================
 
 class Songs(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    artist = models.TextField(max_length=255, verbose_name="Artist", blank=False)
-    category = models.TextField(max_length=255, verbose_name="Category", blank=False)
-    released = models.TextField(null=True, blank=True, verbose_name="Released Date")
-    song_url = models.URLField(verbose_name="Song url", blank=False)
-    song_name = models.TextField(max_length=255, verbose_name="Song Name", blank=False)
+    artist = models.CharField(max_length=255, verbose_name="Artist", blank=False)
+    category = models.CharField(max_length=255, verbose_name="Category", blank=False)
+    released = models.CharField(max_length=100, null=True, blank=True, verbose_name="Released Date")
+    
+    # ✅ FIX: Increased max_length to 1000 to fit long Firebase URLs
+    song_url = models.URLField(max_length=1000, verbose_name="Song url", blank=False)
+    
+    song_name = models.CharField(max_length=255, verbose_name="Song Name", blank=False)
     
     def __str__(self):
-        return self.songName 
+        return self.song_name
   
 
 class Product(models.Model):
@@ -25,15 +29,9 @@ class Product(models.Model):
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     createdAt = models.DateTimeField(default=timezone.now, verbose_name="Created At")
     
-    # 1. The Main Image (MANDATORY - "Initially one is important")
-    # This acts as the thumbnail/cover.
     image_url = models.URLField(verbose_name="Main Image URL", blank=True) 
-    
-    # 2. The Gallery (OPTIONAL - "Come back to add others")
-    # Stores a list of strings. Validation for "Max 10" happens in the Serializer.
     additional_images = models.JSONField(default=list, blank=True, verbose_name="Gallery Images")
     
-    # Variants
     all_available_colors = models.JSONField(default=list, blank=True) 
     all_available_sizes = models.JSONField(default=list, blank=True)
 
@@ -41,7 +39,10 @@ class Product(models.Model):
         return self.name if self.name else "Unnamed Product"
   
 class Users(models.Model): 
-    # Use 'uid' as the link target for other models
+    # Added UUID as primary key
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # 'uid' remains the logical key for Firebase relationships
     uid = models.CharField(max_length=128, unique=True, db_index=True) 
     email = models.EmailField(max_length=255, blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
@@ -65,7 +66,6 @@ class Users(models.Model):
     week3 = models.CharField(max_length=50, blank=True, null=True)
     week4 = models.CharField(max_length=50, blank=True, null=True)
 
-    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -75,24 +75,20 @@ class Users(models.Model):
 
 class SellerListing(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # The Link: This listing belongs to ONE global product
     product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='listings')
     
-    # Seller Specifics - UPDATED to ForeignKey
-    # to_field='uid' links this directly to the 'uid' field in Users, not the auto-ID.
+    # to_field='uid' links to the 'uid' CharField in Users, not the UUID 'id'
     seller = models.ForeignKey(
         Users, 
         to_field='uid', 
         on_delete=models.CASCADE, 
         related_name='seller_listings',
-        db_column='seller_uid' # Optional: keeps the column name in the DB as 'seller_uid'
+        db_column='seller_uid' 
     )
     
     price = models.DecimalField(max_digits=10, decimal_places=2)
     location = models.CharField(max_length=255)
     
-    # What variants does THIS seller actually have in stock?
     seller_colors = models.JSONField(default=list) 
     seller_sizes = models.JSONField(default=list)
     
@@ -100,13 +96,11 @@ class SellerListing(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # Prevent a seller from listing the exact same product twice
         unique_together = ('product', 'seller') 
 
     def __str__(self):
         return f"{self.product.name} - {self.seller.uid}"
-# api/models.py
- 
+
 class Order(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Pending'),
@@ -118,8 +112,6 @@ class Order(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # FIX: Changed from CharField to ForeignKey linking to your Users model
-    # db_column='user_uid' ensures the database column is named 'user_uid'
     user = models.ForeignKey(
         Users, 
         on_delete=models.CASCADE, 
@@ -147,11 +139,12 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order {self.id} - {self.user} - {self.status}"
+
 class OrderItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
-    product = models.ForeignKey('Product', on_delete=models.PROTECT) # Using string 'Product' in case it's defined below
-    price = models.DecimalField(max_digits=10, decimal_places=2) # Price at time of purchase
+    product = models.ForeignKey('Product', on_delete=models.PROTECT) 
+    price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField(default=1)
     color = models.CharField(max_length=255)
     size = models.CharField(max_length=255,)
@@ -164,13 +157,12 @@ class OrderItem(models.Model):
 
 # ===========================
 # 2. USER & OVERSEER MODELS
-
+# ===========================
 
 class UserUniversityApplication(models.Model):
-    """
-    Sub-collection for Users: 'university_applications'
-    Represents the user's personal record of an application.
-    """
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     user = models.ForeignKey(Users, related_name="university_applications", on_delete=models.CASCADE)
     application_uid = models.CharField(max_length=255, verbose_name="Application UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
@@ -186,7 +178,6 @@ class UserUniversityApplication(models.Model):
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
     
-    # Personal Details Snapshot
     full_name = models.CharField(max_length=255, blank=True, verbose_name="Full Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=50, blank=True, verbose_name="Phone")
@@ -198,6 +189,9 @@ class UserUniversityApplication(models.Model):
  
 
 class Overseer(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     uid = models.TextField(null=False, unique=True,blank=False)
     overseer_initials_surname = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
@@ -206,7 +200,7 @@ class Overseer(models.Model):
     code = models.CharField(max_length=50)
     paystack_auth_code = models.CharField(max_length=255,blank=True)
     subscription_status = models.CharField(max_length=55,default='inactive')
-    last_charged=models.DateField(auto_now=True,  ) 
+    last_charged=models.DateField(auto_now=True) 
     last_charged_amount = models.DecimalField( decimal_places=2,max_digits=10,blank=True,null=True)
     current_member_count = models.IntegerField(default=0) 
     next_charge_date = models.CharField(blank=True) 
@@ -222,6 +216,9 @@ class Overseer(models.Model):
         return self.overseer_initials_surname
 
 class CommitteeMember(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     overseer = models.ForeignKey(Overseer, related_name="committee_members", on_delete=models.CASCADE)
     name = models.CharField(max_length=255, verbose_name="Name")
     email = models.EmailField(blank=True, verbose_name="Email")
@@ -234,6 +231,9 @@ class CommitteeMember(models.Model):
         return f"{self.name} - {self.portfolio}"
 
 class District(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
     district_elder_name = models.CharField(max_length=255)
 
@@ -242,6 +242,9 @@ class District(models.Model):
  
 
 class Community(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
     district_elder_name = models.TextField(max_length=255, blank=True, null=True)
     community_name = models.CharField(max_length=255)
@@ -254,48 +257,48 @@ class Community(models.Model):
     def save(self, *args, **kwargs):
         overseer = self.district.overseer
         
-        # 1. Define backup strategies (In order of preference)
+        # 1. Define backup strategies
         address_attempts = [
-            f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa", # Most Specific
-            f"{self.community_name}, {overseer.province}, South Africa",                     # Standard (Best Hit Rate)
-            f"{self.community_name}, South Africa",                                           # Broad
-            f"{overseer.region}, {overseer.province}, South Africa"                           # Fallback (Point to Region center)
+            f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa",
+            f"{self.community_name}, {overseer.province}, South Africa",
+            f"{self.community_name}, South Africa",
+            f"{overseer.region}, {overseer.province}, South Africa"
         ]
 
-        # Set default address string (just in case none work, we keep the specific one)
         self.full_address = address_attempts[0]
 
-        # 2. Geocode (Loop through strategies until one works)
+        # 2. Geocode
         if not self.latitude or not self.longitude:
             geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
-            
             for address in address_attempts:
                 try:
                     print(f"📍 Geocoding Attempt: {address}")
                     location = geolocator.geocode(address, timeout=10)
-                    
                     if location:
                         self.latitude = location.latitude
                         self.longitude = location.longitude
-                        self.full_address = address # Update to the one that actually worked
+                        self.full_address = address 
                         print(f"✅ Success! Found coords: {self.latitude}, {self.longitude}")
-                        break # Stop the loop, we found it!
+                        break 
                     else:
                         print("⚠️ Not found, trying next format...")
-                        
                 except Exception as e:
                     print(f"❌ Error on '{address}': {e}")
-                    continue # Try next format even if error occurs
+                    continue 
  
         super(Community, self).save(*args, **kwargs)
 
     def __str__(self):
         return self.community_name
+
 # ===========================
 # 3. FINANCIAL & EVENTS
 # ===========================
 
 class OverseerExpenseReport(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     archived_at = models.TextField(verbose_name="Archived At", blank=True, null=True)
     overseer_uid = models.CharField(max_length=255, verbose_name="Overseer UID")
     district_elder_name = models.CharField(max_length=255, verbose_name="District Elder Name")
@@ -318,6 +321,9 @@ class OverseerExpenseReport(models.Model):
         return f"Report: {self.community_name} ({self.month}/{self.year})"
 
 class UpcomingEvent(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     title = models.CharField(max_length=255, verbose_name="Title")
     poster_url = models.URLField(blank=True, verbose_name="Poster URL")
     day = models.CharField(max_length=10, verbose_name="Day") 
@@ -333,6 +339,9 @@ class UpcomingEvent(models.Model):
 # ===========================
 
 class CareerOpportunity(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     title = models.CharField(max_length=255, verbose_name="Title")
     description = models.TextField(verbose_name="Description")
     category = models.CharField(max_length=255, verbose_name="Category")
@@ -357,13 +366,10 @@ class CareerOpportunity(models.Model):
     def __str__(self):
         return self.title
  
-
-
-# ===========================
-# 4. CAREERS & EDUCATION
-# ===========================
-
 class TactsoBranch(models.Model): 
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
     email = models.EmailField(blank=True, verbose_name="Email")
@@ -384,66 +390,58 @@ class TactsoBranch(models.Model):
         return self.university_name
 
 class ApplicationRequest(models.Model):
-    """
-    THE UNIFIED APPLICATION MODEL (SAFE VERSION)
-    """
-    # Link to the University (Branch)
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     branch = models.ForeignKey(
         TactsoBranch, 
         related_name="applications", 
         on_delete=models.CASCADE,
-        null=True,   # <--- ADDED THIS (Allows existing rows to exist without a branch)
-        blank=True   # <--- ADDED THIS
+        null=True,   
+        blank=True   
     )
     
-    # Link to the Student (User)
     user = models.ForeignKey(
         'Users', 
         related_name="my_applications", 
         on_delete=models.CASCADE,
         to_field='uid', 
         db_column='user_uid',
-        null=True,   # <--- ADDED THIS (Allows existing rows to exist without a user)
-        blank=True   # <--- ADDED THIS
+        null=True,   
+        blank=True   
     )
 
     uid = models.CharField(max_length=255, verbose_name="Application UID")
-    
-    # Status tracking
     status = models.CharField(max_length=100, default="New", verbose_name="Status")
     submission_date = models.DateTimeField(auto_now_add=True, verbose_name="Submission Date")
     
-    # Personal Snapshot
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=50, blank=True, verbose_name="Phone")
     
-    # Academic Choices
     campus = models.CharField(max_length=255, blank=True, verbose_name="Campus", null=True)
     primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
     second_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Second Choice")
     third_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Third Choice")
     
-    # Details
     highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Qualification")
     previous_school = models.CharField(max_length=255, blank=True, verbose_name="Previous School")
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
 
-    # Document URLs
     id_passport_url = models.URLField(blank=True, verbose_name="ID/Passport URL")
     school_results_url = models.URLField(blank=True, verbose_name="School Results URL")
     proof_of_registration_url = models.URLField(blank=True, verbose_name="Proof of Reg URL")
     other_qualifications_url = models.URLField(blank=True, verbose_name="Other Docs URL")
 
     def __str__(self):
-        # Safety check in case branch is null during print
         uni_name = self.branch.university_name if self.branch else "No University"
         return f"{self.full_name} -> {uni_name}"
+
 class BranchCommitteeMember(models.Model):
-    """
-    Sub-collection for TactsoBranch
-    """
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
     fullname = models.CharField(max_length=255, verbose_name="Name")
     email = models.EmailField(blank=True, verbose_name="Email")
@@ -459,6 +457,9 @@ class BranchCommitteeMember(models.Model):
 # ===========================
 
 class StaffMember(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     name = models.CharField(max_length=255, verbose_name="First Name")
@@ -475,6 +476,9 @@ class StaffMember(models.Model):
         return f"{self.full_name} ({self.role})"
 
 class AuditLog(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     action = models.CharField(max_length=255, verbose_name="Action")
     details = models.TextField(verbose_name="Details") 
      
@@ -498,6 +502,9 @@ class AuditLog(models.Model):
         return f"{self.action} - {self.actor_name}"
     
 class UsersHelp(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     description =models.TextField(max_length =255,verbose_name="Description")
     status=models.BooleanField(default=False)
     subject = models.TextField(max_length=255,blank=True)
@@ -510,8 +517,11 @@ class UsersHelp(models.Model):
     
  
 class ContributionHistory(models.Model):
+    # Added UUID
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     overseer_uid = models.CharField(max_length=255)
-    user_uid = models.CharField(max_length=255) # Link to original user
+    user_uid = models.CharField(max_length=255) 
     name = models.CharField(max_length=255)
     surname = models.CharField(max_length=255)
     district_elder = models.CharField(max_length=255)
@@ -528,14 +538,13 @@ class ContributionHistory(models.Model):
         return f"{self.name} - {self.month}/{self.year}"
 
 class MonthlyReport(models.Model):
-    # ID format: "CommunityName_Year_Month" to ensure uniqueness per community per month
+    # NOTE: Kept as CharField because this ID is manually constructed as "CommunityName_Year_Month"
     id = models.CharField(primary_key=True, max_length=255) 
     
     community_name = models.CharField(max_length=255)
     year = models.IntegerField()
     month = models.IntegerField()
 
-    # Financials
     month_end = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     others = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     rent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
@@ -545,7 +554,6 @@ class MonthlyReport(models.Model):
     council = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     equipment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
 
-    # Dates (Stored as strings or DateFields, using Text for simplicity with Flutter strings)
     date_week1 = models.CharField(max_length=50, blank=True, null=True)
     date_week2 = models.CharField(max_length=50, blank=True, null=True)
     date_week3 = models.CharField(max_length=50, blank=True, null=True)
