@@ -1,4 +1,4 @@
-import uuid  # <--- Added UUID import
+import uuid
 from django.db import models
 from django.utils import timezone
 from geopy.geocoders import Nominatim 
@@ -11,10 +11,10 @@ class Songs(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     artist = models.CharField(max_length=255, verbose_name="Artist", blank=False)
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
-    released = models.CharField(max_length=100, null=True, blank=True, verbose_name="Released Date")
+    released = models.CharField(max_length=255, null=True, blank=True, verbose_name="Released Date")
     
-    # ✅ FIX: Increased max_length to 1000 to fit long Firebase URLs
-    song_url = models.URLField(max_length=1000, verbose_name="Song url", blank=False)
+    # CHANGED: TextField to prevent length errors on long Firebase URLs
+    song_url = models.TextField(verbose_name="Song url", blank=False)
     
     song_name = models.CharField(max_length=255, verbose_name="Song Name", blank=False)
     
@@ -25,13 +25,14 @@ class Songs(models.Model):
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, verbose_name="Product Name", null=True, blank=True)
-    description = models.TextField(max_length=1000, verbose_name="Product Description", blank=False)
+    description = models.TextField(verbose_name="Product Description", blank=False)
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     createdAt = models.DateTimeField(default=timezone.now, verbose_name="Created At")
     
-    image_url = models.URLField(verbose_name="Main Image URL", blank=True) 
-    additional_images = models.JSONField(default=list, blank=True, verbose_name="Gallery Images")
+    # CHANGED: TextField for unlimited length
+    image_url = models.TextField(verbose_name="Main Image URL", blank=True) 
     
+    additional_images = models.JSONField(default=list, blank=True, verbose_name="Gallery Images")
     all_available_colors = models.JSONField(default=list, blank=True) 
     all_available_sizes = models.JSONField(default=list, blank=True)
 
@@ -39,32 +40,33 @@ class Product(models.Model):
         return self.name if self.name else "Unnamed Product"
   
 class Users(models.Model): 
-    # Added UUID as primary key
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # 'uid' remains the logical key for Firebase relationships
-    uid = models.CharField(max_length=128, unique=True, db_index=True) 
+    uid = models.CharField(max_length=255, unique=True, db_index=True) # Increased to 255
     email = models.EmailField(max_length=255, blank=True, null=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    name = models.CharField(max_length=255,blank=True)
-    surname = models.CharField(max_length=100, blank=True, null=True)
-    address = models.CharField(max_length=255, blank=True, null=True)
-    province = models.CharField(max_length=100, blank=True, null=True)
     
-    # Financial / Seller Specific Fields
-    seller_paystack_account = models.CharField(max_length=100, blank=True, null=True)
+    # CHANGED: Increased from 20 to 100 to handle weird formatting
+    phone = models.CharField(max_length=100, blank=True, null=True)
+    
+    name = models.CharField(max_length=255, blank=True)
+    surname = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=500, blank=True, null=True) # Increased for long addresses
+    province = models.CharField(max_length=255, blank=True, null=True)
+    
+    seller_paystack_account = models.CharField(max_length=255, blank=True, null=True)
     account_verified = models.BooleanField(default=False)
     
-    # App Specifics
-    role = models.CharField(max_length=50, blank=True, null=True)
-    community_name = models.CharField(max_length=100, blank=True, null=True)
-    district_elder_name = models.CharField(max_length=100, blank=True, null=True)
-    overseer_uid = models.CharField(max_length=128, blank=True, null=True)
-    profile_url = models.URLField(max_length=500, blank=True, null=True)  
-    week1 = models.CharField(max_length=50, blank=True, null=True)
-    week2 = models.CharField(max_length=50, blank=True, null=True)
-    week3 = models.CharField(max_length=50, blank=True, null=True)
-    week4 = models.CharField(max_length=50, blank=True, null=True)
+    role = models.CharField(max_length=255, blank=True, null=True)
+    community_name = models.CharField(max_length=255, blank=True, null=True)
+    district_elder_name = models.CharField(max_length=255, blank=True, null=True)
+    overseer_uid = models.CharField(max_length=255, blank=True, null=True)
+    
+    # CHANGED: TextField for unlimited length
+    profile_url = models.TextField(blank=True, null=True)  
+    
+    week1 = models.CharField(max_length=255, blank=True, null=True)
+    week2 = models.CharField(max_length=255, blank=True, null=True)
+    week3 = models.CharField(max_length=255, blank=True, null=True)
+    week4 = models.CharField(max_length=255, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -77,7 +79,6 @@ class SellerListing(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='listings')
     
-    # to_field='uid' links to the 'uid' CharField in Users, not the UUID 'id'
     seller = models.ForeignKey(
         Users, 
         to_field='uid', 
@@ -122,14 +123,14 @@ class Order(models.Model):
     
     full_name = models.CharField(max_length=255)
     email = models.EmailField()
-    phone_number = models.CharField(max_length=20)
+    phone_number = models.CharField(max_length=100) # Increased
     address = models.TextField()
-    city = models.CharField(max_length=100)
-    postal_code = models.CharField(max_length=20)
+    city = models.CharField(max_length=255)
+    postal_code = models.CharField(max_length=100) # Increased
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default='pending') # Increased
     is_paid = models.BooleanField(default=False)
-    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    transaction_id = models.CharField(max_length=255, blank=True, null=True)
     paystack_transaction_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -147,7 +148,7 @@ class OrderItem(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField(default=1)
     color = models.CharField(max_length=255)
-    size = models.CharField(max_length=255,)
+    size = models.CharField(max_length=255)
 
     def __str__(self):
         return f"{self.quantity} x {self.product} in Order {self.order.id}"
@@ -160,15 +161,14 @@ class OrderItem(models.Model):
 # ===========================
 
 class UserUniversityApplication(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     user = models.ForeignKey(Users, related_name="university_applications", on_delete=models.CASCADE)
+    
     application_uid = models.CharField(max_length=255, verbose_name="Application UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
     campus_name = models.CharField(max_length=255, blank=True, verbose_name="Campus Name")
     
-    status = models.CharField(max_length=100, verbose_name="Status")
+    status = models.CharField(max_length=255, verbose_name="Status")
     submission_date = models.TextField(blank=True, verbose_name="Submission Date")
     
     primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
@@ -180,7 +180,7 @@ class UserUniversityApplication(models.Model):
     
     full_name = models.CharField(max_length=255, blank=True, verbose_name="Full Name")
     email = models.EmailField(blank=True, verbose_name="Email")
-    phone = models.CharField(max_length=50, blank=True, verbose_name="Phone")
+    phone = models.CharField(max_length=100, blank=True, verbose_name="Phone")
     highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Highest Qualification")
     previous_school = models.CharField(max_length=255, blank=True, verbose_name="Previous School")
 
@@ -189,26 +189,29 @@ class UserUniversityApplication(models.Model):
  
 
 class Overseer(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     uid = models.TextField(null=False, unique=True,blank=False)
     overseer_initials_surname = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
-    province = models.CharField(max_length=100)
-    region = models.CharField(max_length=100)
-    code = models.CharField(max_length=50)
+    province = models.CharField(max_length=255)
+    region = models.CharField(max_length=255)
+    code = models.CharField(max_length=255) # Increased
     paystack_auth_code = models.CharField(max_length=255,blank=True)
-    subscription_status = models.CharField(max_length=55,default='inactive')
+    subscription_status = models.CharField(max_length=255,default='inactive') # Increased
+    
     last_charged=models.DateField(auto_now=True) 
     last_charged_amount = models.DecimalField( decimal_places=2,max_digits=10,blank=True,null=True)
     current_member_count = models.IntegerField(default=0) 
-    next_charge_date = models.CharField(blank=True) 
-    current_plan = models.CharField(max_length=100, blank=True, null=True, default='free_tier')
+    next_charge_date = models.CharField(max_length=255, blank=True) 
+    current_plan = models.CharField(max_length=255, blank=True, null=True, default='free_tier')
+    
     has_agreed_to_terms = models.BooleanField(default=False)
     has_agreed_to_privacy = models.BooleanField(default=False)
     secretary_name = models.CharField(max_length=255, blank=True)
     chairperson_name = models.CharField(max_length=255, blank=True)
+    
+    # CHANGED: TextField
     secretary_face_url = models.TextField(blank=True, null=True)
     chairperson_face_url = models.TextField(blank=True, null=True)
 
@@ -216,24 +219,23 @@ class Overseer(models.Model):
         return self.overseer_initials_surname
 
 class CommitteeMember(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     overseer = models.ForeignKey(Overseer, related_name="committee_members", on_delete=models.CASCADE)
     name = models.CharField(max_length=255, verbose_name="Name")
     email = models.EmailField(blank=True, verbose_name="Email")
-    role = models.CharField(max_length=100, verbose_name="Role")
+    role = models.CharField(max_length=255, verbose_name="Role")
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
-    face_url = models.URLField(blank=True, verbose_name="Face URL")
+    
+    # CHANGED: TextField
+    face_url = models.TextField(blank=True, verbose_name="Face URL")
+    
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
     def __str__(self):
         return f"{self.name} - {self.portfolio}"
 
 class District(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
     district_elder_name = models.CharField(max_length=255)
 
@@ -242,32 +244,25 @@ class District(models.Model):
  
 
 class Community(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
     district_elder_name = models.TextField(max_length=255, blank=True, null=True)
     community_name = models.CharField(max_length=255)
     
-    # Auto-Generated Fields
     full_address = models.TextField(blank=True)
     latitude = models.FloatField(blank=True, null=True)
     longitude = models.FloatField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
         overseer = self.district.overseer
-        
-        # 1. Define backup strategies
         address_attempts = [
             f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa",
             f"{self.community_name}, {overseer.province}, South Africa",
             f"{self.community_name}, South Africa",
             f"{overseer.region}, {overseer.province}, South Africa"
         ]
-
         self.full_address = address_attempts[0]
 
-        # 2. Geocode
         if not self.latitude or not self.longitude:
             geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
             for address in address_attempts:
@@ -296,14 +291,12 @@ class Community(models.Model):
 # ===========================
 
 class OverseerExpenseReport(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     archived_at = models.TextField(verbose_name="Archived At", blank=True, null=True)
     overseer_uid = models.CharField(max_length=255, verbose_name="Overseer UID")
     district_elder_name = models.CharField(max_length=255, verbose_name="District Elder Name")
     community_name = models.CharField(max_length=255, verbose_name="Community Name")
-    province = models.CharField(max_length=100, verbose_name="Province")
+    province = models.CharField(max_length=255, verbose_name="Province")
      
     expense_central = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Central")
     expense_other = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Other")
@@ -321,13 +314,16 @@ class OverseerExpenseReport(models.Model):
         return f"Report: {self.community_name} ({self.month}/{self.year})"
 
 class UpcomingEvent(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     title = models.CharField(max_length=255, verbose_name="Title")
-    poster_url = models.URLField(blank=True, verbose_name="Poster URL")
-    day = models.CharField(max_length=10, verbose_name="Day") 
-    month = models.CharField(max_length=20, verbose_name="Month")
+    
+    # CHANGED: TextField
+    poster_url = models.TextField(blank=True, verbose_name="Poster URL")
+    
+    # CHANGED: Increased to 255 to prevent crashes
+    day = models.CharField(max_length=255, verbose_name="Day") 
+    month = models.CharField(max_length=255, verbose_name="Month")
+    
     parsed_date = models.TextField(blank=True, verbose_name="Parsed Date", null=True) 
     created_at = models.TextField(blank=True, verbose_name="Created At")
 
@@ -339,20 +335,23 @@ class UpcomingEvent(models.Model):
 # ===========================
 
 class CareerOpportunity(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     title = models.CharField(max_length=255, verbose_name="Title")
     description = models.TextField(verbose_name="Description")
     category = models.CharField(max_length=255, verbose_name="Category")
     application_email = models.EmailField(max_length=255, verbose_name="Application Email")
-    contact_number = models.CharField(max_length=50, blank=True, verbose_name="Contact Number")
+    
+    # CHANGED: Increased to 100
+    contact_number = models.CharField(max_length=100, blank=True, verbose_name="Contact Number")
+    
     is_active = models.BooleanField(default=True, verbose_name="Is Active")
     expiry_date = models.TextField(blank=True, verbose_name="Expiry Date", null=True)
     created_at = models.TextField(blank=True, verbose_name="Created At")
     updated_at = models.TextField(blank=True, null=True, verbose_name="Updated At")
-    image_url = models.URLField(blank=True, verbose_name="Image URL")
-    link = models.URLField(blank=True, verbose_name="External Link")
+    
+    # CHANGED: TextField
+    image_url = models.TextField(blank=True, verbose_name="Image URL")
+    link = models.TextField(blank=True, verbose_name="External Link")
 
     details_address = models.TextField(blank=True, verbose_name="Details Address")
     course_duration = models.CharField(max_length=255, blank=True, verbose_name="Course Duration")
@@ -367,19 +366,26 @@ class CareerOpportunity(models.Model):
         return self.title
  
 class TactsoBranch(models.Model): 
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     address = models.TextField(blank=True, verbose_name="Address")
-    application_link = models.URLField(blank=True, verbose_name="Application Link")
+    
+    # CHANGED: TextField
+    application_link = models.TextField(blank=True, verbose_name="Application Link")
+    
     education_officer_email = models.EmailField(blank=True, verbose_name="Email")
     chairperson_email = models.EmailField(blank=True, verbose_name="Email") 
-    image_url = models.URLField(blank=True, verbose_name="Image URLs (JSON)")
+    
+    # CHANGED: TextField
+    image_url = models.TextField(blank=True, verbose_name="Image URLs (JSON)")
+    
     education_officer_name = models.CharField(max_length=255, blank=True, verbose_name="Education Officer Name")
-    education_officer_face_url = models.URLField(blank=True, verbose_name="Education Officer Face URL")
+    
+    # CHANGED: TextField
+    education_officer_face_url = models.TextField(blank=True, verbose_name="Education Officer Face URL")
+    
     authorized_user_face_urls = models.TextField(blank=True, default="[]", verbose_name="Authorized Face URLs (JSON)")
 
     has_multiple_campuses = models.BooleanField(default=False, verbose_name="Has Multiple Campuses")
@@ -390,34 +396,17 @@ class TactsoBranch(models.Model):
         return self.university_name
 
 class ApplicationRequest(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    branch = models.ForeignKey(
-        TactsoBranch, 
-        related_name="applications", 
-        on_delete=models.CASCADE,
-        null=True,   
-        blank=True   
-    )
-    
-    user = models.ForeignKey(
-        'Users', 
-        related_name="my_applications", 
-        on_delete=models.CASCADE,
-        to_field='uid', 
-        db_column='user_uid',
-        null=True,   
-        blank=True   
-    )
+    branch = models.ForeignKey(TactsoBranch, related_name="applications", on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey('Users', related_name="my_applications", on_delete=models.CASCADE, to_field='uid', db_column='user_uid', null=True, blank=True)
 
     uid = models.CharField(max_length=255, verbose_name="Application UID")
-    status = models.CharField(max_length=100, default="New", verbose_name="Status")
+    status = models.CharField(max_length=255, default="New", verbose_name="Status")
     submission_date = models.DateTimeField(auto_now_add=True, verbose_name="Submission Date")
     
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     email = models.EmailField(blank=True, verbose_name="Email")
-    phone = models.CharField(max_length=50, blank=True, verbose_name="Phone")
+    phone = models.CharField(max_length=100, blank=True, verbose_name="Phone")
     
     campus = models.CharField(max_length=255, blank=True, verbose_name="Campus", null=True)
     primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
@@ -429,24 +418,26 @@ class ApplicationRequest(models.Model):
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
 
-    id_passport_url = models.URLField(blank=True, verbose_name="ID/Passport URL")
-    school_results_url = models.URLField(blank=True, verbose_name="School Results URL")
-    proof_of_registration_url = models.URLField(blank=True, verbose_name="Proof of Reg URL")
-    other_qualifications_url = models.URLField(blank=True, verbose_name="Other Docs URL")
+    # CHANGED: All URLs to TextField
+    id_passport_url = models.TextField(blank=True, verbose_name="ID/Passport URL")
+    school_results_url = models.TextField(blank=True, verbose_name="School Results URL")
+    proof_of_registration_url = models.TextField(blank=True, verbose_name="Proof of Reg URL")
+    other_qualifications_url = models.TextField(blank=True, verbose_name="Other Docs URL")
 
     def __str__(self):
         uni_name = self.branch.university_name if self.branch else "No University"
         return f"{self.full_name} -> {uni_name}"
 
 class BranchCommitteeMember(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
     fullname = models.CharField(max_length=255, verbose_name="Name")
     email = models.EmailField(blank=True, verbose_name="Email")
-    role = models.CharField(max_length=100, verbose_name="Role")
-    face_url = models.URLField(blank=True, verbose_name="Face URL")
+    role = models.CharField(max_length=255, verbose_name="Role")
+    
+    # CHANGED: TextField
+    face_url = models.TextField(blank=True, verbose_name="Face URL")
+    
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
     def __str__(self):
@@ -457,18 +448,19 @@ class BranchCommitteeMember(models.Model):
 # ===========================
 
 class StaffMember(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     name = models.CharField(max_length=255, verbose_name="First Name")
     surname = models.CharField(max_length=255, verbose_name="Surname")
     email = models.EmailField(verbose_name="Email")
-    role = models.CharField(max_length=100, verbose_name="Role")
+    role = models.CharField(max_length=255, verbose_name="Role")
     portfolio = models.CharField(max_length=255, blank=True, verbose_name="Portfolio")
-    province = models.CharField(max_length=100, blank=True, verbose_name="Province")
-    face_url = models.URLField(blank=True, verbose_name="Face URL")
+    province = models.CharField(max_length=255, blank=True, verbose_name="Province")
+    
+    # CHANGED: TextField
+    face_url = models.TextField(blank=True, verbose_name="Face URL")
+    
     is_active = models.BooleanField(default=True, verbose_name="Is Active")
     created_at = models.TextField(blank=True, verbose_name="Created At")
 
@@ -476,23 +468,27 @@ class StaffMember(models.Model):
         return f"{self.full_name} ({self.role})"
 
 class AuditLog(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     action = models.CharField(max_length=255, verbose_name="Action")
     details = models.TextField(verbose_name="Details") 
      
     actor_name = models.CharField(max_length=255, verbose_name="Actor Name")
-    actor_role = models.CharField(max_length=100, verbose_name="Actor Role")
-    actor_face_url = models.URLField(blank=True, verbose_name="Actor Face URL")
+    actor_role = models.CharField(max_length=255, verbose_name="Actor Role")
+    
+    # CHANGED: TextField
+    actor_face_url = models.TextField(blank=True, verbose_name="Actor Face URL")
+    
     uid = models.CharField(max_length=255, verbose_name="User UID")
     
     university_name = models.CharField(max_length=255, blank=True, verbose_name="University Name")
-    university_logo = models.URLField(blank=True, verbose_name="University Logo")
+    
+    # CHANGED: TextField
+    university_logo = models.TextField(blank=True, verbose_name="University Logo")
+    
     branch_email = models.EmailField(blank=True, verbose_name="Branch Email")
     
     target_member_name = models.CharField(max_length=255, blank=True, verbose_name="Target Member Name")
-    target_member_role = models.CharField(max_length=100, blank=True, verbose_name="Target Member Role")
+    target_member_role = models.CharField(max_length=255, blank=True, verbose_name="Target Member Role")
     student_name = models.CharField(max_length=255, blank=True, default="N/A", verbose_name="Student Name")
     
     timestamp = models.TextField(verbose_name="Timestamp")
@@ -502,9 +498,7 @@ class AuditLog(models.Model):
         return f"{self.action} - {self.actor_name}"
     
 class UsersHelp(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     description =models.TextField(max_length =255,verbose_name="Description")
     status=models.BooleanField(default=False)
     subject = models.TextField(max_length=255,blank=True)
@@ -517,9 +511,7 @@ class UsersHelp(models.Model):
     
  
 class ContributionHistory(models.Model):
-    # Added UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     overseer_uid = models.CharField(max_length=255)
     user_uid = models.CharField(max_length=255) 
     name = models.CharField(max_length=255)
@@ -554,18 +546,19 @@ class MonthlyReport(models.Model):
     council = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     equipment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
 
-    date_week1 = models.CharField(max_length=50, blank=True, null=True)
-    date_week2 = models.CharField(max_length=50, blank=True, null=True)
-    date_week3 = models.CharField(max_length=50, blank=True, null=True)
-    date_week4 = models.CharField(max_length=50, blank=True, null=True)
-    date_month_end = models.CharField(max_length=50, blank=True, null=True)
-    date_others = models.CharField(max_length=50, blank=True, null=True)
-    date_rent = models.CharField(max_length=50, blank=True, null=True)
-    date_wine = models.CharField(max_length=50, blank=True, null=True)
-    date_power = models.CharField(max_length=50, blank=True, null=True)
-    date_sundries = models.CharField(max_length=50, blank=True, null=True)
-    date_council = models.CharField(max_length=50, blank=True, null=True)
-    date_equipment = models.CharField(max_length=50, blank=True, null=True)
+    # CHANGED: Increased all these to 255 to allow safe date string storage
+    date_week1 = models.CharField(max_length=255, blank=True, null=True)
+    date_week2 = models.CharField(max_length=255, blank=True, null=True)
+    date_week3 = models.CharField(max_length=255, blank=True, null=True)
+    date_week4 = models.CharField(max_length=255, blank=True, null=True)
+    date_month_end = models.CharField(max_length=255, blank=True, null=True)
+    date_others = models.CharField(max_length=255, blank=True, null=True)
+    date_rent = models.CharField(max_length=255, blank=True, null=True)
+    date_wine = models.CharField(max_length=255, blank=True, null=True)
+    date_power = models.CharField(max_length=255, blank=True, null=True)
+    date_sundries = models.CharField(max_length=255, blank=True, null=True)
+    date_council = models.CharField(max_length=255, blank=True, null=True)
+    date_equipment = models.CharField(max_length=255, blank=True, null=True)
     
     archived_at = models.DateTimeField(auto_now_add=True)
 
