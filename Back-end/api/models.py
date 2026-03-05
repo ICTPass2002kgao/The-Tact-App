@@ -188,9 +188,7 @@ class UserUniversityApplication(models.Model):
         return f"{self.university_name} - {self.status}"
  
 
-class Overseer(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+class Overseer(models.Model): 
     uid = models.TextField(null=False, unique=True,blank=False)
     overseer_initials_surname = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
@@ -205,9 +203,8 @@ class Overseer(models.Model):
     current_member_count = models.IntegerField(default=0) 
     next_charge_date = models.CharField(max_length=255, blank=True) 
     current_plan = models.CharField(max_length=255, blank=True, null=True, default='free_tier')
-    
-    has_agreed_to_terms = models.BooleanField(default=False)
-    has_agreed_to_privacy = models.BooleanField(default=False)
+     
+    accepted_ts_and_cs = models.BooleanField(default=False)
     secretary_name = models.CharField(max_length=255, blank=True)
     chairperson_name = models.CharField(max_length=255, blank=True)
     
@@ -434,6 +431,7 @@ class BranchCommitteeMember(models.Model):
     fullname = models.CharField(max_length=255, verbose_name="Name")
     email = models.EmailField(blank=True, verbose_name="Email")
     role = models.CharField(max_length=255, verbose_name="Role")
+    accepted_ts_and_cs = models.BooleanField(default=False)
     
     # CHANGED: TextField
     face_url = models.TextField(blank=True, verbose_name="Face URL")

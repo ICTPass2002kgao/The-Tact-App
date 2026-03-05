@@ -30,6 +30,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
     "192.168.19.151",
+    "mktechcloud.co.za",
     ".railway.app",  # <--- REQUIRED FOR RAILWAY
     "*",             # CAUTION: Remove this '*' when fully live for better security
 ]
@@ -46,6 +47,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 CSRF_TRUSTED_ORIGINS = [
     'https://*.railway.app',
     'https://*.up.railway.app',
+    'https://mktechcloud.co.za',
+    'https://www.mktechcloud.co.za',
+    
 ]
 
 # ==========================================
@@ -151,6 +155,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True 
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER') 
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD') 
+DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 
 # ==========================================
 # 9. ENCRYPTION & FIREBASE 
