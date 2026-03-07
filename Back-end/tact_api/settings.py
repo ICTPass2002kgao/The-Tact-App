@@ -165,9 +165,9 @@ EMAIL_HOST_PASSWORD =  "nsfq zgva ydfw xqso"
 # Force a 10-second timeout so Gunicorn doesn't crash if the connection hangs
 EMAIL_TIMEOUT = 10 
 
-# ==========================================
+# ===============================================================================
 # 9. ENCRYPTION & FIREBASE 
-# ==========================================
+# ===============================================================================
  
 ENCRYPTION_KEY = os.environ.get('FERNET_KEY')
  

@@ -447,7 +447,7 @@ class BranchCommitteeMember(models.Model):
 
 class StaffMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
+    uid = models.CharField(max_length=255, unique=True, verbose_name="UID") 
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     name = models.CharField(max_length=255, verbose_name="First Name")
     surname = models.CharField(max_length=255, verbose_name="Surname")
