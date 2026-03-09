@@ -103,10 +103,10 @@ WSGI_APPLICATION = 'tact_api.wsgi.application'
 # 4. DATABASE (Critical for Railway)
 # ==========================================
 
-# If DATABASE_URL is set (Railway), use Postgres. Otherwise SQLite (Local).
+# If DATABASE_URL is set (Railway), use Postgres. Otherwise fallback to the provided Postgres URL.
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        default="postgresql://postgres:WHCsgksxdTtnjjsduMJhugjYZChOZPcS@switchyard.proxy.rlwy.net:20084/railway",
         conn_max_age=600,
         conn_health_checks=True,
     )

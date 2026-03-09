@@ -4,7 +4,7 @@ from .models import (
     CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
     CareerOpportunity, TactsoBranch,  StaffMember, AuditLog,
     BranchCommitteeMember, ApplicationRequest,UserUniversityApplication,Community, District, Overseer
-,SellerListing,Product, Order,OrderItem,ContributionHistory, MonthlyReport)
+,SellerListing,Product, Order,OrderItem,ContributionHistory, MonthlyReport,IssueReport)
 class OrderItemSerializer(serializers.ModelSerializer):
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(), 
@@ -181,6 +181,10 @@ class OverseerSerializer(serializers.ModelSerializer):
 class CommitteeMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommitteeMember
+        fields = "__all__"
+class IssueReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IssueReport
         fields = "__all__"
 
 class OverseerExpenseReportSerializer(serializers.ModelSerializer):

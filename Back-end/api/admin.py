@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Songs, Product, Users, UserUniversityApplication,
+    IssueReport, Songs, Product, Users, UserUniversityApplication,
     Overseer, District, Community, CommitteeMember,
     OverseerExpenseReport, UpcomingEvent,
     CareerOpportunity, TactsoBranch, BranchCommitteeMember, ApplicationRequest,
@@ -18,12 +18,17 @@ class SongsAdmin(admin.ModelAdmin):
     list_display = ('song_name', 'artist', 'category', 'released')
     search_fields = ('song_name', 'artist')
 
+@admin.register(IssueReport)
+class IssueReportAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'reported_at')
+    search_fields = ('title', 'description')
+    list_filter = ('reported_by', 'reported_at')
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'createdAt')
     search_fields = ('name', 'description')
     list_filter = ('category', 'createdAt')
-
 # ===========================
 # 2. USER & OVERSEER
 # ===========================

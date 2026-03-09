@@ -43,14 +43,14 @@ from .mixins import CachedListMixin
 from django.db import transaction 
 # Models & Serializers
 from .models import (
-    Order, Songs, Product, Users, Overseer, District, Community, 
+    IssueReport, Order, Songs, Product, Users, Overseer, District, Community, 
     CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
     CareerOpportunity, TactsoBranch, StaffMember, AuditLog,
     BranchCommitteeMember, ApplicationRequest, UserUniversityApplication, 
     SellerListing,ContributionHistory, MonthlyReport
 )
 from .serializers import (
-    OrderSerializer, SongSerializer, ProductSerializer, UsersSerializer, 
+    IssueReportSerializer, OrderSerializer, SongSerializer, ProductSerializer, UsersSerializer, 
     OverseerSerializer, DistrictSerializer, CommunitySerializer, 
     CommitteeMemberSerializer, OverseerExpenseReportSerializer, 
     UpcomingEventSerializer, CareerOpportunitySerializer, 
@@ -1196,3 +1196,16 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+        
+        
+class IssueReportViewSet(viewsets.ModelViewSet):
+    queryset = IssueReport.objects.all()
+    serializer_class = IssueReportSerializer
+    
+    def get_queryset(self):
+        qs = IssueReport.objects.all()
+        is_resolved = self.request.query_params.get('is_resolved') 
+
+        if is_resolved is not None:
+            qs = qs.filter(is_resolved=(is_resolved.lower() == 'true')) 
+        return qs

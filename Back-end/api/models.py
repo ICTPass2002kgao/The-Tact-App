@@ -564,3 +564,16 @@ class MonthlyReport(models.Model):
 
     def __str__(self):
         return self.id
+    
+    
+class IssueReport(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255, verbose_name="Title")
+    description = models.TextField(verbose_name="Description")
+    reported_by = models.CharField(max_length=255, verbose_name="Reported By")
+    reported_at = models.DateTimeField(auto_now_add=True, verbose_name="Reported At")
+    is_resolved = models.BooleanField(default=False, verbose_name="Is Resolved")
+    resolved_at = models.DateTimeField(blank=True, null=True, verbose_name="Resolved At")
+
+    def __str__(self):
+        return self.title
