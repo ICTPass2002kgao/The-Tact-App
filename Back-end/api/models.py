@@ -204,7 +204,8 @@ class Overseer(models.Model):
     next_charge_date = models.CharField(max_length=255, blank=True) 
     current_plan = models.CharField(max_length=255, blank=True, null=True, default='free_tier')
      
-    accepted_ts_and_cs = models.BooleanField(default=False)
+    has_agreed_to_terms = models.BooleanField(default=False)
+    has_agreed_to_privacy_policy = models.BooleanField(default=False)
     secretary_name = models.CharField(max_length=255, blank=True)
     chairperson_name = models.CharField(max_length=255, blank=True)
     

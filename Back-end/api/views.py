@@ -563,8 +563,7 @@ def create_payment_link(request):
             amount_cents = int(round(price * qty * 100))
             total_amount += amount_cents
  
-            if product.get('subaccount'):
-                # Using 8% as ADMIN_SHARE based on Node.js constant
+            if product.get('subaccount'): 
                 ADMIN_SHARE_PERCENT = getattr(settings, 'ADMIN_SHARE_PERCENT', 9)
                 seller_share = int(round(amount_cents * (1 - ADMIN_SHARE_PERCENT / 100.0)))
                 subaccounts.append({
