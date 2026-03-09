@@ -25,6 +25,7 @@ router.register(r'seller-inventory', SellerInventoryViewSet, basename='seller-in
 
 # 4. Orders (Handling sales and purchases)
 router.register(r'orders', OrderViewSet, basename='orders')
+router.register(r'issue_report', views.IssueReportViewSet, basename='issue_report')
 router.register(r'staff', StaffMemberViewSet)
 router.register(r'overseers', OverseerViewSet)
 router.register(r'tactso_branches', TactsoBranchViewSet) 
