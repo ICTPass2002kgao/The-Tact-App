@@ -3,17 +3,17 @@ from django.dispatch import receiver
 from django.core.cache import cache
 from .models import (
     Songs, Product, Users, Overseer, District, Community, 
-    CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
-    CareerOpportunity, TactsoBranch,   StaffMember, AuditLog,
-    BranchCommitteeMember, ApplicationRequest, UserUniversityApplication
+    OverseerCommitteeMember, OverseerExpenseReport, UpcomingEvent, 
+    CareerOpportunity, TactsoBranch,   AdminStaffMember, AuditLog,
+    TactsoCommitteeMember, ApplicationRequest, UserUniversityApplication
 )
 
 # List of all models we want to auto-clean
 ALL_MODELS = [
     Songs, Product, Users, Overseer, District, Community, 
-    CommitteeMember, OverseerExpenseReport, UpcomingEvent, 
-    CareerOpportunity, TactsoBranch,   StaffMember, AuditLog,
-    BranchCommitteeMember, ApplicationRequest, UserUniversityApplication
+    OverseerCommitteeMember, OverseerExpenseReport, UpcomingEvent, 
+    CareerOpportunity, TactsoBranch,   AdminStaffMember, AuditLog,
+    TactsoCommitteeMember, ApplicationRequest, UserUniversityApplication
 ]
 
 def clear_model_cache(sender, instance, **kwargs):

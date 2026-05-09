@@ -148,22 +148,17 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # ==========================================
 # 8. EMAIL CONFIGURATION (Gmail)
 # ==========================================
+# # App Password (with spaces)
+EMAIL_TIMEOUT = 10
+ 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
-EMAIL_USE_SSL = True 
-EMAIL_USE_TLS = False
-
-EMAIL_HOST_USER = "kgaogelodeveloper@gmail.com" 
-DEFAULT_FROM_EMAIL = "kgaogelodeveloper@gmail.com"
-
-# Ensure spaces are stripped from the app password to prevent auth failures
- 
-EMAIL_HOST_PASSWORD =  "nsfq zgva ydfw xqso"
-
-# Force a 10-second timeout so Gunicorn doesn't crash if the connection hangs
-EMAIL_TIMEOUT = 10 
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'setamict@gmail.com'
+EMAIL_HOST_PASSWORD = 'owwa msaz ueit juum'
+DEFAULT_FROM_EMAIL = 'setamict@gmail.com'
 
 # ===============================================================================
 # 9. ENCRYPTION & FIREBASE 

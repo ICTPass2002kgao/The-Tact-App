@@ -3,65 +3,69 @@ from django.db import models
 from django.utils import timezone
 from geopy.geocoders import Nominatim 
 
-# ===========================
+GENDER_CHOICES = (
+    ('Male', 'Male'),
+    ('Female', 'Female'),
+)
+
+MEMBER_TYPE_CHOICES = (
+    ('Member', 'Member'),
+    ('Testify', 'Testify'),
+)
+
+# ===============================================================================================
 # 1. CORE CONTENT MODELS
-# ===========================
+# ===============================================================================================
 
 class Songs(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     artist = models.CharField(max_length=255, verbose_name="Artist", blank=False)
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     released = models.CharField(max_length=255, null=True, blank=True, verbose_name="Released Date")
-    
-    # CHANGED: TextField to prevent length errors on long Firebase URLs
     song_url = models.TextField(verbose_name="Song url", blank=False)
-    
     song_name = models.CharField(max_length=255, verbose_name="Song Name", blank=False)
     
     def __str__(self):
         return self.song_name
   
-
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, verbose_name="Product Name", null=True, blank=True)
     description = models.TextField(verbose_name="Product Description", blank=False)
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     createdAt = models.DateTimeField(default=timezone.now, verbose_name="Created At")
-    
-    # CHANGED: TextField for unlimited length
     image_url = models.TextField(verbose_name="Main Image URL", blank=True) 
-    
     additional_images = models.JSONField(default=list, blank=True, verbose_name="Gallery Images")
     all_available_colors = models.JSONField(default=list, blank=True) 
     all_available_sizes = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.name if self.name else "Unnamed Product"
+    
   
 class Users(models.Model): 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    uid = models.CharField(max_length=255, unique=True, db_index=True) # Increased to 255
+    uid = models.CharField(max_length=255, unique=True, db_index=True) 
     email = models.EmailField(max_length=255, blank=True, null=True)
-    
-    # CHANGED: Increased from 20 to 100 to handle weird formatting
     phone = models.CharField(max_length=100, blank=True, null=True)
-    
     name = models.CharField(max_length=255, blank=True)
     surname = models.CharField(max_length=255, blank=True, null=True)
-    address = models.CharField(max_length=500, blank=True, null=True) # Increased for long addresses
-    province = models.CharField(max_length=255, blank=True, null=True)
-    
+    address = models.CharField(max_length=500, blank=True, null=True) 
+    province = models.CharField(max_length=255, blank=True, null=True) 
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True) 
+    last_attended_date = models.DateField(auto_now_add=True, null=True, blank=True) 
     seller_paystack_account = models.CharField(max_length=255, blank=True, null=True)
-    account_verified = models.BooleanField(default=False)
-    
+    account_verified = models.BooleanField(default=False) 
     role = models.CharField(max_length=255, blank=True, null=True)
     community_name = models.CharField(max_length=255, blank=True, null=True)
     district_elder_name = models.CharField(max_length=255, blank=True, null=True)
-    overseer_uid = models.CharField(max_length=255, blank=True, null=True)
+    overseer_uid = models.CharField(max_length=255, blank=True, null=True) 
+    profile_url = models.TextField(blank=True, null=True)   
     
-    # CHANGED: TextField for unlimited length
-    profile_url = models.TextField(blank=True, null=True)  
+    verification_status = models.CharField(max_length=50, default='Unverified', blank=True, null=True)
+    contract_signature_url = models.TextField(blank=True, null=True)
+    id_document_url = models.TextField(blank=True, null=True)
+    face_image_url = models.TextField(blank=True, null=True)
     
     week1 = models.CharField(max_length=255, blank=True, null=True)
     week2 = models.CharField(max_length=255, blank=True, null=True)
@@ -73,12 +77,29 @@ class Users(models.Model):
 
     def __str__(self):
         return f"{self.email} ({self.role})"
+        
+class Visitor(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    community_name = models.CharField(max_length=255, verbose_name="Church/Branch Name")
+    name = models.CharField(max_length=255)
+    overseer_uid = models.CharField(max_length=255, blank=True, null=True)
+    district_elder_name = models.CharField(max_length=255, blank=True, null=True)
+    surname = models.CharField(max_length=255)
+    phone = models.CharField(max_length=100, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES)
+    visitor_category = models.CharField(max_length=255, default='Testify')
+    visitor_role = models.CharField(max_length=255, blank=True, null=True)
+    ready_for_membership = models.BooleanField(default=False)
+    last_attended_date = models.DateField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-
+    def __str__(self):
+        return f"Visitor: {self.name} {self.surname}"
+    
 class SellerListing(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='listings')
-    
     seller = models.ForeignKey(
         Users, 
         to_field='uid', 
@@ -86,13 +107,10 @@ class SellerListing(models.Model):
         related_name='seller_listings',
         db_column='seller_uid' 
     )
-    
     price = models.DecimalField(max_digits=10, decimal_places=2)
     location = models.CharField(max_length=255)
-    
     seller_colors = models.JSONField(default=list) 
     seller_sizes = models.JSONField(default=list)
-    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -123,12 +141,12 @@ class Order(models.Model):
     
     full_name = models.CharField(max_length=255)
     email = models.EmailField()
-    phone_number = models.CharField(max_length=100) # Increased
+    phone_number = models.CharField(max_length=100) 
     address = models.TextField()
     city = models.CharField(max_length=255)
-    postal_code = models.CharField(max_length=100) # Increased
+    postal_code = models.CharField(max_length=100) 
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default='pending') # Increased
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default='pending') 
     is_paid = models.BooleanField(default=False)
     transaction_id = models.CharField(max_length=255, blank=True, null=True)
     paystack_transaction_data = models.JSONField(default=dict, blank=True)
@@ -156,29 +174,21 @@ class OrderItem(models.Model):
     def get_cost(self):
         return self.price * self.quantity
 
-# ===========================
-# 2. USER & OVERSEER MODELS
-# ===========================
-
 class UserUniversityApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(Users, related_name="university_applications", on_delete=models.CASCADE)
-    
     application_uid = models.CharField(max_length=255, verbose_name="Application UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
     campus_name = models.CharField(max_length=255, blank=True, verbose_name="Campus Name")
-    
     status = models.CharField(max_length=255, verbose_name="Status")
     submission_date = models.TextField(blank=True, verbose_name="Submission Date")
-    
     primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
     second_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Second Choice Program")
     third_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Third Choice Program")
-    
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
-    
     full_name = models.CharField(max_length=255, blank=True, verbose_name="Full Name")
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=100, blank=True, verbose_name="Phone")
     highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Highest Qualification")
@@ -187,6 +197,9 @@ class UserUniversityApplication(models.Model):
     def __str__(self):
         return f"{self.university_name} - {self.status}"
  
+# ===============================================================================================
+# 2. USER & OVERSEER MODELS
+# ===============================================================================================
 
 class Overseer(models.Model): 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -195,43 +208,32 @@ class Overseer(models.Model):
     email = models.EmailField(unique=True)
     province = models.CharField(max_length=255)
     region = models.CharField(max_length=255)
-    code = models.CharField(max_length=255) # Increased
+    code = models.CharField(max_length=255) 
     paystack_auth_code = models.CharField(max_length=255,blank=True)
-    subscription_status = models.CharField(max_length=255,default='inactive') # Increased
-    
+    subscription_status = models.CharField(max_length=255,default='inactive') 
     last_charged=models.DateField(auto_now=True) 
     last_charged_amount = models.DecimalField( decimal_places=2,max_digits=10,blank=True,null=True)
     current_member_count = models.IntegerField(default=0) 
     next_charge_date = models.CharField(max_length=255, blank=True) 
     current_plan = models.CharField(max_length=255, blank=True, null=True, default='free_tier')
-     
     has_agreed_to_terms = models.BooleanField(default=False)
     has_agreed_to_privacy_policy = models.BooleanField(default=False)
-    secretary_name = models.CharField(max_length=255, blank=True)
-    chairperson_name = models.CharField(max_length=255, blank=True)
-    
-    # CHANGED: TextField
-    secretary_face_url = models.TextField(blank=True, null=True)
-    chairperson_face_url = models.TextField(blank=True, null=True)
-
     def __str__(self):
         return self.overseer_initials_surname
 
-class CommitteeMember(models.Model):
+class OverseerCommitteeMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name="committee_members", on_delete=models.CASCADE)
-    name = models.CharField(max_length=255, verbose_name="Name")
-    email = models.EmailField(blank=True, verbose_name="Email")
-    role = models.CharField(max_length=255, verbose_name="Role")
+    full_name = models.CharField(max_length=255, verbose_name="Full Name")
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
+    email = models.EmailField(blank=True, verbose_name="Email") 
+    accepted_ts_and_cs = models.BooleanField(default=False)
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
-    
-    # CHANGED: TextField
     face_url = models.TextField(blank=True, verbose_name="Face URL")
-    
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
     def __str__(self):
-        return f"{self.name} - {self.portfolio}"
+        return f"{self.full_name} - {self.portfolio}"
 
 class District(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -241,13 +243,11 @@ class District(models.Model):
     def __str__(self):
         return f"{self.district_elder_name} ({self.overseer})"
  
-
 class Community(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
     district_elder_name = models.TextField(max_length=255, blank=True, null=True)
     community_name = models.CharField(max_length=255)
-    
     full_address = models.TextField(blank=True)
     latitude = models.FloatField(blank=True, null=True)
     longitude = models.FloatField(blank=True, null=True)
@@ -266,18 +266,13 @@ class Community(models.Model):
             geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
             for address in address_attempts:
                 try:
-                    print(f"📍 Geocoding Attempt: {address}")
                     location = geolocator.geocode(address, timeout=10)
                     if location:
                         self.latitude = location.latitude
                         self.longitude = location.longitude
                         self.full_address = address 
-                        print(f"✅ Success! Found coords: {self.latitude}, {self.longitude}")
                         break 
-                    else:
-                        print("⚠️ Not found, trying next format...")
                 except Exception as e:
-                    print(f"❌ Error on '{address}': {e}")
                     continue 
  
         super(Community, self).save(*args, **kwargs)
@@ -285,9 +280,9 @@ class Community(models.Model):
     def __str__(self):
         return self.community_name
 
-# ===========================
+# ===============================================================================================
 # 3. FINANCIAL & EVENTS
-# ===========================
+# ===============================================================================================
 
 class OverseerExpenseReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -296,16 +291,13 @@ class OverseerExpenseReport(models.Model):
     district_elder_name = models.CharField(max_length=255, verbose_name="District Elder Name")
     community_name = models.CharField(max_length=255, verbose_name="Community Name")
     province = models.CharField(max_length=255, verbose_name="Province")
-     
     expense_central = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Central")
     expense_other = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Other")
     expense_rent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Rent")
     expense_mine = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Mine")
-     
     total_banked = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Banked")
     total_expenses = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Expenses")
     total_income = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Income")
-     
     month = models.IntegerField(verbose_name="Month")
     year = models.IntegerField(verbose_name="Year")
 
@@ -315,23 +307,18 @@ class OverseerExpenseReport(models.Model):
 class UpcomingEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255, verbose_name="Title")
-    
-    # CHANGED: TextField
     poster_url = models.TextField(blank=True, verbose_name="Poster URL")
-    
-    # CHANGED: Increased to 255 to prevent crashes
     day = models.CharField(max_length=255, verbose_name="Day") 
     month = models.CharField(max_length=255, verbose_name="Month")
-    
     parsed_date = models.TextField(blank=True, verbose_name="Parsed Date", null=True) 
     created_at = models.TextField(blank=True, verbose_name="Created At")
 
     def __str__(self):
         return self.title
 
-# ===========================
+# ===============================================================================================
 # 4. CAREERS & EDUCATION
-# ===========================
+# ===============================================================================================
 
 class CareerOpportunity(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -339,54 +326,51 @@ class CareerOpportunity(models.Model):
     description = models.TextField(verbose_name="Description")
     category = models.CharField(max_length=255, verbose_name="Category")
     application_email = models.EmailField(max_length=255, verbose_name="Application Email")
-    
-    # CHANGED: Increased to 100
     contact_number = models.CharField(max_length=100, blank=True, verbose_name="Contact Number")
-    
     is_active = models.BooleanField(default=True, verbose_name="Is Active")
     expiry_date = models.TextField(blank=True, verbose_name="Expiry Date", null=True)
     created_at = models.TextField(blank=True, verbose_name="Created At")
     updated_at = models.TextField(blank=True, null=True, verbose_name="Updated At")
-    
-    # CHANGED: TextField
     image_url = models.TextField(blank=True, verbose_name="Image URL")
     link = models.TextField(blank=True, verbose_name="External Link")
-
     details_address = models.TextField(blank=True, verbose_name="Details Address")
     course_duration = models.CharField(max_length=255, blank=True, verbose_name="Course Duration")
     duties_financial = models.TextField(blank=True, verbose_name="Duties Financial")
     duties_location = models.CharField(max_length=255, blank=True, verbose_name="Duties Location")
     requirements_subtitle = models.TextField(blank=True, verbose_name="Requirements Subtitle")
-
     benefits = models.TextField(blank=True, default="[]", verbose_name="Benefits (JSON)")
     required_documents = models.TextField(blank=True, default="[]", verbose_name="Required Documents (JSON)")
 
     def __str__(self):
         return self.title
- 
+
 class TactsoBranch(models.Model): 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID")
     university_name = models.CharField(max_length=255, verbose_name="University Name")
+    overseer = models.ForeignKey(
+        Overseer, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name="managed_universities"
+    )
+    assigned_district = models.ForeignKey(
+        District, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name="university_branches"
+    )
     email = models.EmailField(blank=True, verbose_name="Email")
     address = models.TextField(blank=True, verbose_name="Address")
-    
-    # CHANGED: TextField
     application_link = models.TextField(blank=True, verbose_name="Application Link")
-    
     education_officer_email = models.EmailField(blank=True, verbose_name="Email")
     chairperson_email = models.EmailField(blank=True, verbose_name="Email") 
-    
-    # CHANGED: TextField
     image_url = models.TextField(blank=True, verbose_name="Image URLs (JSON)")
-    
     education_officer_name = models.CharField(max_length=255, blank=True, verbose_name="Education Officer Name")
-    
-    # CHANGED: TextField
     education_officer_face_url = models.TextField(blank=True, verbose_name="Education Officer Face URL")
-    
     authorized_user_face_urls = models.TextField(blank=True, default="[]", verbose_name="Authorized Face URLs (JSON)")
-
     has_multiple_campuses = models.BooleanField(default=False, verbose_name="Has Multiple Campuses")
     is_application_open = models.BooleanField(default=False, verbose_name="Is Application Open")
     created_at = models.TextField(blank=True, verbose_name="Created At")
@@ -398,26 +382,21 @@ class ApplicationRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     branch = models.ForeignKey(TactsoBranch, related_name="applications", on_delete=models.CASCADE, null=True, blank=True)
     user = models.ForeignKey('Users', related_name="my_applications", on_delete=models.CASCADE, to_field='uid', db_column='user_uid', null=True, blank=True)
-
     uid = models.CharField(max_length=255, verbose_name="Application UID")
     status = models.CharField(max_length=255, default="New", verbose_name="Status")
     submission_date = models.DateTimeField(auto_now_add=True, verbose_name="Submission Date")
-    
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
     email = models.EmailField(blank=True, verbose_name="Email")
     phone = models.CharField(max_length=100, blank=True, verbose_name="Phone")
-    
     campus = models.CharField(max_length=255, blank=True, verbose_name="Campus", null=True)
     primary_program = models.CharField(max_length=255, blank=True, verbose_name="Primary Program")
     second_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Second Choice")
     third_choice_program = models.CharField(max_length=255, blank=True, verbose_name="Third Choice")
-    
     highest_qualification = models.CharField(max_length=255, blank=True, verbose_name="Qualification")
     previous_school = models.CharField(max_length=255, blank=True, verbose_name="Previous School")
     applying_for_funding = models.BooleanField(default=False, verbose_name="Funding")
     applying_for_residence = models.BooleanField(default=False, verbose_name="Residence")
-
-    # CHANGED: All URLs to TextField
     id_passport_url = models.TextField(blank=True, verbose_name="ID/Passport URL")
     school_results_url = models.TextField(blank=True, verbose_name="School Results URL")
     proof_of_registration_url = models.TextField(blank=True, verbose_name="Proof of Reg URL")
@@ -427,40 +406,37 @@ class ApplicationRequest(models.Model):
         uni_name = self.branch.university_name if self.branch else "No University"
         return f"{self.full_name} -> {uni_name}"
 
-class BranchCommitteeMember(models.Model):
+class TactsoCommitteeMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
-    fullname = models.CharField(max_length=255, verbose_name="Name")
-    email = models.EmailField(blank=True, verbose_name="Email")
-    role = models.CharField(max_length=255, verbose_name="Role")
     accepted_ts_and_cs = models.BooleanField(default=False)
-    
-    # CHANGED: TextField
+    full_name = models.CharField(max_length=255, verbose_name="Name")
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
+    email = models.EmailField(blank=True, verbose_name="Email")
+    portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
+    accepted_ts_and_cs = models.BooleanField(default=False)
     face_url = models.TextField(blank=True, verbose_name="Face URL")
-    
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
     def __str__(self):
-        return f"{self.fullname} ({self.branch.university_name})"
+        return f"{self.full_name} ({self.branch.university_name})"
 
-# ===========================
+# ===============================================================================================
 # 5. STAFF & LOGS
-# ===========================
+# ===============================================================================================
 
-class StaffMember(models.Model):
+class AdminStaffMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     uid = models.CharField(max_length=255, unique=True, verbose_name="UID") 
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     name = models.CharField(max_length=255, verbose_name="First Name")
     surname = models.CharField(max_length=255, verbose_name="Surname")
+    gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
     email = models.EmailField(verbose_name="Email")
     role = models.CharField(max_length=255, verbose_name="Role")
     portfolio = models.CharField(max_length=255, blank=True, verbose_name="Portfolio")
     province = models.CharField(max_length=255, blank=True, verbose_name="Province")
-    
-    # CHANGED: TextField
     face_url = models.TextField(blank=True, verbose_name="Face URL")
-    
     is_active = models.BooleanField(default=True, verbose_name="Is Active")
     created_at = models.TextField(blank=True, verbose_name="Created At")
 
@@ -471,26 +447,16 @@ class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     action = models.CharField(max_length=255, verbose_name="Action")
     details = models.TextField(verbose_name="Details") 
-     
     actor_name = models.CharField(max_length=255, verbose_name="Actor Name")
     actor_role = models.CharField(max_length=255, verbose_name="Actor Role")
-    
-    # CHANGED: TextField
     actor_face_url = models.TextField(blank=True, verbose_name="Actor Face URL")
-    
     uid = models.CharField(max_length=255, verbose_name="User UID")
-    
     university_name = models.CharField(max_length=255, blank=True, verbose_name="University Name")
-    
-    # CHANGED: TextField
     university_logo = models.TextField(blank=True, verbose_name="University Logo")
-    
     branch_email = models.EmailField(blank=True, verbose_name="Branch Email")
-    
     target_member_name = models.CharField(max_length=255, blank=True, verbose_name="Target Member Name")
     target_member_role = models.CharField(max_length=255, blank=True, verbose_name="Target Member Role")
     student_name = models.CharField(max_length=255, blank=True, default="N/A", verbose_name="Student Name")
-    
     timestamp = models.TextField(verbose_name="Timestamp")
     device_time = models.CharField(max_length=255, blank=True, verbose_name="Device Time")
 
@@ -508,8 +474,22 @@ class UsersHelp(models.Model):
     
     def __str__(self):
         return f"Ticket {self.user_email}"
+
+class AttendanceLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    community_name = models.CharField(max_length=255, db_index=True)
+    member_uid = models.CharField(max_length=255, db_index=True)
+    is_visitor = models.BooleanField(default=False)
+    date = models.DateField(default=timezone.now, db_index=True)
+    is_present = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta: 
+        unique_together = ('member_uid', 'date')
+
+    def __str__(self):
+        return f"{self.community_name} - {self.member_uid} - {self.date}: {self.is_present}"
     
- 
 class ContributionHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer_uid = models.CharField(max_length=255)
@@ -530,13 +510,10 @@ class ContributionHistory(models.Model):
         return f"{self.name} - {self.month}/{self.year}"
 
 class MonthlyReport(models.Model):
-    # NOTE: Kept as CharField because this ID is manually constructed as "CommunityName_Year_Month"
     id = models.CharField(primary_key=True, max_length=255) 
-    
     community_name = models.CharField(max_length=255)
     year = models.IntegerField()
     month = models.IntegerField()
-
     month_end = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     others = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     rent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
@@ -545,8 +522,6 @@ class MonthlyReport(models.Model):
     sundries = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     council = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     equipment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-
-    # CHANGED: Increased all these to 255 to allow safe date string storage
     date_week1 = models.CharField(max_length=255, blank=True, null=True)
     date_week2 = models.CharField(max_length=255, blank=True, null=True)
     date_week3 = models.CharField(max_length=255, blank=True, null=True)
@@ -559,12 +534,10 @@ class MonthlyReport(models.Model):
     date_sundries = models.CharField(max_length=255, blank=True, null=True)
     date_council = models.CharField(max_length=255, blank=True, null=True)
     date_equipment = models.CharField(max_length=255, blank=True, null=True)
-    
     archived_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.id
-    
     
 class IssueReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -577,3 +550,49 @@ class IssueReport(models.Model):
 
     def __str__(self):
         return self.title
+    
+class EventDiary(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255, verbose_name="Event Title")
+    day = models.CharField(max_length=255, verbose_name="Day (e.g., 18 or 11 - 12)")
+    month = models.CharField(max_length=255, blank=True, verbose_name="Month (e.g., Apr)")
+    year = models.IntegerField(verbose_name="Year")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['year', 'month', 'day']
+
+    def __str__(self):
+        return f"{self.title} ({self.day} {self.month} {self.year})"
+
+class EventContribution(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(EventDiary, related_name='contributions', on_delete=models.CASCADE)
+    overseer = models.ForeignKey(Overseer, related_name='event_contributions', on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Amount Contributed")
+    has_contributed = models.BooleanField(default=False)
+    remarks = models.TextField(blank=True, null=True)
+    contribution_date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.overseer.overseer_initials_surname} -> {self.event.title}"
+ 
+class ApostolicGreeting(models.Model):
+    id = models.CharField(primary_key=True, max_length=255, verbose_name="Greeting ID (Year)")
+    year = models.CharField(max_length=255, verbose_name="Year")
+    apostle = models.CharField(max_length=255, verbose_name="Apostle Name")
+    role = models.CharField(max_length=255, verbose_name="Role")
+    image_url = models.TextField(default='assets/profile_placeholder.png', verbose_name="Image URL")
+    content_json = models.JSONField(default=dict, verbose_name="Translations (JSON)")
+    
+    # Engagement Metrics
+    likes = models.PositiveIntegerField(default=0)
+    views = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-year']
+
+    def __str__(self):
+        return f"{self.apostle} - {self.year}"
