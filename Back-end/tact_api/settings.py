@@ -169,7 +169,7 @@ ENCRYPTION_KEY = os.environ.get('FERNET_KEY')
 if not ENCRYPTION_KEY:
     # Only print warning in dev, or check DEBUG status
     if DEBUG:
-        print("⚠️ WARNING: FERNET_KEY not found in env. Using temporary key (DATA LOSS RISK).")
+        print("⚠️ WARNING: FERNET_K;\/EY not found in env. Using temporary key (DATA LOSS RISK).")
     ENCRYPTION_KEY = Fernet.generate_key()
 else:
     # Ensure it's bytes
